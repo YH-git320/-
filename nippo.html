@@ -2,6 +2,9 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>添乗員業務日報</title>
 <style>
@@ -11,9 +14,9 @@
     --line:#cdd8dd;
     --bg:#eef3f4;
     --card:#ffffff;
-    --brand:#0c6b71;
-    --brand-dark:#084b50;
-    --brand-tint:#dcefef;
+    --brand:#4d7a5e;
+    --brand-dark:#3a5e48;
+    --brand-tint:#e4f0e8;
     --amber:#9a5f12;
     --amber-tint:#fbf0db;
     --danger:#a82d24;
@@ -22,7 +25,7 @@
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{margin:0;padding:0;height:100%;}
   body{
-    font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","Noto Sans JP","Meiryo",system-ui,sans-serif;
+    font-family:"Noto Sans JP","Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","Meiryo",system-ui,sans-serif;
     background:var(--bg);color:var(--ink);
     font-size:20px;line-height:1.7;
     display:flex;flex-direction:column;min-height:100dvh;
@@ -34,15 +37,15 @@
   .pbar-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;}
   .pbar-title{font-size:17px;font-weight:700;color:var(--brand-dark);}
   .pbar-count{font-size:18px;font-weight:700;color:var(--ink-soft);}
-  .pbar{height:10px;background:#e2e9eb;border-radius:6px;overflow:hidden;}
-  .pbar > i{display:block;height:100%;background:var(--brand);border-radius:6px;transition:width .25s ease;}
+  .pbar{height:10px;background:#e2e9eb;border-radius: 9px;overflow:hidden;}
+  .pbar > i{display:block;height:100%;background:var(--brand);border-radius: 9px;transition:width .25s ease;}
 
   /* main card */
   main{flex:1;display:flex;flex-direction:column;justify-content:flex-start;
        padding:26px 18px 24px;max-width:620px;margin:0 auto;width:100%;}
   .qlabel{font-size:27px;font-weight:800;line-height:1.5;margin:6px 0 4px;letter-spacing:.01em;}
   .qhint{font-size:18px;color:var(--ink-soft);margin:6px 0 22px;line-height:1.6;}
-  .badge{display:inline-block;font-size:15px;font-weight:700;border-radius:6px;padding:2px 10px;margin-left:8px;vertical-align:middle;}
+  .badge{display:inline-block;font-size:15px;font-weight:700;border-radius: 9px;padding:2px 10px;margin-left:8px;vertical-align:middle;}
   .badge.req{background:var(--danger);color:#fff;}
   .badge.opt{background:#e7eef0;color:var(--ink-soft);}
 
@@ -98,7 +101,7 @@
   .crow .ck{font-size:16px;font-weight:700;color:var(--ink-soft);}
   .crow .cv{font-size:23px;font-weight:700;margin-top:2px;word-break:break-word;}
   .crow .fix{float:right;font-size:16px;font-weight:700;color:var(--brand);
-     background:var(--brand-tint);border:none;border-radius:10px;padding:6px 14px;cursor:pointer;font-family:inherit;}
+     background:var(--brand-tint);border:none;border-radius: 14px;padding:6px 14px;cursor:pointer;font-family:inherit;}
 
   /* done */
   .done{text-align:center;padding-top:30px;}
@@ -110,6 +113,42 @@
   .send-err{display:none;background:#fbe9e7;border:2px solid #eebab4;color:var(--danger);
     font-size:18px;font-weight:700;border-radius:12px;padding:14px 18px;margin:16px 18px 0;text-align:center;}
   .send-err.show{display:block;}
+
+  /* === Sage Green Theme Refinements === */
+  :root {
+    --sage: #6b9e7e;
+    --sage-dark: #4d7a5e;
+    --sage-tint: #e4f0e8;
+    --sage-light: #f0f7f3;
+    --bg: #f5f8f4;
+    --text: #2d3b35;
+    --text-soft: #5c7066;
+    --border: #c8d8cc;
+  }
+  .btn { border-radius: 9px !important; }
+  .btn-primary  { background: #4d7a5e !important; }
+  .btn-add      { background: #6b9e7e !important; }
+  .btn-success  { background: #2e7d52 !important; }
+  .btn-edit     { background: #9b7eb8 !important; }
+  .btn-danger   { background: #b5453a !important; }
+  .btn-notify   { background: #c17f3e !important; }
+  .btn-dl       { background: #5a9e7a !important; }
+  .btn-gray     { background: #8aaa94 !important; }
+  .btn:hover    { opacity: 0.88 !important; }
+
+  /* nippo extra */
+  :root {
+    --brand: #6b9e7e !important;
+    --brand-dark: #4d7a5e !important;
+    --brand-tint: #e4f0e8 !important;
+    --bg: #f5f8f4 !important;
+  }
+  .pbar-title { color: #4d7a5e !important; }
+  .pbar > i { background: #6b9e7e !important; }
+  .choice.sel { border-color: #6b9e7e !important; background: #e4f0e8 !important; color: #4d7a5e !important; }
+  .choice.sel .tick { background: #6b9e7e !important; border-color: #6b9e7e !important; }
+  input:focus, textarea:focus { border-color: #6b9e7e !important; box-shadow: 0 0 0 4px #e4f0e8 !important; }
+
 </style>
 </head>
 <body>
@@ -271,7 +310,7 @@ function renderQ(){
   // 事前入力バナー
   const isPrefilled = prefilledKeys.includes(s.k);
   const prefilledBanner = isPrefilled
-    ? `<div style="background:#e8f8e8;border:1.5px solid #7dcc90;border-radius:10px;padding:8px 14px;font-size:16px;color:#1c7a48;margin-bottom:12px;">
+    ? `<div style="background:#e8f8e8;border:1.5px solid #7dcc90;border-radius: 14px;padding:8px 14px;font-size:16px;color:#1c7a48;margin-bottom:12px;">
          ✅ 配置表から自動入力されています。変更が必要な場合は上書きしてください。
        </div>`
     : '';
