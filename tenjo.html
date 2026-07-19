@@ -369,8 +369,25 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // ========== データ読み込み ==========
 async function loadStaff() {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/staff?active=eq.true&order=name`, { headers });
-  staffList = await res.json();
+  // 「添乗員」業務種別のIDを取得
+  const jtRes = await fetch(`${SUPABASE_URL}/rest/v1/job_types?name=eq.添乗員&select=id&active=eq.true`, { headers });
+  const jtData = await jtRes.json();
+  const tenjoTypeId = jtData[0]?.id;
+
+  // 全従業員を取得
+  const allRes = await fetch(`${SUPABASE_URL}/rest/v1/staff?active=eq.true&order=name`, { headers });
+  const allStaff = await allRes.json();
+
+  if (tenjoTypeId) {
+    // 添乗員役割を持つ従業員IDを取得
+    const ejRes = await fetch(`${SUPABASE_URL}/rest/v1/employee_job_types?job_type_id=eq.${tenjoTypeId}&select=employee_id`, { headers });
+    const ejData = await ejRes.json();
+    const tenjoIds = new Set(ejData.map(e => e.employee_id));
+    staffList = allStaff.filter(s => tenjoIds.has(s.id));
+  } else {
+    // 業務マスタ未設定の場合は全員表示
+    staffList = allStaff;
+  }
   renderStaffGrid();
 }
 
