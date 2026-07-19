@@ -2,22 +2,25 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>高尾輸送サービス 管理システム</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  font-family: 'Hiragino Kaku Gothic Pro', 'Meiryo', sans-serif;
-  background: #eaf0f6;
+  font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic Pro', 'Meiryo', sans-serif;
+  background: #f5f8f4;
   color: #333;
   min-height: 100vh;
 }
 
 header {
-  background: #1a5276;
+  background: #4d7a5e;
   color: white;
   padding: 20px 28px;
-  box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+  box-shadow: 0 3px 8px rgba(77,122,94,0.25);
 }
 header .company { font-size: 12px; opacity: 0.75; letter-spacing: 0.05em; margin-bottom: 4px; }
 header h1 { font-size: 22px; font-weight: bold; letter-spacing: 0.03em; }
@@ -31,12 +34,12 @@ header h1 { font-size: 22px; font-weight: bold; letter-spacing: 0.03em; }
 .section-title {
   font-size: 13px;
   font-weight: bold;
-  color: #5d8aa8;
+  color: #7fa88a;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   margin-bottom: 14px;
   padding-left: 4px;
-  border-left: 3px solid #5d8aa8;
+  border-left: 3px solid #7fa88a;
   padding-left: 10px;
 }
 
@@ -56,7 +59,7 @@ header h1 { font-size: 22px; font-weight: bold; letter-spacing: 0.03em; }
   color: #333;
   display: block;
   transition: transform 0.15s, box-shadow 0.15s;
-  border-top: 4px solid #1a5276;
+  border-top: 4px solid #4d7a5e;
   position: relative;
 }
 .card:hover {
@@ -70,7 +73,7 @@ header h1 { font-size: 22px; font-weight: bold; letter-spacing: 0.03em; }
 }
 
 .card-icon { font-size: 32px; margin-bottom: 10px; }
-.card-title { font-size: 16px; font-weight: bold; margin-bottom: 6px; color: #1a5276; }
+.card-title { font-size: 16px; font-weight: bold; margin-bottom: 6px; color: #4d7a5e; }
 .card.coming-soon .card-title { color: #888; }
 .card-desc { font-size: 12px; color: #666; line-height: 1.6; }
 
@@ -83,15 +86,15 @@ header h1 { font-size: 22px; font-weight: bold; letter-spacing: 0.03em; }
   font-size: 10px;
   font-weight: bold;
   padding: 2px 8px;
-  border-radius: 10px;
+  border-radius: 14px;
   letter-spacing: 0.05em;
 }
 
-.card-accent-green  { border-top-color: #1e8449; }
+.card-accent-green  { border-top-color: #2e7d52; }
 .card-accent-orange { border-top-color: #d35400; }
-.card-accent-purple { border-top-color: #6c3483; }
+.card-accent-purple { border-top-color: #7a5a9e; }
 .card-accent-teal   { border-top-color: #148f77; }
-.card-accent-navy   { border-top-color: #1a5276; }
+.card-accent-navy   { border-top-color: #4d7a5e; }
 
 footer {
   text-align: center;
@@ -99,6 +102,40 @@ footer {
   font-size: 12px;
   color: #aaa;
 }
+
+  /* === Sage Green Theme Refinements === */
+  :root {
+    --sage: #6b9e7e;
+    --sage-dark: #4d7a5e;
+    --sage-tint: #e4f0e8;
+    --sage-light: #f0f7f3;
+    --bg: #f5f8f4;
+    --text: #2d3b35;
+    --text-soft: #5c7066;
+    --border: #c8d8cc;
+  }
+  .btn { border-radius: 9px !important; }
+  .btn-primary  { background: #4d7a5e !important; }
+  .btn-add      { background: #6b9e7e !important; }
+  .btn-success  { background: #2e7d52 !important; }
+  .btn-edit     { background: #9b7eb8 !important; }
+  .btn-danger   { background: #b5453a !important; }
+  .btn-notify   { background: #c17f3e !important; }
+  .btn-dl       { background: #5a9e7a !important; }
+  .btn-gray     { background: #8aaa94 !important; }
+  .btn:hover    { opacity: 0.88 !important; }
+
+  /* index extra */
+  .card { border-radius: 16px !important; border-top-width: 4px; }
+  .card-accent-green  { border-top-color: #4d7a5e !important; }
+  .card-accent-orange { border-top-color: #c17f3e !important; }
+  .card-accent-purple { border-top-color: #9b7eb8 !important; }
+  .card-accent-teal   { border-top-color: #6b9e7e !important; }
+  .card-accent-navy   { border-top-color: #4d7a5e !important; }
+  .card-title { color: #4d7a5e !important; }
+  header { background: linear-gradient(135deg, #4d7a5e 0%, #6b9e7e 100%) !important; }
+  .section-title { color: #4d7a5e !important; border-left-color: #6b9e7e !important; }
+
 </style>
 </head>
 <body>
