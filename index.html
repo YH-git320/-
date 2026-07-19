@@ -3,414 +3,189 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>添乗員業務日報</title>
+<title>高尾輸送サービス 管理システム</title>
 <style>
-  :root{
-    --ink:#15242b;
-    --ink-soft:#4a5b63;
-    --line:#cdd8dd;
-    --bg:#eef3f4;
-    --card:#ffffff;
-    --brand:#0c6b71;
-    --brand-dark:#084b50;
-    --brand-tint:#dcefef;
-    --amber:#9a5f12;
-    --amber-tint:#fbf0db;
-    --danger:#a82d24;
-    --ok:#1c7a48;
-  }
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-  html,body{margin:0;padding:0;height:100%;}
-  body{
-    font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","Noto Sans JP","Meiryo",system-ui,sans-serif;
-    background:var(--bg);color:var(--ink);
-    font-size:20px;line-height:1.7;
-    display:flex;flex-direction:column;min-height:100dvh;
-    -webkit-text-size-adjust:100%;
-  }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Hiragino Kaku Gothic Pro', 'Meiryo', sans-serif;
+  background: #eaf0f6;
+  color: #333;
+  min-height: 100vh;
+}
 
-  /* progress */
-  .pbar-wrap{background:#fff;border-bottom:1px solid var(--line);padding:14px 18px 10px;}
-  .pbar-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;}
-  .pbar-title{font-size:17px;font-weight:700;color:var(--brand-dark);}
-  .pbar-count{font-size:18px;font-weight:700;color:var(--ink-soft);}
-  .pbar{height:10px;background:#e2e9eb;border-radius:6px;overflow:hidden;}
-  .pbar > i{display:block;height:100%;background:var(--brand);border-radius:6px;transition:width .25s ease;}
+header {
+  background: #1a5276;
+  color: white;
+  padding: 20px 28px;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+}
+header .company { font-size: 12px; opacity: 0.75; letter-spacing: 0.05em; margin-bottom: 4px; }
+header h1 { font-size: 22px; font-weight: bold; letter-spacing: 0.03em; }
 
-  /* main card */
-  main{flex:1;display:flex;flex-direction:column;justify-content:flex-start;
-       padding:26px 18px 24px;max-width:620px;margin:0 auto;width:100%;}
-  .qlabel{font-size:27px;font-weight:800;line-height:1.5;margin:6px 0 4px;letter-spacing:.01em;}
-  .qhint{font-size:18px;color:var(--ink-soft);margin:6px 0 22px;line-height:1.6;}
-  .badge{display:inline-block;font-size:15px;font-weight:700;border-radius:6px;padding:2px 10px;margin-left:8px;vertical-align:middle;}
-  .badge.req{background:var(--danger);color:#fff;}
-  .badge.opt{background:#e7eef0;color:var(--ink-soft);}
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 36px 20px;
+}
 
-  /* inputs */
-  input[type=text],input[type=number],input[type=time],input[type=date],textarea{
-    width:100%;font-size:26px;font-family:inherit;color:var(--ink);
-    border:2px solid var(--line);border-radius:14px;background:#fff;
-    padding:16px 18px;line-height:1.4;
-  }
-  textarea{min-height:140px;resize:vertical;}
-  input:focus,textarea:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 4px var(--brand-tint);}
+.section-title {
+  font-size: 13px;
+  font-weight: bold;
+  color: #5d8aa8;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+  padding-left: 4px;
+  border-left: 3px solid #5d8aa8;
+  padding-left: 10px;
+}
 
-  /* choice buttons */
-  .choices{display:flex;flex-direction:column;gap:14px;}
-  .choice{
-    display:flex;align-items:center;gap:16px;width:100%;text-align:left;
-    font-size:24px;font-weight:700;font-family:inherit;color:var(--ink);
-    background:#fff;border:2px solid var(--line);border-radius:16px;
-    padding:20px 20px;cursor:pointer;min-height:72px;
-  }
-  .choice .tick{flex:0 0 auto;width:30px;height:30px;border-radius:50%;border:2.5px solid var(--line);
-    display:grid;place-items:center;color:#fff;font-size:18px;}
-  .choice.sel{border-color:var(--brand);background:var(--brand-tint);color:var(--brand-dark);}
-  .choice.sel .tick{background:var(--brand);border-color:var(--brand);}
-  .choice:active{transform:scale(.995);}
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+  margin-bottom: 36px;
+}
 
-  .timegrid{display:flex;gap:14px;}
-  .timegrid > div{flex:1;}
-  .timegrid label{display:block;font-size:18px;font-weight:700;color:var(--ink-soft);margin-bottom:8px;}
+.card {
+  background: white;
+  border-radius: 12px;
+  padding: 22px 22px 18px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  text-decoration: none;
+  color: #333;
+  display: block;
+  transition: transform 0.15s, box-shadow 0.15s;
+  border-top: 4px solid #1a5276;
+  position: relative;
+}
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.13);
+}
+.card.coming-soon {
+  opacity: 0.55;
+  pointer-events: none;
+  border-top-color: #aaa;
+}
 
-  .err{display:none;background:#fbe9e7;border:2px solid #eebab4;color:var(--danger);
-       font-size:18px;font-weight:700;border-radius:12px;padding:12px 16px;margin-top:18px;}
-  .err.show{display:block;}
+.card-icon { font-size: 32px; margin-bottom: 10px; }
+.card-title { font-size: 16px; font-weight: bold; margin-bottom: 6px; color: #1a5276; }
+.card.coming-soon .card-title { color: #888; }
+.card-desc { font-size: 12px; color: #666; line-height: 1.6; }
 
-  /* nav */
-  .nav{position:sticky;bottom:0;background:rgba(255,255,255,.97);backdrop-filter:blur(6px);
-       border-top:1px solid var(--line);padding:16px 18px;display:flex;gap:14px;
-       box-shadow:0 -6px 20px rgba(20,40,50,.07);}
-  .nav .inner{max-width:620px;margin:0 auto;width:100%;display:flex;gap:14px;}
-  button.nav-btn{flex:1;border:none;border-radius:16px;font-family:inherit;font-weight:800;
-     cursor:pointer;min-height:68px;font-size:24px;letter-spacing:.04em;}
-  .btn-back{flex:0 0 32%;background:#fff;border:2px solid var(--line);color:var(--ink-soft);}
-  .btn-next{background:var(--brand);color:#fff;}
-  .btn-next:active{background:var(--brand-dark);}
-  .btn-next.send{background:var(--ok);}
-  .btn-back:disabled{opacity:.4;}
+.badge-soon {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: #eee;
+  color: #999;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 2px 8px;
+  border-radius: 10px;
+  letter-spacing: 0.05em;
+}
 
-  /* confirm */
-  .confirm-title{font-size:26px;font-weight:800;color:var(--brand-dark);margin:4px 0 4px;}
-  .confirm-sub{font-size:18px;color:var(--ink-soft);margin:0 0 18px;}
-  .clist{display:flex;flex-direction:column;gap:10px;}
-  .crow{background:#fff;border:2px solid var(--line);border-radius:14px;padding:14px 16px;}
-  .crow .ck{font-size:16px;font-weight:700;color:var(--ink-soft);}
-  .crow .cv{font-size:23px;font-weight:700;margin-top:2px;word-break:break-word;}
-  .crow .fix{float:right;font-size:16px;font-weight:700;color:var(--brand);
-     background:var(--brand-tint);border:none;border-radius:10px;padding:6px 14px;cursor:pointer;font-family:inherit;}
+.card-accent-green  { border-top-color: #1e8449; }
+.card-accent-orange { border-top-color: #d35400; }
+.card-accent-purple { border-top-color: #6c3483; }
+.card-accent-teal   { border-top-color: #148f77; }
+.card-accent-navy   { border-top-color: #1a5276; }
 
-  /* done */
-  .done{text-align:center;padding-top:30px;}
-  .done .ico{width:96px;height:96px;border-radius:50%;background:var(--brand-tint);color:var(--ok);
-     display:grid;place-items:center;font-size:56px;margin:0 auto 18px;}
-  .done h2{font-size:30px;margin:0 0 8px;color:var(--brand-dark);}
-  .done p{font-size:20px;color:var(--ink-soft);margin:0 0 30px;}
-
-  .send-err{display:none;background:#fbe9e7;border:2px solid #eebab4;color:var(--danger);
-    font-size:18px;font-weight:700;border-radius:12px;padding:14px 18px;margin:16px 18px 0;text-align:center;}
-  .send-err.show{display:block;}
+footer {
+  text-align: center;
+  padding: 28px;
+  font-size: 12px;
+  color: #aaa;
+}
 </style>
 </head>
 <body>
 
-<div class="pbar-wrap">
-  <div class="pbar-top">
-    <span class="pbar-title">添乗員業務日報</span>
-    <span class="pbar-count" id="count"></span>
+<header>
+  <div class="company">高尾輸送サービス</div>
+  <h1>🚌 管理システム ポータル</h1>
+</header>
+
+<div class="container">
+
+  <!-- 配置管理 -->
+  <div class="section-title">配置管理</div>
+  <div class="card-grid">
+
+    <a href="tenjo.html" class="card card-accent-navy">
+      <div class="card-icon">📋</div>
+      <div class="card-title">添乗員 配置管理</div>
+      <div class="card-desc">
+        学校・コース別の添乗員配置を入力・保存します。<br>
+        メール通知の送信もこちらから。
+      </div>
+    </a>
+
+    <a href="#" class="card card-accent-orange coming-soon">
+      <div class="badge-soon">準備中</div>
+      <div class="card-icon">🚌</div>
+      <div class="card-title">運転手 配置管理</div>
+      <div class="card-desc">
+        コース別の運転手・車両の配置を管理します。
+      </div>
+    </a>
+
+    <a href="#" class="card card-accent-teal coming-soon">
+      <div class="badge-soon">準備中</div>
+      <div class="card-icon">📅</div>
+      <div class="card-title">スケジュール管理</div>
+      <div class="card-desc">
+        月次・週次の配置スケジュールを一覧表示します。
+      </div>
+    </a>
+
   </div>
-  <div class="pbar"><i id="pfill" style="width:0%"></i></div>
+
+  <!-- 日報・記録 -->
+  <div class="section-title">日報・記録</div>
+  <div class="card-grid">
+
+    <a href="nippo.html" class="card card-accent-green">
+      <div class="card-icon">📝</div>
+      <div class="card-title">日報入力フォーム</div>
+      <div class="card-desc">
+        添乗員が業務終了後に入力する日報フォームです。<br>
+        スマートフォンからも入力できます。
+      </div>
+    </a>
+
+    <a href="#" class="card card-accent-green coming-soon">
+      <div class="badge-soon">準備中</div>
+      <div class="card-icon">📊</div>
+      <div class="card-title">日報 一覧・集計</div>
+      <div class="card-desc">
+        提出された日報の一覧確認・集計を行います。
+      </div>
+    </a>
+
+  </div>
+
+  <!-- マスター管理 -->
+  <div class="section-title">マスターデータ管理</div>
+  <div class="card-grid">
+
+    <a href="master.html" class="card card-accent-purple">
+      <div class="card-icon">📂</div>
+      <div class="card-title">マスター管理</div>
+      <div class="card-desc">
+        添乗員・コース名・運転手・車両・営業所・<br>
+        営業許可・管理者のマスターデータを管理します。<br>
+        CSVによる一括取込に対応。
+      </div>
+    </a>
+
+  </div>
+
 </div>
 
-<main id="screen"></main>
-<div class="send-err" id="sendErr">送信に失敗しました。時間をおいて再度お試しください。</div>
+<footer>高尾輸送サービス 管理システム</footer>
 
-<div class="nav" id="nav">
-  <div class="inner">
-    <button class="nav-btn btn-back" id="back">もどる</button>
-    <button class="nav-btn btn-next" id="next">次へ ▶</button>
-  </div>
-</div>
-
-<script>
-/* === Supabase 接続設定 === */
-const SUPABASE_URL = "https://wxdyqkyqtizhtkwtpvru.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4ZHlxa3lxdGl6aHRrd3RwdnJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NzYxODEsImV4cCI6MjA5OTQ1MjE4MX0.yVbClXBk2JVeglevsBLY5sH2_m2ybCf71u4i_YYWyHE";
-const TABLE = "tenjo_nippo";
-
-/* ---- 条件 ---- */
-const toOn   = a => ['登校・下校 両方','登校のみ'].includes(a['勤務種別']);
-const fromOn = a => ['登校・下校 両方','下校のみ'].includes(a['勤務種別']);
-const otherOn= a => a['勤務種別']==='その他（研修・短時間授業など）';
-const both   = a => a['勤務種別']==='登校・下校 両方';
-
-const arriveOpt = ['車庫','学校','会社指示場所'];
-const leaveOpt  = ['車庫','学校','途中下車'];
-const methodOpt = ['自家用車','徒歩','自転車','公共交通機関'];
-
-/* ---- 質問定義（表示順） ---- */
-function trip(pfx, key, when){
-  const T = m => a => when(a) && a[`${key}_${m}`]==='公共交通機関';
-  return [
-   {k:`${key}_学校`, q:`${key}便　学校名は？`, t:'text', req:true, ph:'例）〇〇特別支援学校', when},
-   {k:`${key}_コース`, q:`${key}便　コースは？`, t:'text', opt:true, ph:'例）Aコース', when},
-   {k:`${key}_出勤場所`, q:`${key}便　出勤場所は？`, t:'choice', op:arriveOpt, req:true, when},
-   {k:`${key}_出勤手段`, q:`${key}便　出勤場所までの通勤手段は？`, t:'choice', op:methodOpt, req:true, when},
-   {k:`${key}_出勤経路`, q:`${key}便　出勤の経路は？`, t:'text', opt:true, ph:'例）〇〇駅 → 学校前', hint:'公共交通機関を使ったときだけ入力します', when:T('出勤手段')},
-   {k:`${key}_出勤交通費`, q:`${key}便　出勤の交通費は？（円）`, t:'number', opt:true, ph:'例）480', when:T('出勤手段')},
-   {k:`${key}_退勤場所`, q:`${key}便　退勤場所は？`, t:'choice', op:leaveOpt, req:true, when},
-   {k:`${key}_帰宅手段`, q:`${key}便　退勤場所から帰宅手段は？`, t:'choice', op:methodOpt, req:true, when},
-   {k:`${key}_帰宅経路`, q:`${key}便　帰宅の経路は？`, t:'text', opt:true, hint:'公共交通機関を使ったときだけ入力します', when:T('帰宅手段')},
-   {k:`${key}_帰宅交通費`, q:`${key}便　帰宅の交通費は？（円）`, t:'number', opt:true, hint:'自宅に戻った場合のみ', when:T('帰宅手段')},
-   {k:`${key}_出勤指示時刻`, q:`${key}便　出勤指示時刻は？`, t:'time', req:true, hint:'会社が指示した時刻。遅刻したときは到着時刻', when},
-   {k:`${key}_終了時刻`, q:`${key}便　添乗業務の終了時刻は？`, t:'time', req:true, hint:'実際にバスを降りた時刻', when},
-  ];
-}
-
-const Q = [
-  {k:'勤務日', q:'きょうの勤務日は？', t:'date', req:true, when:()=>true},
-  {k:'氏名',  q:'お名前は？', t:'text', req:true, ph:'例）山田 太郎', when:()=>true},
-  {k:'勤務種別', q:'きょうの勤務はどれですか？', t:'choice', req:true, when:()=>true,
-     op:['登校・下校 両方','登校のみ','下校のみ','その他（研修・短時間授業など）']},
-
-  ...trip('to','登校', toOn),
-  ...trip('from','下校', fromOn),
-
-  {k:'その他_内容', q:'勤務の内容は？', t:'text', req:true, ph:'例）安全運転研修 / 短時間授業 添乗', when:otherOn},
-  {k:'その他_出勤場所', q:'出勤場所は？', t:'choice', op:[...arriveOpt,'その他'], opt:true, when:otherOn},
-  {k:'その他_手段', q:'通勤手段は？', t:'choice', op:methodOpt, opt:true, when:otherOn},
-  {k:'その他_経路', q:'経路は？', t:'text', opt:true, when:a=>otherOn(a)&&a['その他_手段']==='公共交通機関'},
-  {k:'その他_交通費', q:'交通費は？（円）', t:'number', opt:true, when:a=>otherOn(a)&&a['その他_手段']==='公共交通機関'},
-  {k:'その他_開始時刻', q:'開始時刻は？', t:'time', req:true, when:otherOn},
-  {k:'その他_終了時刻', q:'終了時刻は？', t:'time', req:true, when:otherOn},
-
-  {k:'_中間有無', q:'中間利用・SB連絡会などはありましたか？', t:'choice', op:['あり','なし'], req:true,
-     hint:'登校と下校の間に行った業務', when:a=>toOn(a)||fromOn(a)},
-  {k:'中間業務_開始', q:'中間業務の開始時刻は？', t:'time', req:true, when:a=>a['_中間有無']==='あり'},
-  {k:'中間業務_終了', q:'中間業務の終了時刻は？', t:'time', req:true, when:a=>a['_中間有無']==='あり'},
-
-  {k:'自宅戻り', q:'登校と下校の間に自宅へ戻りましたか？', t:'choice', op:['あり','なし'], req:true, when:both},
-
-  {k:'_備考有無', q:'連絡事項・特記事項はありますか？', t:'choice', op:['ある','ない'], req:true, when:()=>true},
-  {k:'備考', q:'備考を入力してください', t:'textarea', opt:true, when:a=>a['_備考有無']==='ある'},
-];
-
-/* 集計用キー（確認・送信に使う） */
-const RECORD_KEYS = Q.map(x=>x.k).filter(k=>!k.startsWith('_'));
-
-/* ---- 状態 ---- */
-const today = new Date().toISOString().slice(0,10);
-let answers = {'勤務日':today};
-let steps = [];
-let idx = 0;
-let mode = 'q'; // 'q' | 'confirm' | 'done'
-let prefilledKeys = []; // URLから事前入力されたキー
-
-/* ---- URLパラメータ事前入力 ---- */
-(function applyUrlParams(){
-  const p = new URLSearchParams(location.search);
-  const preDate   = p.get('date');
-  const preName   = p.get('name');
-  const preSchool = p.get('school');
-  const preCourse = p.get('course');
-  const preRole   = p.get('role'); // "登校便" or "下校便" or "登校便,下校便"
-
-  if(preDate){ answers['勤務日'] = preDate; prefilledKeys.push('勤務日'); }
-  if(preName){ answers['氏名']   = preName;  prefilledKeys.push('氏名'); }
-
-  if(preRole){
-    const roles = preRole.split(',').map(r=>r.trim());
-    const hasT  = roles.includes('登校便');
-    const hasG  = roles.includes('下校便');
-
-    const shubetsu = (hasT && hasG) ? '登校・下校 両方' : hasT ? '登校のみ' : hasG ? '下校のみ' : '';
-    if(shubetsu){ answers['勤務種別'] = shubetsu; prefilledKeys.push('勤務種別'); }
-
-    if(preSchool){
-      if(hasT){ answers['登校_学校'] = preSchool; prefilledKeys.push('登校_学校'); }
-      if(hasG){ answers['下校_学校'] = preSchool; prefilledKeys.push('下校_学校'); }
-    }
-    if(preCourse){
-      if(hasT){ answers['登校_コース'] = preCourse; prefilledKeys.push('登校_コース'); }
-      if(hasG){ answers['下校_コース'] = preCourse; prefilledKeys.push('下校_コース'); }
-    }
-  }
-})();
-
-function recompute(){ steps = Q.filter(x=>x.when(answers)); }
-
-/* ---- 描画 ---- */
-const screen=document.getElementById('screen');
-const backBtn=document.getElementById('back');
-const nextBtn=document.getElementById('next');
-
-function setProgress(){
-  const total = steps.length + 1; // +確認
-  let cur = mode==='confirm' ? total : Math.min(idx+1, steps.length);
-  document.getElementById('count').textContent = mode==='done' ? '完了' : `${cur} / ${total}`;
-  document.getElementById('pfill').style.width = (mode==='done'?100:(cur/total*100))+'%';
-}
-
-function inputControl(s){
-  const v = answers[s.k] ?? (s.t==='date'?today:'');
-  if(s.t==='choice'){
-    return `<div class="choices">`+ s.op.map(o=>
-      `<button type="button" class="choice ${v===o?'sel':''}" data-val="${o}">
-         <span class="tick">✓</span><span>${o}</span></button>`).join('')+`</div>`;
-  }
-  if(s.t==='textarea') return `<textarea id="inp" placeholder="${s.ph||''}">${v}</textarea>`;
-  if(s.t==='time')     return `<input id="inp" type="time" value="${v}" step="60">`;
-  if(s.t==='date')     return `<input id="inp" type="date" value="${v}">`;
-  if(s.t==='number')   return `<input id="inp" type="number" inputmode="numeric" value="${v}" placeholder="${s.ph||''}">`;
-  return `<input id="inp" type="text" value="${v}" placeholder="${s.ph||''}">`;
-}
-
-function renderQ(){
-  const s = steps[idx];
-  const badge = s.req ? `<span class="badge req">必須</span>` : `<span class="badge opt">任意</span>`;
-  // 事前入力バナー
-  const isPrefilled = prefilledKeys.includes(s.k);
-  const prefilledBanner = isPrefilled
-    ? `<div style="background:#e8f8e8;border:1.5px solid #7dcc90;border-radius:10px;padding:8px 14px;font-size:16px;color:#1c7a48;margin-bottom:12px;">
-         ✅ 配置表から自動入力されています。変更が必要な場合は上書きしてください。
-       </div>`
-    : '';
-  screen.innerHTML =
-    `<div class="qlabel">${s.q}${badge}</div>`+
-    (s.hint?`<div class="qhint">${s.hint}</div>`:`<div style="height:8px"></div>`)+
-    prefilledBanner+
-    inputControl(s)+
-    `<div class="err" id="err">この項目を入力してください</div>`;
-
-  // listeners
-  if(s.t==='choice'){
-    screen.querySelectorAll('.choice').forEach(b=>{
-      b.addEventListener('click',()=>{
-        answers[s.k]=b.dataset.val;
-        screen.querySelectorAll('.choice').forEach(x=>x.classList.remove('sel'));
-        b.classList.add('sel');
-        document.getElementById('err').classList.remove('show');
-      });
-    });
-  }else{
-    const inp=document.getElementById('inp');
-    const ev = (s.t==='text'||s.t==='textarea'||s.t==='number')?'input':'change';
-    inp.addEventListener(ev,()=>{ answers[s.k]=inp.value; if(inp.value)document.getElementById('err').classList.remove('show'); });
-    if(s.t!=='date') setTimeout(()=>inp.focus(),60);
-  }
-
-  backBtn.disabled = idx===0;
-  backBtn.style.visibility='visible';
-  nextBtn.textContent = (idx===steps.length-1)?'確認へ ▶':'次へ ▶';
-  nextBtn.classList.remove('send');
-  document.getElementById('nav').style.display='block';
-  document.getElementById('sendErr').classList.remove('show');
-  setProgress();
-}
-
-function valueText(k){
-  const v=answers[k]; if(v===undefined||v==='') return '—'; return v;
-}
-function renderConfirm(){
-  // 表示する項目（入力された/該当するもの）
-  const showKeys = RECORD_KEYS.filter(k=>{
-    const def=Q.find(x=>x.k===k);
-    return def.when(answers) && (answers[k]!==undefined && answers[k]!=='');
-  });
-  const labelOf = k => (Q.find(x=>x.k===k).q).replace('は？','').replace('を入力してください','');
-  let rows = showKeys.map(k=>{
-    const st = steps.findIndex(x=>x.k===k);
-    return `<div class="crow"><button class="fix" data-i="${st}">なおす</button>
-      <div class="ck">${labelOf(k)}</div><div class="cv">${valueText(k)}</div></div>`;
-  }).join('');
-  screen.innerHTML =
-    `<div class="confirm-title">この内容で送信します</div>
-     <div class="confirm-sub">まちがいがなければ「送信する」を押してください</div>
-     <div class="clist">${rows}</div>`;
-  screen.querySelectorAll('.fix').forEach(b=>b.addEventListener('click',()=>{
-    mode='q'; idx=parseInt(b.dataset.i); renderQ();
-  }));
-  backBtn.disabled=false;
-  nextBtn.textContent='送信する';
-  nextBtn.classList.add('send');
-  document.getElementById('sendErr').classList.remove('show');
-  setProgress();
-}
-
-function renderDone(){
-  document.getElementById('nav').style.display='none';
-  screen.innerHTML =
-    `<div class="done">
-       <div class="ico">✓</div>
-       <h2>送信しました</h2>
-       <p>おつかれさまでした。</p>
-       <button class="nav-btn btn-next" style="max-width:360px;margin:0 auto;" id="again">新しく入力する</button>
-     </div>`;
-  document.getElementById('again').addEventListener('click',()=>location.reload());
-  setProgress();
-}
-
-/* ---- ナビ操作 ---- */
-function validateCurrent(){
-  const s=steps[idx];
-  if(s.req){
-    const v=answers[s.k];
-    if(v===undefined||String(v).trim()===''){ document.getElementById('err').classList.add('show'); return false; }
-  }
-  return true;
-}
-
-nextBtn.addEventListener('click',async()=>{
-  if(mode==='q'){
-    if(!validateCurrent()) return;
-    recompute();
-    if(idx < steps.length-1){ idx++; renderQ(); }
-    else { mode='confirm'; renderConfirm(); }
-  } else if(mode==='confirm'){
-    // Supabase に送信
-    nextBtn.disabled=true; nextBtn.textContent='送信中…';
-    document.getElementById('sendErr').classList.remove('show');
-
-    const rec={};
-    RECORD_KEYS.forEach(k=>{
-      rec[k] = (Q.find(x=>x.k===k).when(answers) ? (answers[k]||'') : '');
-    });
-    rec['送信日時'] = new Date().toLocaleString('ja-JP');
-
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
-        method: 'POST',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': 'Bearer ' + SUPABASE_KEY,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=minimal'
-        },
-        body: JSON.stringify(rec)
-      });
-
-      if(!res.ok){
-        const errText = await res.text();
-        console.error('Supabase error:', res.status, errText);
-        throw new Error('送信エラー: ' + res.status);
-      }
-
-      mode='done'; renderDone();
-    } catch(e) {
-      console.error(e);
-      document.getElementById('sendErr').classList.add('show');
-      nextBtn.disabled=false;
-      nextBtn.textContent='送信する';
-    }
-  }
-});
-
-backBtn.addEventListener('click',()=>{
-  if(mode==='confirm'){ mode='q'; idx=steps.length-1; renderQ(); return; }
-  if(idx>0){ idx--; recompute(); renderQ(); }
-});
-
-recompute(); renderQ();
-</script>
 </body>
 </html>
