@@ -149,6 +149,35 @@ table.preview-table { width: 100%; border-collapse: collapse; font-size: 12px; }
   .filter-row { flex-direction: column; }
   .filter-field select, .filter-field input { min-width: 100%; }
 }
+
+/* ===== 全データバックアップ バナー ===== */
+.backup-banner {
+  background: linear-gradient(135deg, #2d3b35 0%, #3d5545 100%);
+  border-radius: 16px; padding: 22px 26px; margin-bottom: 24px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 20px; flex-wrap: wrap;
+  box-shadow: 0 4px 16px rgba(45,59,53,0.25);
+}
+.backup-banner-text h2 {
+  font-size: 17px; font-weight: 800; color: white; margin-bottom: 5px;
+  display: flex; align-items: center; gap: 8px;
+}
+.backup-banner-text p { font-size: 12px; color: rgba(255,255,255,0.72); line-height: 1.6; }
+.btn-backup {
+  background: #6b9e7e; color: white; border: none; border-radius: 12px;
+  padding: 14px 28px; font-size: 15px; font-weight: 800; font-family: inherit;
+  cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2); transition: all 0.18s; flex-shrink: 0;
+}
+.btn-backup:hover { background: #4d7a5e; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.25); }
+.btn-backup:disabled { background: #5c7066; cursor: not-allowed; transform: none; }
+
+/* プログレスバー */
+.backup-progress { display: none; margin-top: 12px; }
+.backup-progress.show { display: block; }
+.bpbar-wrap { background: rgba(255,255,255,0.15); border-radius: 6px; height: 8px; overflow: hidden; }
+.bpbar-fill { height: 100%; background: #6b9e7e; border-radius: 6px; transition: width 0.3s ease; width: 0%; }
+.bpbar-label { font-size: 12px; color: rgba(255,255,255,0.8); margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -166,6 +195,24 @@ table.preview-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 </header>
 
 <div class="container">
+
+  <!-- ===== 全データバックアップ ===== -->
+  <div class="backup-banner">
+    <div class="backup-banner-text">
+      <h2>🗂️ 全データ完全バックアップ</h2>
+      <p>
+        全テーブル（従業員・業務・コース・車両・営業所・許可・管理者・日報・配置表）を<br>
+        まとめてZIPファイルにダウンロードします。毎日の終業時に実行することをお勧めします。
+      </p>
+      <div class="backup-progress" id="backup-progress">
+        <div class="bpbar-wrap"><div class="bpbar-fill" id="bpbar-fill"></div></div>
+        <div class="bpbar-label" id="bpbar-label">準備中...</div>
+      </div>
+    </div>
+    <button class="btn-backup" id="btn-full-backup" onclick="runFullBackup()">
+      ⬇️ 全データをバックアップ
+    </button>
+  </div>
 
   <div class="tab-bar">
     <div class="tab active" onclick="switchTab('nippo')">📝 日報データ</div>
@@ -637,12 +684,122 @@ async function exportEmpJobTypes() {
 /* ===== 初期化 ===== */
 (function init() {
   const now = new Date();
-  // 今月をデフォルトにセット
-  document.getElementById('nippo-from').value = firstDayOfMonth(now);
-  document.getElementById('nippo-to').value   = lastDayOfMonth(now);
+  document.getElementById('nippo-from').value  = firstDayOfMonth(now);
+  document.getElementById('nippo-to').value    = lastDayOfMonth(now);
   document.getElementById('assign-from').value = firstDayOfMonth(now);
   document.getElementById('assign-to').value   = lastDayOfMonth(now);
 })();
+
+/* ===== 全データ完全バックアップ ===== */
+async function runFullBackup() {
+  const btn = document.getElementById('btn-full-backup');
+  const progress = document.getElementById('backup-progress');
+  const bar = document.getElementById('bpbar-fill');
+  const label = document.getElementById('bpbar-label');
+
+  btn.disabled = true;
+  btn.textContent = '⏳ バックアップ中...';
+  progress.classList.add('show');
+
+  // JSZip を動的ロード
+  if (typeof JSZip === 'undefined') {
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+  }
+
+  const zip = new JSZip();
+  const now = new Date();
+  const dateStr = now.getFullYear() + '-'
+    + String(now.getMonth()+1).padStart(2,'0') + '-'
+    + String(now.getDate()).padStart(2,'0');
+  const timeStr = String(now.getHours()).padStart(2,'0')
+    + String(now.getMinutes()).padStart(2,'0');
+  const folder = zip.folder('高尾輸送バックアップ_' + dateStr);
+
+  // バックアップ対象テーブル定義
+  const targets = [
+    { table: 'staff',              label: '従業員マスタ',       params: 'order=id' },
+    { table: 'job_types',          label: '業務マスタ',         params: 'order=sort_order,id' },
+    { table: 'employee_job_types', label: '従業員業務紐付け',   params: 'order=employee_id,job_type_id' },
+    { table: 'courses',            label: 'コース名マスタ',     params: 'order=id' },
+    { table: 'vehicles',           label: '車両マスタ',         params: 'order=id' },
+    { table: 'offices',            label: '営業所マスタ',       params: 'order=id' },
+    { table: 'permits',            label: '営業許可マスタ',     params: 'order=id' },
+    { table: 'admins',             label: '管理者マスタ',       params: 'order=id' },
+    { table: 'assignments',        label: '配置表',             params: 'order=work_date,id' },
+    { table: 'tenjo_nippo',        label: '日報',               params: 'order=勤務日,id' },
+  ];
+
+  let done = 0;
+  const errors = [];
+
+  for (const t of targets) {
+    label.textContent = `${t.label} を取得中... (${done}/${targets.length})`;
+    bar.style.width = (done / targets.length * 100) + '%';
+    try {
+      const rows = await fetchAll(t.table, t.params);
+      const csvStr = toCSVString(rows);
+      folder.file(t.label + '.csv', csvStr);
+    } catch(e) {
+      errors.push(t.label + '：' + e.message);
+    }
+    done++;
+  }
+
+  bar.style.width = '100%';
+  label.textContent = 'ZIPを生成中...';
+
+  try {
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `高尾輸送バックアップ_${dateStr}_${timeStr}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    if (errors.length > 0) {
+      label.textContent = '⚠️ 一部エラー: ' + errors.join(' / ');
+      label.style.color = '#c17f3e';
+    } else {
+      label.textContent = `✅ ${targets.length}テーブルのバックアップが完了しました`;
+      label.style.color = '#6b9e7e';
+    }
+  } catch(e) {
+    label.textContent = '❌ ZIP生成エラー: ' + e.message;
+    label.style.color = '#b5453a';
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '⬇️ 全データをバックアップ';
+}
+
+// CSVテキスト生成（UTF-8 BOM付き）
+function toCSVString(rows) {
+  if (!rows || rows.length === 0) return '﻿データなし\r\n';
+  const BOM = '﻿';
+  const headers = Object.keys(rows[0]);
+  const lines = [headers.join(',')];
+  for (const row of rows) {
+    const vals = headers.map(h => {
+      let v = row[h] == null ? '' : String(row[h]);
+      if (v.includes(',') || v.includes('"') || v.includes('\n')) {
+        v = '"' + v.replace(/"/g, '""') + '"';
+      }
+      return v;
+    });
+    lines.push(vals.join(','));
+  }
+  return BOM + lines.join('\r\n');
+}
+
+// 外部スクリプトを動的ロード
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
 </script>
 </body>
 </html>
