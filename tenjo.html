@@ -431,15 +431,23 @@ let staffList = [];    // [{id, name, email}, ...]
 let courseList = [];   // [{id, prefecture, school_name, course_name}, ...]
 let assignRows = [];   // 現在の配置行データ
 
+// ローカル日付文字列を返す（タイムゾーン対応）
+function localDateStr(d) {
+  const dt = d || new Date();
+  return dt.getFullYear() + '-' +
+    String(dt.getMonth() + 1).padStart(2, '0') + '-' +
+    String(dt.getDate()).padStart(2, '0');
+}
+
 // ========== 初期化 ==========
 document.addEventListener('DOMContentLoaded', async () => {
   const now = new Date();
-  const today = now.toISOString().slice(0, 10);
+  const today = localDateStr(now);
 
   // 翌日を配置日のデフォルトに設定
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+  const tomorrowStr = localDateStr(tomorrow);
   document.getElementById('workDate').value = tomorrowStr;
   document.getElementById('notifyDate').value = tomorrowStr;
 
