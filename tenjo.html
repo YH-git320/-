@@ -320,7 +320,6 @@
       <input type="date" id="workDate" />
       <button class="btn btn-primary" onclick="loadAssignments()"
         title="この配置日としてすでに保存されているデータを再読み込みします">↩ 保存済みを再読み込み</button>
-      <button class="btn btn-add" onclick="addRow()">＋ 行を追加</button>
       <span class="date-indicator" id="todayLabel"></span>
 
       <!-- 区切り -->
@@ -360,6 +359,9 @@
       <div class="action-bar">
         <button class="btn btn-success" onclick="saveAssignments()">💾 配置を保存</button>
         <button class="btn btn-small" style="background:#2e7d52;color:white;" onclick="exportAssignCSV()">📥 CSVダウンロード</button>
+        <div style="width:1px; height:28px; background:#c8d8cc; margin:0 4px; align-self:center;"></div>
+        <button class="btn" style="background:#a8c5b0; color:#2d3b35; font-weight:700;"
+          onclick="addRow()" title="配置表の末尾に新しい行を追加します">＋ 行を追加</button>
         <span id="saveStatus" class="status-bar"></span>
       </div>
     </div>
