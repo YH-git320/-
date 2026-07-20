@@ -387,16 +387,22 @@ const H = {
   'Content-Type': 'application/json'
 };
 
-/* ===== ユーティリティ ===== */
+/* ===== ユーティリティ（タイムゾーン対応） ===== */
+function localDateStr(d) {
+  const dt = d || new Date();
+  return dt.getFullYear() + '-' +
+    String(dt.getMonth() + 1).padStart(2, '0') + '-' +
+    String(dt.getDate()).padStart(2, '0');
+}
 function today() {
-  return new Date().toISOString().slice(0,10);
+  return localDateStr();
 }
 function firstDayOfMonth(d) {
-  return d.toISOString().slice(0,8) + '01';
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2,'0') + '-01';
 }
 function lastDayOfMonth(d) {
-  const y = d.getFullYear(), m = d.getMonth();
-  return new Date(y, m+1, 0).toISOString().slice(0,10);
+  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  return localDateStr(last);
 }
 
 // UTF-8 BOM付きCSVをダウンロード
