@@ -325,6 +325,7 @@
 
       <div class="action-bar">
         <button class="btn btn-success" onclick="saveAssignments()">💾 配置を保存</button>
+        <button class="btn btn-small" style="background:#2e7d52;color:white;" onclick="exportAssignCSV()">📥 CSVダウンロード</button>
         <span id="saveStatus" class="status-bar"></span>
       </div>
     </div>
@@ -884,6 +885,51 @@ function showStatus(id, type, msg) {
   if (type === 'success') {
     setTimeout(() => { el.style.display = 'none'; }, 4000);
   }
+}
+
+/* ===== CSV出力（配置表） ===== */
+function exportAssignCSV() {
+  const date = document.getElementById('workDate').value;
+  const rows = [];
+  const tbody = document.getElementById('assignBody');
+  if (!tbody || tbody.children.length === 0) {
+    alert('配置データがありません。先にデータを読み込んでください。');
+    return;
+  }
+  // テーブルのヘッダー取得
+  const headers = Array.from(document.querySelectorAll('#assignTable thead th')).map(th => th.textContent.trim());
+  document.querySelectorAll('#assignBody tr').forEach(tr => {
+    const row = {};
+    const cells = tr.querySelectorAll('td');
+    cells.forEach((td, i) => {
+      const select = td.querySelector('select');
+      const input  = td.querySelector('input');
+      const checkbox = td.querySelector('input[type=checkbox]');
+      let val = '';
+      if (checkbox) val = checkbox.checked ? '✓' : '';
+      else if (select) val = select.value;
+      else if (input) val = input.value;
+      else val = td.textContent.trim();
+      if (headers[i]) row[headers[i]] = val;
+    });
+    if (Object.values(row).some(v => v)) rows.push(row);
+  });
+  if (rows.length === 0) { alert('出力するデータがありません'); return; }
+  const BOM = '﻿';
+  const cols = Object.keys(rows[0]);
+  const lines = [cols.join(',')];
+  rows.forEach(r => {
+    lines.push(cols.map(c => {
+      let v = String(r[c] ?? '');
+      if (v.includes(',') || v.includes('"') || v.includes('\n')) v = '"' + v.replace(/"/g, '""') + '"';
+      return v;
+    }).join(','));
+  });
+  const blob = new Blob([BOM + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `配置表_${date||'未選択'}.csv`; a.click();
+  URL.revokeObjectURL(url);
 }
 </script>
 </body>
