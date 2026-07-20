@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>データ出力 — 高尾輸送サービス</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic Pro', 'Meiryo', sans-serif;
+  background: #f5f8f4; color: #2d3b35; font-size: 14px;
+}
+
+header {
+  background: linear-gradient(135deg, #4d7a5e 0%, #6b9e7e 100%);
+  color: white; padding: 14px 20px;
+  display: flex; align-items: center; justify-content: space-between;
+  box-shadow: 0 2px 8px rgba(77,122,94,0.3);
+}
+header h1 { font-size: 18px; font-weight: 700; }
+header .subtitle { font-size: 12px; opacity: 0.8; }
+header a.hlink {
+  color: rgba(255,255,255,0.9); font-size: 13px; text-decoration: none;
+  border: 1px solid rgba(255,255,255,0.4); padding: 5px 12px; border-radius: 9px; margin-left: 6px;
+}
+header a.hlink:hover { background: rgba(255,255,255,0.15); }
+
+.container { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+
+/* タブ */
+.tab-bar {
+  display: flex; gap: 4px; margin-bottom: 20px;
+  border-bottom: 2px solid #c8d8cc; padding-bottom: 0;
+}
+.tab {
+  padding: 9px 20px; cursor: pointer; border-radius: 9px 9px 0 0;
+  font-size: 13px; font-weight: 700; color: #5c7066;
+  background: #eef7f1; border: 1px solid #b4d4c0; border-bottom: none;
+  transition: all 0.18s; margin-bottom: -2px;
+}
+.tab.active { background: white; color: #4d7a5e; border-color: #c8d8cc; border-bottom: 2px solid white; }
+.tab:hover:not(.active) { background: #e4f0e8; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* パネル */
+.panel {
+  background: white; border-radius: 14px; padding: 22px 24px;
+  margin-bottom: 18px; box-shadow: 0 2px 8px rgba(77,122,94,0.08);
+}
+.panel h2 {
+  font-size: 15px; font-weight: 700; color: #4d7a5e;
+  margin-bottom: 16px; padding-bottom: 10px;
+  border-bottom: 2px solid #d8eee0;
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* フィルター行 */
+.filter-row {
+  display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 16px;
+}
+.filter-field { display: flex; flex-direction: column; gap: 5px; }
+.filter-field label { font-size: 12px; font-weight: 700; color: #5c7066; }
+.filter-field select,
+.filter-field input[type=date],
+.filter-field input[type=text] {
+  padding: 7px 10px; border: 1px solid #c8d8cc; border-radius: 9px;
+  font-size: 13px; font-family: inherit; background: white; color: #2d3b35;
+  min-width: 130px;
+}
+.filter-field select:focus,
+.filter-field input:focus {
+  outline: none; border-color: #6b9e7e; box-shadow: 0 0 0 3px rgba(107,158,126,0.18);
+}
+.range-sep { align-self: center; padding-top: 18px; color: #5c7066; font-size: 14px; }
+
+/* ボタン */
+.btn {
+  padding: 9px 18px; border: none; border-radius: 9px;
+  font-size: 13px; font-weight: 700; font-family: inherit;
+  cursor: pointer; transition: opacity 0.18s; display: inline-flex; align-items: center; gap: 6px;
+}
+.btn:hover { opacity: 0.85; }
+.btn-primary  { background: #4d7a5e; color: white; }
+.btn-export   { background: #2e7d52; color: white; }
+.btn-preview  { background: #6b9e7e; color: white; }
+.btn-small    { padding: 5px 12px; font-size: 12px; }
+
+/* プレビューテーブル */
+.preview-wrap { overflow-x: auto; max-height: 420px; overflow-y: auto; margin-top: 14px; border: 1px solid #c8d8cc; border-radius: 9px; }
+table.preview-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.preview-table th {
+  background: #d8eee0; padding: 7px 10px; border: 1px solid #b4d4c0;
+  color: #4d7a5e; font-weight: 700; white-space: nowrap;
+  position: sticky; top: 0; z-index: 1;
+}
+.preview-table td { padding: 5px 9px; border: 1px solid #d8e8dc; white-space: nowrap; }
+.preview-table tr:nth-child(even) { background: #f8fbf9; }
+.preview-table tr:hover { background: #eef7f1; }
+
+/* ステータス */
+.status-bar {
+  padding: 10px 14px; border-radius: 9px; font-size: 13px;
+  margin-top: 10px; display: none;
+}
+.status-bar.success { background: #d8f0e2; color: #2e7d52; border: 1px solid #95d0aa; display: block; }
+.status-bar.error   { background: #fce8e6; color: #b5453a; border: 1px solid #eeaaa4; display: block; }
+.status-bar.info    { background: #e4f0e8; color: #4d7a5e; border: 1px solid #b4d4c0; display: block; }
+
+/* 件数バッジ */
+.count-badge {
+  display: inline-block; background: #6b9e7e; color: white;
+  border-radius: 12px; padding: 2px 9px; font-size: 11px; font-weight: 700;
+}
+
+/* マスター出力グリッド */
+.master-export-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px;
+}
+.master-export-card {
+  border: 1px solid #c8d8cc; border-radius: 12px; padding: 16px 18px;
+  background: #fdfffe;
+}
+.master-export-card h3 { font-size: 14px; font-weight: 700; color: #4d7a5e; margin-bottom: 10px; }
+.master-export-card p { font-size: 12px; color: #5c7066; margin-bottom: 12px; line-height: 1.6; }
+
+/* 区切り線 */
+.divider { border: none; border-top: 1px solid #e0eae4; margin: 16px 0; }
+
+/* 日報プレビュー件数表示 */
+.result-summary {
+  font-size: 13px; color: #5c7066; padding: 8px 0;
+}
+.result-summary strong { color: #4d7a5e; }
+
+/* クイック期間ボタン */
+.quick-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.quick-btn {
+  padding: 5px 13px; border: 1px solid #b4d4c0; border-radius: 20px;
+  font-size: 12px; font-weight: 700; color: #4d7a5e; background: #eef7f1;
+  cursor: pointer; transition: all 0.15s;
+}
+.quick-btn:hover { background: #d8eee0; border-color: #6b9e7e; }
+
+@media (max-width: 600px) {
+  .filter-row { flex-direction: column; }
+  .filter-field select, .filter-field input { min-width: 100%; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="subtitle">高尾輸送サービス</div>
+    <h1>📥 データ出力</h1>
+  </div>
+  <div>
+    <a class="hlink" href="tenjo.html">📋 配置管理</a>
+    <a class="hlink" href="master.html">📂 マスター</a>
+    <a class="hlink" href="index.html">🏠 トップ</a>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="tab-bar">
+    <div class="tab active" onclick="switchTab('nippo')">📝 日報データ</div>
+    <div class="tab" onclick="switchTab('assign')">📋 配置表</div>
+    <div class="tab" onclick="switchTab('master')">📂 マスターデータ</div>
+  </div>
+
+  <!-- ===== 日報データ出力 ===== -->
+  <div id="tab-nippo" class="tab-content active">
+    <div class="panel">
+      <h2>📝 日報データ出力</h2>
+
+      <!-- クイック選択 -->
+      <div style="margin-bottom:14px;">
+        <div style="font-size:12px; font-weight:700; color:#5c7066; margin-bottom:8px;">クイック期間選択</div>
+        <div class="quick-btns">
+          <div class="quick-btn" onclick="setQuick('thisMonth')">今月</div>
+          <div class="quick-btn" onclick="setQuick('lastMonth')">先月</div>
+          <div class="quick-btn" onclick="setQuick('thisYear')">今年</div>
+          <div class="quick-btn" onclick="setQuick('lastYear')">昨年</div>
+        </div>
+      </div>
+
+      <!-- フィルター -->
+      <div class="filter-row">
+        <div class="filter-field">
+          <label>開始日</label>
+          <input type="date" id="nippo-from" />
+        </div>
+        <div class="range-sep">〜</div>
+        <div class="filter-field">
+          <label>終了日</label>
+          <input type="date" id="nippo-to" />
+        </div>
+        <div class="filter-field">
+          <label>勤務種別</label>
+          <select id="nippo-type">
+            <option value="">すべて</option>
+            <option value="登校・下校 両方">登校・下校 両方</option>
+            <option value="登校のみ">登校のみ</option>
+            <option value="下校のみ">下校のみ</option>
+            <option value="その他（研修・短時間授業など）">その他（研修・短時間授業など）</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>氏名（部分一致）</label>
+          <input type="text" id="nippo-name" placeholder="例：山田" style="min-width:140px;">
+        </div>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+        <button class="btn btn-preview" onclick="previewNippo()">🔍 プレビュー</button>
+        <button class="btn btn-export" onclick="exportNippo()">⬇️ CSVダウンロード</button>
+        <div id="nippo-status" class="status-bar"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="nippo-preview-panel" style="display:none;">
+      <h2>プレビュー <span class="count-badge" id="nippo-count">0</span></h2>
+      <div class="result-summary" id="nippo-summary"></div>
+      <div class="preview-wrap">
+        <table class="preview-table" id="nippo-preview-table">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 配置表出力 ===== -->
+  <div id="tab-assign" class="tab-content">
+    <div class="panel">
+      <h2>📋 配置表出力</h2>
+      <div class="filter-row">
+        <div class="filter-field">
+          <label>開始日</label>
+          <input type="date" id="assign-from" />
+        </div>
+        <div class="range-sep">〜</div>
+        <div class="filter-field">
+          <label>終了日</label>
+          <input type="date" id="assign-to" />
+        </div>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+        <button class="btn btn-preview" onclick="previewAssign()">🔍 プレビュー</button>
+        <button class="btn btn-export" onclick="exportAssign()">⬇️ CSVダウンロード</button>
+        <div id="assign-status" class="status-bar"></div>
+      </div>
+    </div>
+    <div class="panel" id="assign-preview-panel" style="display:none;">
+      <h2>プレビュー <span class="count-badge" id="assign-count">0</span></h2>
+      <div class="preview-wrap">
+        <table class="preview-table" id="assign-preview-table">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== マスターデータ出力 ===== -->
+  <div id="tab-master" class="tab-content">
+    <div class="panel">
+      <h2>📂 マスターデータ出力</h2>
+      <p style="font-size:13px; color:#5c7066; margin-bottom:16px;">
+        各マスターテーブルのデータをCSVで個別にダウンロードできます。
+      </p>
+      <div class="master-export-grid">
+
+        <div class="master-export-card">
+          <h3>👥 従業員マスタ</h3>
+          <p>氏名・社員番号・メールアドレス・電話番号・免許情報・備考</p>
+          <button class="btn btn-export btn-small" onclick="exportMaster('staff')">⬇️ CSV出力</button>
+        </div>
+
+        <div class="master-export-card">
+          <h3>💼 業務マスタ</h3>
+          <p>業務名・説明・表示順</p>
+          <button class="btn btn-export btn-small" onclick="exportMaster('job_types')">⬇️ CSV出力</button>
+        </div>
+
+        <div class="master-export-card">
+          <h3>🏫 コース名マスタ</h3>
+          <p>都道府県・学校名・コース名</p>
+          <button class="btn btn-export btn-small" onclick="exportMaster('courses')">⬇️ CSV出力</button>
+        </div>
+
+        <div class="master-export-card">
+          <h3>🚗 車両マスタ</h3>
+          <p>車両番号・車種・定員・営業所・車検期限・備考</p>
+          <button class="btn btn-export btn-small" onclick="exportMaster('vehicles')">⬇️ CSV出力</button>
+        </div>
+
+        <div class="master-export-card">
+          <h3>🏢 営業所マスタ</h3>
+          <p>営業所名・住所・電話番号・備考</p>
+          <button class="btn btn-export btn-small" onclick="exportMaster('offices')">⬇️ CSV出力</button>
+        </div>
+
+        <div class="master-export-card">
+          <h3>📋 営業許可マスタ</h3>
+          <p>許可番号・許可区分・有効期限・発行機関</p>
+          <button class="btn btn-export btn-small" onclick="exportMaster('permits')">⬇️ CSV出力</button>
+        </div>
+
+        <div class="master-export-card">
+          <h3>🔑 管理者マスタ</h3>
+          <p>氏名・役職・メールアドレス</p>
+          <button class="btn btn-export btn-small" onclick="exportMaster('admins')">⬇️ CSV出力</button>
+        </div>
+
+        <div class="master-export-card">
+          <h3>👥 従業員×業務 紐付け</h3>
+          <p>従業員と業務種別の紐付け一覧（兼務管理用）</p>
+          <button class="btn btn-export btn-small" onclick="exportEmpJobTypes()">⬇️ CSV出力</button>
+        </div>
+
+      </div>
+      <div id="master-status" class="status-bar" style="margin-top:14px;"></div>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+/* ===== 接続設定 ===== */
+const SUPABASE_URL = 'https://wxdyqkyqtizhtkwtpvru.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4ZHlxa3lxdGl6aHRrd3RwdnJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NzYxODEsImV4cCI6MjA5OTQ1MjE4MX0.yVbClXBk2JVeglevsBLY5sH2_m2ybCf71u4i_YYWyHE';
+const H = {
+  'apikey': SUPABASE_KEY,
+  'Authorization': 'Bearer ' + SUPABASE_KEY,
+  'Content-Type': 'application/json'
+};
+
+/* ===== ユーティリティ ===== */
+function today() {
+  return new Date().toISOString().slice(0,10);
+}
+function firstDayOfMonth(d) {
+  return d.toISOString().slice(0,8) + '01';
+}
+function lastDayOfMonth(d) {
+  const y = d.getFullYear(), m = d.getMonth();
+  return new Date(y, m+1, 0).toISOString().slice(0,10);
+}
+
+// UTF-8 BOM付きCSVをダウンロード
+function downloadCSV(rows, filename) {
+  if (!rows || rows.length === 0) { alert('出力するデータがありません'); return; }
+  const BOM = '﻿';
+  const headers = Object.keys(rows[0]);
+  const lines = [headers.join(',')];
+  for (const row of rows) {
+    const vals = headers.map(h => {
+      let v = row[h] == null ? '' : String(row[h]);
+      if (v.includes(',') || v.includes('"') || v.includes('\n')) {
+        v = '"' + v.replace(/"/g, '""') + '"';
+      }
+      return v;
+    });
+    lines.push(vals.join(','));
+  }
+  const csv = BOM + lines.join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function setStatus(id, msg, type) {
+  const el = document.getElementById(id);
+  el.className = 'status-bar ' + type;
+  el.textContent = msg;
+}
+
+// Supabase から全件取得（1000件超対応）
+async function fetchAll(table, params='') {
+  let rows = [], offset = 0, limit = 1000;
+  while (true) {
+    const url = `${SUPABASE_URL}/rest/v1/${table}?${params}${params?'&':''}offset=${offset}&limit=${limit}`;
+    const res = await fetch(url, { headers: H });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    rows = rows.concat(data);
+    if (data.length < limit) break;
+    offset += limit;
+  }
+  return rows;
+}
+
+/* ===== タブ切替 ===== */
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    const ids = ['nippo','assign','master'];
+    t.classList.toggle('active', ids[i] === name);
+  });
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+/* ===== クイック期間 ===== */
+function setQuick(type) {
+  const now = new Date();
+  let from, to;
+  if (type === 'thisMonth') {
+    from = firstDayOfMonth(now);
+    to = lastDayOfMonth(now);
+  } else if (type === 'lastMonth') {
+    const last = new Date(now.getFullYear(), now.getMonth()-1, 1);
+    from = firstDayOfMonth(last);
+    to = lastDayOfMonth(last);
+  } else if (type === 'thisYear') {
+    from = now.getFullYear() + '-01-01';
+    to = now.getFullYear() + '-12-31';
+  } else if (type === 'lastYear') {
+    const y = now.getFullYear() - 1;
+    from = y + '-01-01';
+    to = y + '-12-31';
+  }
+  document.getElementById('nippo-from').value = from;
+  document.getElementById('nippo-to').value = to;
+}
+
+/* ===== 日報 プレビュー ===== */
+// 日報の表示カラム定義（管理者向け主要項目）
+const NIPPO_COLS = [
+  ['勤務日','勤務日'],
+  ['氏名','氏名'],
+  ['勤務種別','勤務種別'],
+  ['登校_学校','登校_学校'],
+  ['登校_コース','登校_コース'],
+  ['登校_出勤場所','登校_出勤場所'],
+  ['登校_出勤手段','登校_出勤手段'],
+  ['登校_出勤交通費','登校_出勤交通費'],
+  ['登校_出勤指示時刻','登校_出勤指示時刻'],
+  ['登校_終了時刻','登校_終了時刻'],
+  ['登校_退勤場所','登校_退勤場所'],
+  ['登校_帰宅手段','登校_帰宅手段'],
+  ['登校_帰宅交通費','登校_帰宅交通費'],
+  ['下校_学校','下校_学校'],
+  ['下校_コース','下校_コース'],
+  ['下校_出勤場所','下校_出勤場所'],
+  ['下校_出勤手段','下校_出勤手段'],
+  ['下校_出勤交通費','下校_出勤交通費'],
+  ['下校_出勤指示時刻','下校_出勤指示時刻'],
+  ['下校_終了時刻','下校_終了時刻'],
+  ['下校_退勤場所','下校_退勤場所'],
+  ['下校_帰宅手段','下校_帰宅手段'],
+  ['下校_帰宅交通費','下校_帰宅交通費'],
+  ['その他_内容','その他_内容'],
+  ['その他_開始時刻','その他_開始時刻'],
+  ['その他_終了時刻','その他_終了時刻'],
+  ['その他_手段','その他_手段'],
+  ['その他_交通費','その他_交通費'],
+  ['中間業務_開始','中間業務_開始'],
+  ['中間業務_終了','中間業務_終了'],
+  ['自宅戻り','自宅戻り'],
+  ['備考','備考'],
+  ['created_at','送信日時'],
+];
+
+function buildNippoParams() {
+  const from = document.getElementById('nippo-from').value;
+  const to   = document.getElementById('nippo-to').value;
+  const type = document.getElementById('nippo-type').value;
+  const name = document.getElementById('nippo-name').value.trim();
+
+  if (!from || !to) { alert('開始日と終了日を指定してください'); return null; }
+  if (from > to)    { alert('開始日が終了日より後になっています'); return null; }
+
+  let params = `勤務日=gte.${from}&勤務日=lte.${to}&order=勤務日.asc,氏名.asc`;
+  if (type) params += `&勤務種別=eq.${encodeURIComponent(type)}`;
+  if (name) params += `&氏名=ilike.*${encodeURIComponent(name)}*`;
+  return params;
+}
+
+let nippoData = [];
+
+async function previewNippo() {
+  const params = buildNippoParams();
+  if (!params) return;
+  setStatus('nippo-status','読み込み中…','info');
+  try {
+    nippoData = await fetchAll('tenjo_nippo', params);
+    renderNippoTable(nippoData);
+    document.getElementById('nippo-count').textContent = nippoData.length;
+    const from = document.getElementById('nippo-from').value;
+    const to   = document.getElementById('nippo-to').value;
+    document.getElementById('nippo-summary').innerHTML =
+      `<strong>${from}</strong> 〜 <strong>${to}</strong> の日報：<strong>${nippoData.length}</strong> 件`;
+    document.getElementById('nippo-preview-panel').style.display = 'block';
+    setStatus('nippo-status', nippoData.length + ' 件取得しました', 'success');
+  } catch(e) {
+    setStatus('nippo-status', 'エラー：' + e.message, 'error');
+  }
+}
+
+function renderNippoTable(data) {
+  const thead = document.querySelector('#nippo-preview-table thead');
+  const tbody = document.querySelector('#nippo-preview-table tbody');
+  // プレビューは主要列のみ表示（勤務日・氏名・勤務種別・登校/下校の学校・時刻）
+  const previewCols = ['勤務日','氏名','勤務種別','登校_学校','登校_出勤指示時刻','登校_終了時刻','下校_学校','下校_出勤指示時刻','下校_終了時刻','その他_内容','備考'];
+  thead.innerHTML = '<tr>' + previewCols.map(c=>`<th>${c}</th>`).join('') + '</tr>';
+  tbody.innerHTML = data.slice(0,200).map(r =>
+    '<tr>' + previewCols.map(c => `<td>${r[c]||''}</td>`).join('') + '</tr>'
+  ).join('');
+  if (data.length > 200) {
+    tbody.innerHTML += `<tr><td colspan="${previewCols.length}" style="text-align:center;color:#5c7066;padding:8px;">… 先頭200件のみ表示。CSVには全${data.length}件が含まれます。</td></tr>`;
+  }
+}
+
+async function exportNippo() {
+  const params = buildNippoParams();
+  if (!params) return;
+  setStatus('nippo-status','ダウンロード準備中…','info');
+  try {
+    const data = nippoData.length > 0 ? nippoData : await fetchAll('tenjo_nippo', params);
+    // 出力列を整理
+    const rows = data.map(r => {
+      const obj = {};
+      for (const [key, label] of NIPPO_COLS) {
+        obj[label] = r[key] ?? '';
+      }
+      return obj;
+    });
+    const from = document.getElementById('nippo-from').value;
+    const to   = document.getElementById('nippo-to').value;
+    downloadCSV(rows, `日報_${from}_${to}.csv`);
+    setStatus('nippo-status', rows.length + ' 件をダウンロードしました', 'success');
+  } catch(e) {
+    setStatus('nippo-status', 'エラー：' + e.message, 'error');
+  }
+}
+
+/* ===== 配置表 ===== */
+let assignData = [];
+
+async function previewAssign() {
+  const from = document.getElementById('assign-from').value;
+  const to   = document.getElementById('assign-to').value;
+  if (!from || !to) { alert('開始日と終了日を指定してください'); return; }
+  setStatus('assign-status','読み込み中…','info');
+  try {
+    const params = `work_date=gte.${from}&work_date=lte.${to}&order=work_date.asc,school_name.asc&select=*`;
+    assignData = await fetchAll('assignments', params);
+    renderAssignTable(assignData);
+    document.getElementById('assign-count').textContent = assignData.length;
+    document.getElementById('assign-preview-panel').style.display = 'block';
+    setStatus('assign-status', assignData.length + ' 件取得しました', 'success');
+  } catch(e) {
+    setStatus('assign-status', 'エラー：' + e.message, 'error');
+  }
+}
+
+function renderAssignTable(data) {
+  if (data.length === 0) return;
+  const cols = Object.keys(data[0]);
+  const thead = document.querySelector('#assign-preview-table thead');
+  const tbody = document.querySelector('#assign-preview-table tbody');
+  thead.innerHTML = '<tr>' + cols.map(c=>`<th>${c}</th>`).join('') + '</tr>';
+  tbody.innerHTML = data.slice(0,200).map(r =>
+    '<tr>' + cols.map(c => `<td>${r[c]||''}</td>`).join('') + '</tr>'
+  ).join('');
+}
+
+async function exportAssign() {
+  const from = document.getElementById('assign-from').value;
+  const to   = document.getElementById('assign-to').value;
+  if (!from || !to) { alert('開始日と終了日を指定してください'); return; }
+  setStatus('assign-status','ダウンロード準備中…','info');
+  try {
+    const params = `work_date=gte.${from}&work_date=lte.${to}&order=work_date.asc,school_name.asc`;
+    const data = assignData.length > 0 ? assignData : await fetchAll('assignments', params);
+    downloadCSV(data, `配置表_${from}_${to}.csv`);
+    setStatus('assign-status', data.length + ' 件をダウンロードしました', 'success');
+  } catch(e) {
+    setStatus('assign-status', 'エラー：' + e.message, 'error');
+  }
+}
+
+/* ===== マスター ===== */
+const MASTER_LABEL = {
+  staff:     '従業員マスタ',
+  job_types: '業務マスタ',
+  courses:   'コース名マスタ',
+  vehicles:  '車両マスタ',
+  offices:   '営業所マスタ',
+  permits:   '営業許可マスタ',
+  admins:    '管理者マスタ',
+};
+
+async function exportMaster(table) {
+  setStatus('master-status', MASTER_LABEL[table] + ' を取得中…', 'info');
+  try {
+    const data = await fetchAll(table, 'active=eq.true&order=id');
+    downloadCSV(data, MASTER_LABEL[table] + '.csv');
+    setStatus('master-status', MASTER_LABEL[table] + '：' + data.length + ' 件をダウンロードしました', 'success');
+  } catch(e) {
+    setStatus('master-status', 'エラー：' + e.message, 'error');
+  }
+}
+
+async function exportEmpJobTypes() {
+  setStatus('master-status', '従業員×業務 紐付けを取得中…', 'info');
+  try {
+    // staff と job_types を結合して取得
+    const [staffRows, jtRows, ejRows] = await Promise.all([
+      fetchAll('staff', 'active=eq.true'),
+      fetchAll('job_types', 'active=eq.true'),
+      fetchAll('employee_job_types', ''),
+    ]);
+    const staffMap = Object.fromEntries(staffRows.map(s => [s.id, s.name]));
+    const jtMap    = Object.fromEntries(jtRows.map(j => [j.id, j.name]));
+    const rows = ejRows.map(r => ({
+      '従業員ID': r.employee_id,
+      '従業員名': staffMap[r.employee_id] || '',
+      '業務種別ID': r.job_type_id,
+      '業務種別名': jtMap[r.job_type_id] || '',
+      '登録日': r.created_at || '',
+    }));
+    downloadCSV(rows, '従業員業務紐付け.csv');
+    setStatus('master-status', rows.length + ' 件をダウンロードしました', 'success');
+  } catch(e) {
+    setStatus('master-status', 'エラー：' + e.message, 'error');
+  }
+}
+
+/* ===== 初期化 ===== */
+(function init() {
+  const now = new Date();
+  // 今月をデフォルトにセット
+  document.getElementById('nippo-from').value = firstDayOfMonth(now);
+  document.getElementById('nippo-to').value   = lastDayOfMonth(now);
+  document.getElementById('assign-from').value = firstDayOfMonth(now);
+  document.getElementById('assign-to').value   = lastDayOfMonth(now);
+})();
+</script>
+</body>
+</html>
