@@ -44,6 +44,27 @@
     font-size: 16px;
     cursor: pointer;
   }
+
+  /* 参照日ライン */
+  .date-bar-sep {
+    width: 100%; height: 0;
+    border-top: 1px dashed #c8d8cc;
+    margin: 4px 0;
+  }
+  .date-bar .ref-label {
+    font-size: 12px; color: #7fa88a; font-weight: bold;
+  }
+  .date-bar input.ref-date {
+    border: 1.5px solid #b4d4c0 !important;
+    font-size: 14px !important;
+    padding: 6px 10px !important;
+    color: #5c7066;
+  }
+  /* 当日インジケーター */
+  .date-indicator {
+    font-size: 12px; color: #5c7066; padding: 3px 10px;
+    background: #eef7f1; border-radius: 20px; border: 1px solid #b4d4c0;
+  }
   .btn {
     padding: 9px 18px;
     border: none;
@@ -294,10 +315,23 @@
   <!-- ========== 日次配置入力 ========== -->
   <div id="tab-assign" class="tab-content active">
     <div class="date-bar">
-      <label>📅 配置日：</label>
+      <!-- メイン：配置日（翌日デフォルト・保存先） -->
+      <label>📅 配置日（保存先）：</label>
       <input type="date" id="workDate" />
-      <button class="btn btn-primary" onclick="loadAssignments()">この日の配置を読み込む</button>
+      <button class="btn btn-primary" onclick="loadAssignments()"
+        title="この配置日としてすでに保存されているデータを再読み込みします">↩ 保存済みを再読み込み</button>
       <button class="btn btn-add" onclick="addRow()">＋ 行を追加</button>
+      <span class="date-indicator" id="todayLabel"></span>
+
+      <!-- 区切り -->
+      <div class="date-bar-sep"></div>
+
+      <!-- サブ：前日などをテンプレートとして読み込む（今日デフォルト） -->
+      <span class="ref-label">📂 前日などを読み込んでテンプレートにする：</span>
+      <input type="date" id="refDate" class="ref-date" />
+      <button class="btn btn-small" style="background:#9b7eb8;color:white;font-weight:bold;"
+        onclick="loadFromRef()"
+        title="この日の配置を配置表に展開します。配置日（保存先）は変わりません。">この日を読み込む</button>
     </div>
 
     <div class="panel">
@@ -399,13 +433,27 @@ let assignRows = [];   // 現在の配置行データ
 
 // ========== 初期化 ==========
 document.addEventListener('DOMContentLoaded', async () => {
-  // 今日の日付をセット
-  const today = new Date().toISOString().slice(0, 10);
-  document.getElementById('workDate').value = today;
-  document.getElementById('notifyDate').value = today;
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+
+  // 翌日を配置日のデフォルトに設定
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+  document.getElementById('workDate').value = tomorrowStr;
+  document.getElementById('notifyDate').value = tomorrowStr;
+
+  // 別日参照は今日をデフォルトに
+  document.getElementById('refDate').value = today;
+
+  // 当日表示ラベル
+  const ymd = today.replace(/-/g, '/');
+  document.getElementById('todayLabel').textContent = `本日 ${ymd}`;
 
   await Promise.all([loadStaff(), loadCourses()]);
-  addRow(); // 最初の1行を追加
+
+  // 翌日の配置を自動読み込み（なければ空行1行）
+  await loadAssignments();
 });
 
 // ========== データ読み込み ==========
@@ -552,17 +600,33 @@ function toggleChukanStaff(checkbox) {
 }
 
 // ========== 配置読み込み ==========
+// 別日参照：配置日は変えず、指定日のデータをテンプレートとして読み込む
+async function loadFromRef() {
+  const ref = document.getElementById('refDate').value;
+  if (!ref) { alert('参照する日付を選択してください'); return; }
+  const workDate = document.getElementById('workDate').value;
+  // 配置日（保存先）はそのままにして、参照日のデータだけ展開する
+  await loadAssignmentsFromDate(ref, true);
+  // 読み込み後、配置日を元に戻す（念のため）
+  document.getElementById('workDate').value = workDate;
+}
+
+// 配置日の保存済みデータを再読み込み
 async function loadAssignments() {
   const date = document.getElementById('workDate').value;
   if (!date) return;
+  await loadAssignmentsFromDate(date, false);
+}
 
+// 指定日のデータを配置表に展開する共通処理
+// asTemplate=true のとき：DBのIDを引き継がない（新規行として展開）
+async function loadAssignmentsFromDate(date, asTemplate) {
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/assignments?work_date=eq.${date}&order=id`,
     { headers }
   );
   const data = await res.json();
 
-  // コース情報をcourse_idからマッピング
   const courseMap = {};
   courseList.forEach(c => { courseMap[c.id] = c; });
 
@@ -570,11 +634,16 @@ async function loadAssignments() {
 
   if (data.length === 0) {
     addRow();
+    if (asTemplate) {
+      showStatus('saveStatus', 'info',
+        `${date} の配置データはありません。空の行を追加しました。`);
+    }
   } else {
     data.forEach(row => {
       const course = courseMap[row.course_id] || {};
       addRow({
-        id: row.id,
+        // テンプレート読み込み時はIDを持たせない（保存時に新規INSERT）
+        id: asTemplate ? null : row.id,
         school_name: course.school_name || '',
         course_id: row.course_id,
         tokou_staff_id: row.tokou_staff_id,
@@ -584,6 +653,10 @@ async function loadAssignments() {
         memo: row.memo || ''
       });
     });
+    if (asTemplate) {
+      showStatus('saveStatus', 'info',
+        `${date} の配置（${data.length}件）を読み込みました。差分を修正して「配置を保存」してください。`);
+    }
   }
 }
 
