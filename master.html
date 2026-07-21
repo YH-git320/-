@@ -1546,18 +1546,19 @@ async function verifyTotpEnrollment(factorId, code) {
 }
 
 /**
- * 登録済みTOTPファクター一覧
+ * 登録済みTOTPファクター一覧（/auth/v1/user 経由で確実に取得）
  */
 async function getEnrolledFactors() {
   const session = _getSession();
   if (!session?.access_token) return [];
   try {
-    const res = await fetch(`${AUTH_URL}/factors`, {
+    const res = await fetch(`${AUTH_URL}/user`, {
       headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
     });
     if (!res.ok) return [];
-    const factors = await res.json();
-    return Array.isArray(factors) ? factors.filter(f => f.factor_type === 'totp' && f.status === 'verified') : [];
+    const userData = await res.json();
+    const factors = Array.isArray(userData.factors) ? userData.factors : [];
+    return factors.filter(f => f.factor_type === 'totp' && f.status === 'verified');
   } catch { return []; }
 }
 
