@@ -160,7 +160,7 @@ footer {
   // 未ログイン・セッション期限切れの場合はログイン画面へリダイレクト
   (function() {
     try {
-      const s = JSON.parse(localStorage.getItem('takao_session'));
+      const s = JSON.parse(sessionStorage.getItem('takao_session'));
       const now = Math.floor(Date.now() / 1000);
       if (!s || !s.access_token || !s.expires_at || s.expires_at < now) {
         location.replace('login.html');
@@ -291,19 +291,19 @@ function _saveSession(data) {
     user_id:       data.user?.id || data.user_id,
     email:         data.user?.email || data.email,
   };
-  localStorage.setItem('takao_session', JSON.stringify(session));
+  sessionStorage.setItem('takao_session', JSON.stringify(session));
   return session;
 }
 
 function _getSession() {
-  try { return JSON.parse(localStorage.getItem('takao_session')); }
+  try { return JSON.parse(sessionStorage.getItem('takao_session')); }
   catch { return null; }
 }
 
 function _clearSession() {
-  localStorage.removeItem('takao_session');
-  localStorage.removeItem('takao_role');
-  localStorage.removeItem('takao_name');
+  sessionStorage.removeItem('takao_session');
+  sessionStorage.removeItem('takao_role');
+  sessionStorage.removeItem('takao_name');
 }
 
 function _isExpired(session) {
@@ -334,7 +334,7 @@ async function _refresh(session) {
 }
 
 async function _getRole(accessToken) {
-  const cached = localStorage.getItem('takao_role');
+  const cached = sessionStorage.getItem('takao_role');
   if (cached) return cached;
   try {
     const res = await fetch(`${REST_URL}/user_roles?select=role,display_name`, {
@@ -344,8 +344,8 @@ async function _getRole(accessToken) {
     const data = await res.json();
     const row = data[0];
     if (!row) return null;
-    localStorage.setItem('takao_role', row.role);
-    if (row.display_name) localStorage.setItem('takao_name', row.display_name);
+    sessionStorage.setItem('takao_role', row.role);
+    if (row.display_name) sessionStorage.setItem('takao_name', row.display_name);
     return row.role;
   } catch { return null; }
 }
@@ -639,7 +639,7 @@ function _injectUserInfo(email, role) {
   const header = document.querySelector('header');
   if (!header) return;
 
-  const name = localStorage.getItem('takao_name') || email;
+  const name = sessionStorage.getItem('takao_name') || email;
   const label = ROLE_LABEL[role] || role;
   const badgeColor = role === 'admin' ? '#9b7eb8' : '#6b9e7e';
 
