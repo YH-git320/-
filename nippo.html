@@ -149,6 +149,22 @@
   .choice.sel .tick { background: #6b9e7e !important; border-color: #6b9e7e !important; }
   input:focus, textarea:focus { border-color: #6b9e7e !important; box-shadow: 0 0 0 4px #e4f0e8 !important; }
 
+  /* ===== iOS / モバイル対応 ===== */
+  @media (max-width: 390px) {
+    body { overflow-x: hidden; font-size: 18px; }
+    .qlabel { font-size: 22px; }
+    .qhint { font-size: 16px; }
+    input[type=text], input[type=number], input[type=time], input[type=date], textarea {
+      font-size: 18px;
+      padding: 14px 14px;
+    }
+    .choice { font-size: 20px; padding: 16px 16px; }
+    .timegrid { flex-direction: column; gap: 10px; }
+    button.nav-btn { min-height: 60px; font-size: 20px; }
+    .confirm-title { font-size: 22px; }
+    .crow .cv { font-size: 19px; }
+  }
+
 </style>
 </head>
 <body>

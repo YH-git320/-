@@ -288,6 +288,60 @@
   .notify-preview { background: #fdf9ef !important; border-color: #e8d8a0 !important; }
   .badge-blue { background: #e4f0e8 !important; color: #4d7a5e !important; }
 
+  /* ===== iOS / モバイル対応 ===== */
+  @media (max-width: 768px) {
+    body { overflow-x: hidden; }
+    header {
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px 14px;
+    }
+    header h1 { font-size: 15px; }
+    header .subtitle { font-size: 11px; }
+    header > div:last-child {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    header > div:last-child a {
+      font-size: 11px !important;
+      padding: 4px 8px !important;
+    }
+    .container { padding: 10px 12px; }
+    .date-bar {
+      padding: 10px 12px;
+      gap: 8px;
+    }
+    .date-bar label { font-size: 13px; }
+    .date-bar input[type=date] {
+      font-size: 14px;
+      padding: 6px 8px;
+    }
+    .ref-label { font-size: 11px !important; }
+    .tab-bar {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      flex-wrap: nowrap;
+    }
+    .tab {
+      padding: 7px 10px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .btn { padding: 8px 12px; font-size: 13px; }
+    .btn-small { padding: 5px 8px; font-size: 11px; }
+    .panel { padding: 12px; }
+    .panel h2 { font-size: 14px; }
+    .action-bar { gap: 6px; }
+    .staff-grid { grid-template-columns: 1fr; }
+    .staff-card { flex-wrap: wrap; gap: 6px; }
+    .add-staff-form { flex-direction: column; }
+    .add-staff-form input { width: 100%; }
+    select, input[type=text] { font-size: 16px; } /* iOS: ズーム防止 */
+    .assignment-table { font-size: 12px; }
+    .assignment-table th, .assignment-table td { padding: 5px 6px; }
+  }
+
 </style>
 </head>
 <body>

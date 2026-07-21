@@ -178,6 +178,68 @@ table.preview-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .bpbar-wrap { background: rgba(255,255,255,0.15); border-radius: 6px; height: 8px; overflow: hidden; }
 .bpbar-fill { height: 100%; background: #6b9e7e; border-radius: 6px; transition: width 0.3s ease; width: 0%; }
 .bpbar-label { font-size: 12px; color: rgba(255,255,255,0.8); margin-top: 6px; }
+
+/* ===== iOS / モバイル対応 ===== */
+@media (max-width: 768px) {
+  body { overflow-x: hidden; }
+  header {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 14px;
+  }
+  header h1 { font-size: 15px; }
+  header .subtitle { font-size: 11px; }
+  header > div:last-child {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  header a.hlink {
+    font-size: 11px !important;
+    padding: 4px 8px !important;
+    margin-left: 0 !important;
+  }
+  .container { padding: 12px; }
+  .backup-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 16px 18px;
+    gap: 14px;
+  }
+  .backup-banner-text h2 { font-size: 15px; }
+  .btn-backup {
+    width: 100%;
+    justify-content: center;
+    padding: 12px 20px;
+    font-size: 14px;
+  }
+  .tab-bar {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+  }
+  .tab {
+    padding: 7px 12px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .panel { padding: 14px 14px; }
+  .panel h2 { font-size: 14px; }
+  .filter-row { flex-direction: column; gap: 10px; }
+  .filter-field select,
+  .filter-field input[type=date],
+  .filter-field input[type=text] {
+    min-width: 100%;
+    width: 100%;
+    font-size: 16px; /* iOS: ズーム防止 */
+  }
+  .range-sep { padding-top: 0; }
+  .quick-btns { gap: 6px; }
+  .master-export-grid { grid-template-columns: 1fr; gap: 10px; }
+  .preview-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .btn { padding: 8px 14px; font-size: 13px; }
+  .btn-small { padding: 5px 10px; font-size: 12px; }
+}
 </style>
 </head>
 <body>
