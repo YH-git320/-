@@ -713,7 +713,7 @@ async function addJobType() {
   if (!name) { showStatus('status-jobtypes','error','業務名を入力してください'); return; }
   const res = await fetch(`${SUPABASE_URL}/rest/v1/job_types`, {
     method: 'POST', headers: getH(),
-    body: JSON.stringify({ name, description: desc || null, sort_order: order })
+    body: JSON.stringify({ name, description: desc || null, sort_order: order, active: true })
   });
   if (res.ok) {
     document.getElementById('jt-name').value = '';
@@ -723,7 +723,10 @@ async function addJobType() {
     if (det) det.removeAttribute('open');
     await loadJobTypes();
     showStatus('status-jobtypes','success',`✅「${name}」を追加しました`);
-  } else { showStatus('status-jobtypes','error','追加に失敗しました'); }
+  } else {
+    const err = await res.json().catch(()=>({}));
+    showStatus('status-jobtypes','error','追加に失敗しました: ' + (err.message || err.hint || res.status));
+  }
 }
 
 function startEditJT(id) {
@@ -1111,13 +1114,13 @@ async function deleteSimple(key, id, label) {
 
 async function addSimple(key, reqField) {
   const def = SIMPLE_DEF[key];
-  const body = {};
+  const body = { active: true };
   def.fields.forEach(f => {
     const el = document.getElementById(`add-${key}-${f}`);
     if (el) body[f] = el.value.trim() || null;
   });
   if (!body[reqField]) { showStatus('status-'+key,'error','必須項目を入力してください'); return; }
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${def.table}`, { method:'POST', headers:H, body:JSON.stringify(body) });
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${def.table}`, { method:'POST', headers:getH(), body:JSON.stringify(body) });
   if (res.ok) {
     def.fields.forEach(f => { const el = document.getElementById(`add-${key}-${f}`); if (el && el.tagName!=='SELECT') el.value=''; });
     const det = document.getElementById('details-'+key+'-form');
@@ -1132,7 +1135,7 @@ async function addCourse() {
   const school = document.getElementById('add-courses-school').value.trim();
   const course = document.getElementById('add-courses-course').value.trim();
   if (!school||!course) { showStatus('status-courses','error','学校名・コース名を入力してください'); return; }
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/courses`, { method:'POST', headers:H, body:JSON.stringify({prefecture:pref, school_name:school, course_name:course}) });
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/courses`, { method:'POST', headers:H, body:JSON.stringify({prefecture:pref, school_name:school, course_name:course, active:true}) });
   if (res.ok) {
     document.getElementById('add-courses-school').value='';
     document.getElementById('add-courses-course').value='';
