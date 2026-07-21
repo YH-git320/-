@@ -1019,18 +1019,9 @@ function exportAssignCSV() {
 }
 </script>
 <script>
-/**
- * auth.js — 高尾輸送サービス 管理システム 共通認証モジュール
- *
- * 使い方：
- *   <script src="auth.js"></script>
- *   <script>
- *     // ページ読み込み時に呼ぶ。許可する役割の配列を渡す。
- *     // ['admin']        → 管理者のみ
- *     // ['admin','staff'] → 管理者・事務員どちらも可
- *     initAuth(['admin', 'staff']);
- *   </script>
- */
+// ===== 高尾輸送サービス 管理システム 共通認証モジュール =====
+// initAuth(['admin', 'staff'])  → 管理者・事務員どちらも可
+// initAuth(['admin'])           → 管理者のみ
 
 const AUTH_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/auth/v1';
 const REST_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/rest/v1';
