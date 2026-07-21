@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ログイン — 高尾輸送サービス 管理システム</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic Pro', sans-serif;
+      background: linear-gradient(145deg, #e8f0ea 0%, #f5f8f4 50%, #eef4ef 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .login-card {
+      background: white;
+      border-radius: 20px;
+      padding: 48px 44px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 6px 32px rgba(77, 122, 94, 0.14), 0 2px 8px rgba(0,0,0,0.06);
+    }
+
+    .logo-area {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+
+    .logo-icon {
+      font-size: 48px;
+      margin-bottom: 10px;
+      display: block;
+      line-height: 1;
+    }
+
+    .company-name {
+      font-size: 13px;
+      color: #7a9e86;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      margin-bottom: 4px;
+    }
+
+    .system-name {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2d4a36;
+      letter-spacing: 0.03em;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      color: #4d7a5e;
+      margin-bottom: 7px;
+      letter-spacing: 0.03em;
+    }
+
+    input[type="email"],
+    input[type="password"] {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1.5px solid #c8d8cc;
+      border-radius: 10px;
+      font-size: 15px;
+      font-family: inherit;
+      color: #2d4a36;
+      background: #f9fbfa;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+
+    input[type="email"]:focus,
+    input[type="password"]:focus {
+      border-color: #4d7a5e;
+      box-shadow: 0 0 0 3px rgba(77, 122, 94, 0.12);
+      background: white;
+    }
+
+    input[type="email"]::placeholder,
+    input[type="password"]::placeholder {
+      color: #b4c8bc;
+    }
+
+    .btn-login {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #4d7a5e 0%, #3d6a4e 100%);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      letter-spacing: 0.05em;
+      margin-top: 8px;
+      transition: opacity 0.2s, transform 0.1s;
+      position: relative;
+    }
+
+    .btn-login:hover:not(:disabled) {
+      opacity: 0.9;
+    }
+
+    .btn-login:active:not(:disabled) {
+      transform: scale(0.99);
+    }
+
+    .btn-login:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-login .spinner {
+      display: none;
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255,255,255,0.4);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      position: absolute;
+      right: 18px;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+
+    .btn-login.loading .spinner { display: block; }
+    .btn-login.loading { padding-right: 48px; }
+
+    @keyframes spin {
+      to { transform: translateY(-50%) rotate(360deg); }
+    }
+
+    .error-msg {
+      display: none;
+      background: #fdf0ef;
+      border: 1px solid #f0b8b3;
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-top: 16px;
+      font-size: 13px;
+      color: #b5453a;
+      line-height: 1.6;
+    }
+
+    .error-msg.visible { display: block; }
+
+    .error-icon {
+      font-size: 15px;
+      margin-right: 6px;
+    }
+
+    footer {
+      margin-top: 28px;
+      font-size: 11px;
+      color: #a0b8a8;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="login-card">
+    <div class="logo-area">
+      <span class="logo-icon">🚌</span>
+      <div class="company-name">高尾輸送サービス</div>
+      <div class="system-name">添乗員管理システム</div>
+    </div>
+
+    <form id="loginForm" onsubmit="handleLogin(event)">
+      <div class="form-group">
+        <label for="emailInput">メールアドレス</label>
+        <input type="email" id="emailInput" placeholder="example@company.com" autocomplete="username" required>
+      </div>
+
+      <div class="form-group">
+        <label for="passwordInput">パスワード</label>
+        <input type="password" id="passwordInput" placeholder="パスワードを入力" autocomplete="current-password" required>
+      </div>
+
+      <button type="submit" class="btn-login" id="loginBtn">
+        ログイン
+        <span class="spinner"></span>
+      </button>
+
+      <div class="error-msg" id="errorMsg">
+        <span class="error-icon">⚠️</span>
+        <span id="errorText"></span>
+      </div>
+    </form>
+  </div>
+
+  <footer>© 高尾輸送サービス 管理システム</footer>
+
+  <script src="auth.js"></script>
+  <script>
+    // パスワード入力中にエラーを消す
+    document.getElementById('passwordInput').addEventListener('input', () => {
+      document.getElementById('errorMsg').classList.remove('visible');
+    });
+    document.getElementById('emailInput').addEventListener('input', () => {
+      document.getElementById('errorMsg').classList.remove('visible');
+    });
+
+    async function handleLogin(e) {
+      e.preventDefault();
+
+      const email    = document.getElementById('emailInput').value.trim();
+      const password = document.getElementById('passwordInput').value;
+      const btn      = document.getElementById('loginBtn');
+      const errBox   = document.getElementById('errorMsg');
+      const errText  = document.getElementById('errorText');
+
+      // ローディング状態にする
+      btn.disabled = true;
+      btn.classList.add('loading');
+      btn.textContent = 'ログイン中…';
+      btn.insertAdjacentHTML('beforeend', '<span class="spinner"></span>');
+      errBox.classList.remove('visible');
+
+      const result = await signIn(email, password);
+
+      if (result.ok) {
+        // ログイン成功 → リダイレクト先へ
+        const params   = new URLSearchParams(location.search);
+        const redirect = params.get('redirect');
+        // 同じオリジンまたは相対パスのみ許可
+        if (redirect && (redirect.startsWith('/') || redirect.startsWith(location.origin))) {
+          window.location.href = redirect;
+        } else {
+          window.location.href = 'index.html';
+        }
+      } else {
+        // エラー表示
+        errText.textContent = result.error || 'ログインに失敗しました';
+        errBox.classList.add('visible');
+        btn.disabled = false;
+        btn.classList.remove('loading');
+        btn.textContent = 'ログイン';
+        btn.insertAdjacentHTML('beforeend', '<span class="spinner"></span>');
+      }
+    }
+  </script>
+</body>
+</html>
