@@ -390,11 +390,8 @@ async function signIn(email, password) {
 
     // MFA不要
     const role = await _getRole(session.access_token);
-    if (!role) {
-      _clearSession();
-      return { ok: false, error: 'このアカウントに役割が設定されていません。管理者にお問い合わせください。' };
-    }
-    return { ok: true, role };
+    // ロール取得に失敗してもセッションは有効なので消去しない
+    return { ok: true, role: role || null };
   } catch (e) {
     return { ok: false, error: 'ネットワークエラー: ' + e.message };
   }
@@ -422,8 +419,8 @@ async function signInMfa(factorId, code, tempToken) {
 
     const session = _saveSession(await vRes.json());
     const role = await _getRole(session.access_token);
-    if (!role) { _clearSession(); return { ok: false, error: '役割が設定されていません。' }; }
-    return { ok: true, role };
+    // ロール取得に失敗してもセッションは有効なので消去しない
+    return { ok: true, role: role || null };
   } catch (e) {
     return { ok: false, error: 'ネットワークエラー: ' + e.message };
   }
