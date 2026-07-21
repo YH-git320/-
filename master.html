@@ -262,9 +262,14 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 
         <div class="form-row" style="margin-top:14px;">
           <div class="form-field"><label>氏名 *</label><input type="text" id="emp-name" placeholder="山田 太郎"></div>
+          <div class="form-field"><label>フリガナ</label><input type="text" id="emp-kana" placeholder="ﾔﾏﾀﾞ ﾀﾛｳ"></div>
+          <div class="form-field"><label>部課</label><input type="text" id="emp-dept" placeholder="004:特定バス部門"></div>
+          <div class="form-field"><label>社員番号</label><input type="text" id="emp-code" placeholder="4001"></div>
+          <div class="form-field"><label>郵便番号</label><input type="text" id="emp-postal" placeholder="192-0000"></div>
+          <div class="form-field"><label>住所</label><input type="text" id="emp-address" placeholder="東京都八王子市…" style="min-width:220px;"></div>
+          <div class="form-field"><label>退職年月日</label><input type="text" id="emp-retire" placeholder="令和8年3月31日"></div>
           <div class="form-field"><label>メールアドレス</label><input type="email" id="emp-email" placeholder="yamada@example.com"></div>
           <div class="form-field"><label>電話番号</label><input type="tel" id="emp-phone" placeholder="090-0000-0000"></div>
-          <div class="form-field"><label>社員番号</label><input type="text" id="emp-code" placeholder="T001"></div>
           <div class="form-field"><label>免許番号</label><input type="text" id="emp-license" placeholder="第123456号"></div>
           <div class="form-field"><label>免許有効期限</label><input type="date" id="emp-expiry"></div>
           <div class="form-field"><label>備考</label><input type="text" id="emp-note"></div>
@@ -518,10 +523,23 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 <script>
 const SUPABASE_URL = 'https://wxdyqkyqtizhtkwtpvru.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4ZHlxa3lxdGl6aHRrd3RwdnJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NzYxODEsImV4cCI6MjA5OTQ1MjE4MX0.yVbClXBk2JVeglevsBLY5sH2_m2ybCf71u4i_YYWyHE';
-const H = {
-  'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
-  'Content-Type': 'application/json', 'Prefer': 'return=representation'
-};
+
+// 毎回セッショントークンを読み直す動的ヘッダー取得
+function getH() {
+  let token = SUPABASE_KEY;
+  try {
+    const s = JSON.parse(localStorage.getItem('takao_session'));
+    if (s && s.access_token) token = s.access_token;
+  } catch(e) {}
+  return {
+    'apikey': SUPABASE_KEY,
+    'Authorization': 'Bearer ' + token,
+    'Content-Type': 'application/json',
+    'Prefer': 'return=representation'
+  };
+}
+// 後方互換のためHも維持（後でgetH()に置換）
+const H = getH();
 
 // ===== グローバルキャッシュ =====
 let allEmployees = [];   // {id, name, email, phone, employee_code, license_number, license_expiry, note, jobTypes:[{id,name}]}
@@ -548,6 +566,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   const authorized = await initAuth(['admin']);
   if (!authorized) return;
 
+  // ログイン済みユーザーのJWTをAPIヘッダーに使用
+  const _sess = _getSession();
+  if (_sess?.access_token) {
+    H['Authorization'] = 'Bearer ' + _sess.access_token;
+  }
+
   await loadJobTypes();   // 業務マスタを先に読む（従業員表示で使う）
   await loadEmployees();
   // ドラッグ&ドロップ
@@ -569,11 +593,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 //  業務マスタ
 // ================================================
 async function loadJobTypes() {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/job_types?active=eq.true&order=sort_order,id`, { headers: H });
-  allJobTypes = await res.json();
-  document.getElementById('cnt-jobtypes').textContent = allJobTypes.length;
-  renderJobTypeTable();
-  updateJobTypeFilter();
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/job_types?active=eq.true&order=sort_order,id`, { headers: getH() });
+    const data = await res.json();
+    if (!res.ok) { console.error('job_types error:', data); allJobTypes = []; }
+    else allJobTypes = Array.isArray(data) ? data : [];
+    document.getElementById('cnt-jobtypes').textContent = allJobTypes.length;
+    renderJobTypeTable();
+    updateJobTypeFilter();
+  } catch(e) { console.error('loadJobTypes exception:', e); allJobTypes = []; }
 }
 
 function renderJobTypeTable() {
@@ -609,7 +637,7 @@ async function addJobType() {
   const order = parseInt(document.getElementById('jt-order').value) || (allJobTypes.length + 1);
   if (!name) { showStatus('status-jobtypes','error','業務名を入力してください'); return; }
   const res = await fetch(`${SUPABASE_URL}/rest/v1/job_types`, {
-    method: 'POST', headers: H,
+    method: 'POST', headers: getH(),
     body: JSON.stringify({ name, description: desc || null, sort_order: order })
   });
   if (res.ok) {
@@ -656,34 +684,44 @@ async function deleteJT(id, name) {
 //  従業員マスタ
 // ================================================
 async function loadEmployees() {
-  // 従業員一覧
-  const empRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/staff?active=eq.true&order=name&select=id,name,email,phone,employee_code,license_number,license_expiry,note`,
-    { headers: H }
-  );
-  const employees = await empRes.json();
+  try {
+    // 従業員一覧
+    const empRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/staff?active=eq.true&order=name&select=id,name,name_kana,department,email,phone,employee_code,postal_code,address,retirement_date,license_number,license_expiry,note`,
+      { headers: getH() }
+    );
+    const empData = await empRes.json();
+    if (!empRes.ok) { console.error('staff error:', empData); allEmployees = []; renderEmployeeGrid([]); return; }
+    const employees = Array.isArray(empData) ? empData : [];
 
-  // 従業員×業務 紐付け
-  const ejRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/employee_job_types?select=employee_id,job_type_id`,
-    { headers: H }
-  );
-  const ejData = await ejRes.json();
+    // 従業員×業務 紐付け
+    const ejRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/employee_job_types?select=employee_id,job_type_id`,
+      { headers: getH() }
+    );
+    const ejRaw = await ejRes.json();
+    if (!ejRes.ok) { console.error('employee_job_types error:', ejRaw); }
+    const ejData = Array.isArray(ejRaw) ? ejRaw : [];
 
-  // 業務IDでグループ化
-  const ejMap = {};
-  ejData.forEach(ej => {
-    if (!ejMap[ej.employee_id]) ejMap[ej.employee_id] = [];
-    const jt = allJobTypes.find(j => j.id === ej.job_type_id);
-    if (jt) ejMap[ej.employee_id].push(jt);
-  });
+    // 業務IDでグループ化
+    const ejMap = {};
+    ejData.forEach(ej => {
+      if (!ejMap[ej.employee_id]) ejMap[ej.employee_id] = [];
+      const jt = allJobTypes.find(j => j.id === ej.job_type_id);
+      if (jt) ejMap[ej.employee_id].push(jt);
+    });
 
-  allEmployees = employees.map(emp => ({
-    ...emp, jobTypes: ejMap[emp.id] || []
-  }));
+    allEmployees = employees.map(emp => ({
+      ...emp, jobTypes: ejMap[emp.id] || []
+    }));
 
-  document.getElementById('cnt-employees').textContent = allEmployees.length;
-  filterEmployees();
+    document.getElementById('cnt-employees').textContent = allEmployees.length;
+    filterEmployees();
+  } catch(e) {
+    console.error('loadEmployees exception:', e);
+    allEmployees = [];
+    renderEmployeeGrid([]);
+  }
 }
 
 function filterEmployees() {
@@ -709,6 +747,7 @@ function renderEmployeeGrid(employees) {
   }
   grid.innerHTML = employees.map(emp => {
     const sub = [emp.employee_code ? '社員番号：'+emp.employee_code : null,
+                 emp.department || null,
                  emp.phone || null, emp.email || null].filter(Boolean).join('　|　');
     const chips = emp.jobTypes.map((jt, i) => {
       const ci = allJobTypes.findIndex(j => j.id === jt.id);
@@ -734,8 +773,10 @@ function renderEmployeeGrid(employees) {
       <div class="emp-card" id="emp-card-${emp.id}">
         <div class="emp-card-top">
           <div class="emp-info">
-            <div class="emp-name">${esc(emp.name)}</div>
+            <div class="emp-name">${esc(emp.name)}${emp.name_kana ? `<span style="font-size:12px;font-weight:normal;color:#888;margin-left:8px;">${esc(emp.name_kana)}</span>` : ''}</div>
             ${sub ? `<div class="emp-sub">${esc(sub)}</div>` : ''}
+            ${emp.postal_code || emp.address ? `<div class="emp-sub">📮 ${emp.postal_code ? esc(emp.postal_code)+'　' : ''}${esc(emp.address||'')}</div>` : ''}
+            ${emp.retirement_date ? `<div class="emp-sub" style="color:#c17f3e;">🔔 退職：${esc(emp.retirement_date)}</div>` : ''}
             ${emp.license_number ? `<div class="emp-sub">免許：${esc(emp.license_number)}${emp.license_expiry ? '　有効期限：'+emp.license_expiry : ''}</div>` : ''}
             ${emp.note ? `<div class="emp-sub" style="color:#888;">📝 ${esc(emp.note)}</div>` : ''}
           </div>
@@ -758,7 +799,7 @@ async function addJobTypeToEmp(empId) {
   const jtId = parseInt(sel.value);
   if (!jtId) return;
   const res = await fetch(`${SUPABASE_URL}/rest/v1/employee_job_types`, {
-    method: 'POST', headers: H,
+    method: 'POST', headers: getH(),
     body: JSON.stringify({ employee_id: empId, job_type_id: jtId })
   });
   if (res.ok) { await loadEmployees(); }
@@ -771,7 +812,7 @@ async function removeJobType(empId, jtId) {
   if (!confirm(`この従業員から「${jt?.name || ''}」を外しますか？`)) return;
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/employee_job_types?employee_id=eq.${empId}&job_type_id=eq.${jtId}`,
-    { method: 'DELETE', headers: H }
+    { method: 'DELETE', headers: getH() }
   );
   if (res.ok) { await loadEmployees(); }
 }
@@ -779,23 +820,30 @@ async function removeJobType(empId, jtId) {
 // 従業員追加
 async function addEmployee() {
   const name    = document.getElementById('emp-name').value.trim();
+  const kana    = document.getElementById('emp-kana').value.trim();
+  const dept    = document.getElementById('emp-dept').value.trim();
+  const empCode = document.getElementById('emp-code').value.trim();
+  const postal  = document.getElementById('emp-postal').value.trim();
+  const addr    = document.getElementById('emp-address').value.trim();
+  const retire  = document.getElementById('emp-retire').value.trim();
   const email   = document.getElementById('emp-email').value.trim();
   const phone   = document.getElementById('emp-phone').value.trim();
-  const empCode = document.getElementById('emp-code').value.trim();
   const license = document.getElementById('emp-license').value.trim();
   const expiry  = document.getElementById('emp-expiry').value;
   const note    = document.getElementById('emp-note').value.trim();
   if (!name) { showStatus('status-employees','error','氏名を入力してください'); return; }
   const res = await fetch(`${SUPABASE_URL}/rest/v1/staff`, {
-    method: 'POST', headers: H,
+    method: 'POST', headers: getH(),
     body: JSON.stringify({
-      name, email: email||null, phone: phone||null,
-      employee_code: empCode||null, license_number: license||null,
-      license_expiry: expiry||null, note: note||null
+      name, name_kana:kana||null, department:dept||null,
+      employee_code:empCode||null, postal_code:postal||null, address:addr||null,
+      retirement_date:retire||null, email:email||null, phone:phone||null,
+      license_number:license||null, license_expiry:expiry||null, note:note||null
     })
   });
   if (res.ok) {
-    ['emp-name','emp-email','emp-phone','emp-code','emp-license','emp-expiry','emp-note'].forEach(id => {
+    ['emp-name','emp-kana','emp-dept','emp-code','emp-postal','emp-address','emp-retire',
+     'emp-email','emp-phone','emp-license','emp-expiry','emp-note'].forEach(id => {
       document.getElementById(id).value = '';
     });
     await loadEmployees();
@@ -811,9 +859,14 @@ function startEditEmp(id) {
   card.innerHTML = `
     <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
       <div class="form-field"><label>氏名 *</label><input type="text" id="ee-name-${id}" value="${esc(emp.name)}" style="min-width:140px;"></div>
+      <div class="form-field"><label>フリガナ</label><input type="text" id="ee-kana-${id}" value="${esc(emp.name_kana||'')}" style="min-width:140px;"></div>
+      <div class="form-field"><label>部課</label><input type="text" id="ee-dept-${id}" value="${esc(emp.department||'')}" style="min-width:160px;"></div>
+      <div class="form-field"><label>社員番号</label><input type="text" id="ee-code-${id}" value="${esc(emp.employee_code||'')}" style="min-width:100px;"></div>
+      <div class="form-field"><label>郵便番号</label><input type="text" id="ee-postal-${id}" value="${esc(emp.postal_code||'')}" style="min-width:100px;"></div>
+      <div class="form-field"><label>住所</label><input type="text" id="ee-addr-${id}" value="${esc(emp.address||'')}" style="min-width:240px;"></div>
+      <div class="form-field"><label>退職年月日</label><input type="text" id="ee-retire-${id}" value="${esc(emp.retirement_date||'')}" placeholder="令和8年3月31日" style="min-width:140px;"></div>
       <div class="form-field"><label>メール</label><input type="email" id="ee-email-${id}" value="${esc(emp.email||'')}" style="min-width:180px;"></div>
       <div class="form-field"><label>電話番号</label><input type="tel" id="ee-phone-${id}" value="${esc(emp.phone||'')}" style="min-width:140px;"></div>
-      <div class="form-field"><label>社員番号</label><input type="text" id="ee-code-${id}" value="${esc(emp.employee_code||'')}" style="min-width:100px;"></div>
       <div class="form-field"><label>免許番号</label><input type="text" id="ee-lic-${id}" value="${esc(emp.license_number||'')}" style="min-width:140px;"></div>
       <div class="form-field"><label>免許有効期限</label><input type="date" id="ee-exp-${id}" value="${emp.license_expiry||''}"></div>
       <div class="form-field"><label>備考</label><input type="text" id="ee-note-${id}" value="${esc(emp.note||'')}" style="min-width:160px;"></div>
@@ -826,16 +879,26 @@ function startEditEmp(id) {
 
 async function saveEditEmp(id) {
   const name    = document.getElementById(`ee-name-${id}`).value.trim();
+  const kana    = document.getElementById(`ee-kana-${id}`).value.trim();
+  const dept    = document.getElementById(`ee-dept-${id}`).value.trim();
+  const empCode = document.getElementById(`ee-code-${id}`).value.trim();
+  const postal  = document.getElementById(`ee-postal-${id}`).value.trim();
+  const addr    = document.getElementById(`ee-addr-${id}`).value.trim();
+  const retire  = document.getElementById(`ee-retire-${id}`).value.trim();
   const email   = document.getElementById(`ee-email-${id}`).value.trim();
   const phone   = document.getElementById(`ee-phone-${id}`).value.trim();
-  const empCode = document.getElementById(`ee-code-${id}`).value.trim();
   const license = document.getElementById(`ee-lic-${id}`).value.trim();
   const expiry  = document.getElementById(`ee-exp-${id}`).value;
   const note    = document.getElementById(`ee-note-${id}`).value.trim();
   if (!name) { showStatus('status-employees','error','氏名を入力してください'); return; }
   const res = await fetch(`${SUPABASE_URL}/rest/v1/staff?id=eq.${id}`, {
-    method: 'PATCH', headers: H,
-    body: JSON.stringify({ name, email:email||null, phone:phone||null, employee_code:empCode||null, license_number:license||null, license_expiry:expiry||null, note:note||null })
+    method: 'PATCH', headers: getH(),
+    body: JSON.stringify({
+      name, name_kana:kana||null, department:dept||null,
+      employee_code:empCode||null, postal_code:postal||null, address:addr||null,
+      retirement_date:retire||null, email:email||null, phone:phone||null,
+      license_number:license||null, license_expiry:expiry||null, note:note||null
+    })
   });
   if (res.ok) { await loadEmployees(); showStatus('status-employees','success','✅ 更新しました'); }
   else showStatus('status-employees','error','更新に失敗しました');
@@ -844,7 +907,7 @@ async function saveEditEmp(id) {
 async function deleteEmployee(id, name) {
   if (!confirm(`「${name}」さんを削除しますか？`)) return;
   const res = await fetch(`${SUPABASE_URL}/rest/v1/staff?id=eq.${id}`, {
-    method: 'PATCH', headers: H, body: JSON.stringify({ active: false })
+    method: 'PATCH', headers: getH(), body: JSON.stringify({ active: false })
   });
   if (res.ok) { await loadEmployees(); showStatus('status-employees','success',`「${name}」を削除しました`); }
 }
@@ -912,7 +975,7 @@ const simpleCache = {};
 
 async function loadSimple(key) {
   const def = SIMPLE_DEF[key];
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${def.table}?active=eq.true&order=id`, { headers: H });
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${def.table}?active=eq.true&order=id`, { headers: getH() });
   simpleCache[key] = await res.json();
   renderSimpleTable(key);
   const cnt = document.getElementById('cnt-'+key);
@@ -1308,16 +1371,15 @@ async function signIn(email, password) {
 
     const session = _saveSession(data);
 
-    // MFA登録チェック
+    // MFA登録チェック（/auth/v1/user でfactorsを取得）
     try {
-      const fRes = await fetch(`${AUTH_URL}/factors`, {
+      const uRes = await fetch(`${AUTH_URL}/user`, {
         headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
       });
-      if (fRes.ok) {
-        const factors = await fRes.json();
-        const totp = Array.isArray(factors)
-          ? factors.find(f => f.factor_type === 'totp' && f.status === 'verified')
-          : null;
+      if (uRes.ok) {
+        const userData = await uRes.json();
+        const factors = Array.isArray(userData.factors) ? userData.factors : [];
+        const totp = factors.find(f => f.factor_type === 'totp' && f.status === 'verified');
         if (totp) {
           // MFA必要 → セッションを一旦クリアし、仮トークンだけ返す
           _clearSession();
@@ -1406,15 +1468,50 @@ async function changePassword(newPassword) {
  * TOTP登録開始（QRコードURIを返す）
  */
 async function enrollTotp() {
-  const session = _getSession();
+  let session = _getSession();
   if (!session?.access_token) return { ok: false, error: 'セッションが無効です' };
+
+  // セッションの有効期限が近い場合はリフレッシュ
+  if (_isExpired(session)) {
+    session = await _refresh(session);
+    if (!session) return { ok: false, error: 'セッションの更新に失敗しました。再ログインしてください。' };
+  }
+
   try {
+    // 未確認（unverified）のTOTPファクターのみ削除（確認済みのものは絶対に削除しない）
+    const listRes = await fetch(`${AUTH_URL}/factors`, {
+      headers: _authHeaders(session.access_token)
+    });
+    if (listRes.ok) {
+      const factors = await listRes.json();
+      if (Array.isArray(factors)) {
+        // 確認済みファクターが既にある場合はエラーを返す
+        const verified = factors.find(f => f.factor_type === 'totp' && f.status === 'verified');
+        if (verified) {
+          return { ok: false, error: '二段階認証はすでに設定済みです。一度「解除する」してから再設定してください。' };
+        }
+        // 未確認ファクターのみ削除
+        for (const f of factors) {
+          if (f.factor_type === 'totp' && f.status === 'unverified') {
+            await fetch(`${AUTH_URL}/factors/${f.id}`, {
+              method: 'DELETE',
+              headers: _authHeaders(session.access_token)
+            });
+          }
+        }
+      }
+    }
+
     const res = await fetch(`${AUTH_URL}/factors`, {
       method: 'POST',
       headers: _authHeaders(session.access_token),
-      body: JSON.stringify({ factor_type: 'totp', friendly_name: '高尾輸送サービス' })
+      body: JSON.stringify({ factor_type: 'totp', friendly_name: '高尾輸送サービス', issuer: '高尾輸送サービス' })
     });
-    if (!res.ok) return { ok: false, error: 'QRコードの生成に失敗しました' };
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const msg = errData.msg || errData.message || errData.error_description || errData.code || `エラー(${res.status})`;
+      return { ok: false, error: 'QRコードの生成に失敗しました: ' + msg };
+    }
     const d = await res.json();
     return { ok: true, factorId: d.id, totpUri: d.totp?.uri, secret: d.totp?.secret };
   } catch (e) {
@@ -1879,6 +1976,9 @@ function _loadQRLib(cb) {
   s.onload = cb;
   document.head.appendChild(s);
 }
+
+
+
 
 </script>
 </body>
