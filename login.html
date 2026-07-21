@@ -184,12 +184,12 @@
     <form id="loginForm" onsubmit="handleLogin(event)">
       <div class="form-group">
         <label for="emailInput">メールアドレス</label>
-        <input type="email" id="emailInput" placeholder="example@company.com" autocomplete="username" required>
+        <input type="email" id="emailInput" name="email" placeholder="example@company.com" autocomplete="email" required>
       </div>
 
       <div class="form-group">
         <label for="passwordInput">パスワード</label>
-        <input type="password" id="passwordInput" placeholder="パスワードを入力" autocomplete="current-password" required>
+        <input type="password" id="passwordInput" name="password" placeholder="パスワードを入力" autocomplete="current-password" required>
       </div>
 
       <button type="submit" class="btn-login" id="loginBtn">
@@ -457,6 +457,17 @@ function _injectUserInfo(email, role) {
 
 </script>
 <script>
+    // ブラウザ保存済みの認証情報を自動補完
+    if (window.PasswordCredential && navigator.credentials) {
+      navigator.credentials.get({ password: true, mediation: 'optional' })
+        .then(cred => {
+          if (cred && cred.type === 'password') {
+            document.getElementById('emailInput').value = cred.id;
+            document.getElementById('passwordInput').value = cred.password;
+          }
+        }).catch(() => {});
+    }
+
     // パスワード入力中にエラーを消す
     document.getElementById('passwordInput').addEventListener('input', () => {
       document.getElementById('errorMsg').classList.remove('visible');
@@ -484,6 +495,13 @@ function _injectUserInfo(email, role) {
       const result = await signIn(email, password);
 
       if (result.ok) {
+        // ブラウザのパスワードマネージャーに保存を依頼
+        if (window.PasswordCredential) {
+          try {
+            const cred = new PasswordCredential({ id: email, password: password });
+            await navigator.credentials.store(cred);
+          } catch (_) {}
+        }
         // ログイン成功 → リダイレクト先へ
         const params   = new URLSearchParams(location.search);
         const redirect = params.get('redirect');
