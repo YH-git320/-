@@ -156,6 +156,16 @@ footer {
 </head>
 <body>
 
+<script>
+  // 未ログインの場合はログイン画面へリダイレクト
+  (function() {
+    try {
+      const s = JSON.parse(localStorage.getItem('takao_session'));
+      if (!s || !s.access_token) { location.replace('login.html'); }
+    } catch(e) { location.replace('login.html'); }
+  })();
+</script>
+
 <header>
   <div>
     <div class="company">高尾輸送サービス</div>
