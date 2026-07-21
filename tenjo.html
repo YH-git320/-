@@ -1032,7 +1032,6 @@ const ROLE_LABEL = { admin: '管理者', staff: '事務員' };
 /* ===================== セッション管理 ===================== */
 
 function _saveSession(data) {
-  // expires_at は秒単位のUNIXタイムスタンプ
   const session = {
     access_token:  data.access_token,
     refresh_token: data.refresh_token,
@@ -1058,6 +1057,14 @@ function _clearSession() {
 function _isExpired(session) {
   if (!session?.expires_at) return true;
   return Math.floor(Date.now() / 1000) > session.expires_at - 60;
+}
+
+function _authHeaders(token) {
+  return {
+    'Content-Type': 'application/json',
+    'apikey': ANON_KEY,
+    'Authorization': `Bearer ${token || ANON_KEY}`
+  };
 }
 
 /* ===================== Supabase Auth API ===================== */
@@ -1094,10 +1101,11 @@ async function _getRole(accessToken) {
 /* ===================== 公開 API ===================== */
 
 /**
- * ログイン処理
- * @param {string} email
- * @param {string} password
- * @returns {{ ok: boolean, error?: string, role?: string }}
+ * ログイン（パスワード認証 → MFA確認）
+ * 戻り値:
+ *   { ok: false, error }
+ *   { ok: true, role }              ← MFAなし or MFA未設定
+ *   { ok: true, mfaRequired: true, factorId, tempToken } ← MFA必要
  */
 async function signIn(email, password) {
   try {
@@ -1110,11 +1118,60 @@ async function signIn(email, password) {
     if (!res.ok) return { ok: false, error: data.error_description || 'ログインに失敗しました' };
 
     const session = _saveSession(data);
+
+    // MFA登録チェック
+    try {
+      const fRes = await fetch(`${AUTH_URL}/factors`, {
+        headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
+      });
+      if (fRes.ok) {
+        const factors = await fRes.json();
+        const totp = Array.isArray(factors)
+          ? factors.find(f => f.factor_type === 'totp' && f.status === 'verified')
+          : null;
+        if (totp) {
+          // MFA必要 → セッションを一旦クリアし、仮トークンだけ返す
+          _clearSession();
+          return { ok: true, mfaRequired: true, factorId: totp.id, tempToken: session.access_token };
+        }
+      }
+    } catch (_) {}
+
+    // MFA不要
     const role = await _getRole(session.access_token);
     if (!role) {
       _clearSession();
       return { ok: false, error: 'このアカウントに役割が設定されていません。管理者にお問い合わせください。' };
     }
+    return { ok: true, role };
+  } catch (e) {
+    return { ok: false, error: 'ネットワークエラー: ' + e.message };
+  }
+}
+
+/**
+ * MFA（TOTP）認証 — パスワード認証の続き
+ */
+async function signInMfa(factorId, code, tempToken) {
+  try {
+    const chRes = await fetch(`${AUTH_URL}/factors/${factorId}/challenge`, {
+      method: 'POST',
+      headers: _authHeaders(tempToken),
+      body: JSON.stringify({})
+    });
+    if (!chRes.ok) return { ok: false, error: '認証チャレンジの作成に失敗しました' };
+    const { id: challengeId } = await chRes.json();
+
+    const vRes = await fetch(`${AUTH_URL}/factors/${factorId}/verify`, {
+      method: 'POST',
+      headers: _authHeaders(tempToken),
+      body: JSON.stringify({ challenge_id: challengeId, code })
+    });
+    if (!vRes.ok) return { ok: false, error: 'コードが正しくありません。認証アプリを確認してください。' };
+
+    const session = _saveSession(await vRes.json());
+    const role = await _getRole(session.access_token);
+    if (!role) { _clearSession(); return { ok: false, error: '役割が設定されていません。' }; }
     return { ok: true, role };
   } catch (e) {
     return { ok: false, error: 'ネットワークエラー: ' + e.message };
@@ -1137,45 +1194,125 @@ async function signOut() {
 }
 
 /**
- * 認証チェック（各ページの DOMContentLoaded 前に呼ぶ）
- * @param {string[]} allowedRoles 許可する役割の配列
+ * パスワード変更（ログイン中のユーザー自身）
+ */
+async function changePassword(newPassword) {
+  const session = _getSession();
+  if (!session?.access_token) return { ok: false, error: 'セッションが無効です' };
+  try {
+    const res = await fetch(`${AUTH_URL}/user`, {
+      method: 'PUT',
+      headers: _authHeaders(session.access_token),
+      body: JSON.stringify({ password: newPassword })
+    });
+    if (res.ok) return { ok: true };
+    const d = await res.json();
+    return { ok: false, error: d.msg || d.message || 'パスワード変更に失敗しました' };
+  } catch (e) {
+    return { ok: false, error: 'ネットワークエラー: ' + e.message };
+  }
+}
+
+/**
+ * TOTP登録開始（QRコードURIを返す）
+ */
+async function enrollTotp() {
+  const session = _getSession();
+  if (!session?.access_token) return { ok: false, error: 'セッションが無効です' };
+  try {
+    const res = await fetch(`${AUTH_URL}/factors`, {
+      method: 'POST',
+      headers: _authHeaders(session.access_token),
+      body: JSON.stringify({ factor_type: 'totp', friendly_name: '高尾輸送サービス' })
+    });
+    if (!res.ok) return { ok: false, error: 'QRコードの生成に失敗しました' };
+    const d = await res.json();
+    return { ok: true, factorId: d.id, totpUri: d.totp?.uri, secret: d.totp?.secret };
+  } catch (e) {
+    return { ok: false, error: 'ネットワークエラー: ' + e.message };
+  }
+}
+
+/**
+ * TOTP登録確認（初回コード検証）
+ */
+async function verifyTotpEnrollment(factorId, code) {
+  const session = _getSession();
+  if (!session?.access_token) return { ok: false, error: 'セッションが無効です' };
+  try {
+    const chRes = await fetch(`${AUTH_URL}/factors/${factorId}/challenge`, {
+      method: 'POST', headers: _authHeaders(session.access_token), body: JSON.stringify({})
+    });
+    if (!chRes.ok) return { ok: false, error: 'チャレンジ作成に失敗しました' };
+    const { id: challengeId } = await chRes.json();
+
+    const vRes = await fetch(`${AUTH_URL}/factors/${factorId}/verify`, {
+      method: 'POST',
+      headers: _authHeaders(session.access_token),
+      body: JSON.stringify({ challenge_id: challengeId, code })
+    });
+    if (!vRes.ok) return { ok: false, error: 'コードが正しくありません。もう一度お試しください。' };
+    _saveSession(await vRes.json());
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: 'ネットワークエラー: ' + e.message };
+  }
+}
+
+/**
+ * 登録済みTOTPファクター一覧
+ */
+async function getEnrolledFactors() {
+  const session = _getSession();
+  if (!session?.access_token) return [];
+  try {
+    const res = await fetch(`${AUTH_URL}/factors`, {
+      headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
+    });
+    if (!res.ok) return [];
+    const factors = await res.json();
+    return Array.isArray(factors) ? factors.filter(f => f.factor_type === 'totp' && f.status === 'verified') : [];
+  } catch { return []; }
+}
+
+/**
+ * TOTP解除
+ */
+async function unenrollTotp(factorId) {
+  const session = _getSession();
+  if (!session?.access_token) return { ok: false };
+  try {
+    const res = await fetch(`${AUTH_URL}/factors/${factorId}`, {
+      method: 'DELETE',
+      headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
+    });
+    return { ok: res.ok };
+  } catch { return { ok: false }; }
+}
+
+/**
+ * 認証チェック（各ページのDOMContentLoaded前に呼ぶ）
  */
 async function initAuth(allowedRoles) {
-  // コンテンツを一旦隠す（認証前に画面が見えないように）
   document.documentElement.style.visibility = 'hidden';
-
   try {
     let session = _getSession();
-
-    // セッションなし → ログイン画面へ
-    if (!session) {
-      _redirectLogin();
-      return false;
-    }
-
-    // トークン期限切れ → リフレッシュ
+    if (!session) { _redirectLogin(); return false; }
     if (_isExpired(session)) {
       session = await _refresh(session);
       if (!session) { _clearSession(); _redirectLogin(); return false; }
     }
-
-    // 役割取得
     const role = await _getRole(session.access_token);
-
-    // 役割なし or 許可外 → アクセス拒否
     if (!role || !allowedRoles.includes(role)) {
       _showDenied(role);
       document.documentElement.style.visibility = 'visible';
       return false;
     }
-
-    // 認証成功 → ヘッダーにユーザー情報を注入してコンテンツ表示
     _injectUserInfo(session.email, role);
+    _injectModals();
     document.documentElement.style.visibility = 'visible';
     return true;
-
   } catch (err) {
-    // 予期せぬエラー（ネットワーク断など）→ ページを表示してエラーを通知
     console.error('[auth.js] initAuth error:', err);
     document.documentElement.style.visibility = 'visible';
     return false;
@@ -1213,7 +1350,6 @@ function _showDenied(role) {
 }
 
 function _injectUserInfo(email, role) {
-  // ヘッダー右端にユーザー情報＋ログアウトボタンを追加
   const header = document.querySelector('header');
   if (!header) return;
 
@@ -1221,50 +1357,338 @@ function _injectUserInfo(email, role) {
   const label = ROLE_LABEL[role] || role;
   const badgeColor = role === 'admin' ? '#9b7eb8' : '#6b9e7e';
 
-  const userInfoHtml = `
+  const menuId = '_takao_usermenu';
+  const html = `
     <span style="display:inline-block;width:1px;height:18px;background:rgba(255,255,255,0.3);
       margin:0 4px;vertical-align:middle;"></span>
-    <span style="font-size:12px;color:rgba(255,255,255,0.85);white-space:nowrap;">
-      <span style="background:${badgeColor};padding:2px 8px;border-radius:10px;
-        font-size:11px;font-weight:700;margin-right:6px;">${label}</span>${name}
-    </span>
-    <button onclick="signOut()" style="background:rgba(255,255,255,0.15);color:white;
-      border:1px solid rgba(255,255,255,0.35);padding:5px 13px;border-radius:9px;
-      font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">
-      ログアウト
-    </button>`;
+    <div style="position:relative;display:inline-block;">
+      <button id="_takao_menubtn" onclick="_toggleUserMenu()" style="background:rgba(255,255,255,0.15);
+        color:white;border:1px solid rgba(255,255,255,0.35);padding:5px 12px;border-radius:9px;
+        font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;
+        display:flex;align-items:center;gap:6px;">
+        <span style="background:${badgeColor};padding:2px 7px;border-radius:10px;font-size:11px;">${label}</span>
+        ${name} ▾
+      </button>
+      <div id="${menuId}" style="display:none;position:absolute;right:0;top:calc(100% + 6px);
+        background:white;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.15);
+        min-width:160px;z-index:9999;overflow:hidden;">
+        <button onclick="_closeUserMenu();showPasswordChangeModal();" style="${_menuItemStyle()}">
+          🔑 パスワード変更
+        </button>
+        <button onclick="_closeUserMenu();showTotpSetupModal();" style="${_menuItemStyle()}">
+          🛡️ 二段階認証設定
+        </button>
+        <hr style="margin:0;border:none;border-top:1px solid #eee;">
+        <button onclick="signOut()" style="${_menuItemStyle('danger')}">
+          ログアウト
+        </button>
+      </div>
+    </div>`;
 
-  // ヘッダー直下のdiv一覧を取得
   const divs = header.querySelectorAll(':scope > div');
-
   if (divs.length >= 2) {
-    // 2カラムレイアウト（タイトル＋ナビリンク）の場合 → 右側divに追記
     const navDiv = divs[divs.length - 1];
     navDiv.style.display = 'flex';
     navDiv.style.alignItems = 'center';
     navDiv.style.gap = '8px';
-    navDiv.insertAdjacentHTML('beforeend', userInfoHtml);
+    navDiv.insertAdjacentHTML('beforeend', html);
   } else {
-    // 1カラムまたはdivなしの場合 → 新しいdivをヘッダーに追加してflex化
     header.style.display = 'flex';
     header.style.alignItems = 'center';
     header.style.justifyContent = 'space-between';
     header.style.flexWrap = 'wrap';
-
     const div = document.createElement('div');
     div.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;';
-    div.innerHTML = `
-      <span style="font-size:12px;color:rgba(255,255,255,0.85);white-space:nowrap;">
-        <span style="background:${badgeColor};padding:2px 8px;border-radius:10px;
-          font-size:11px;font-weight:700;margin-right:6px;">${label}</span>${name}
-      </span>
-      <button onclick="signOut()" style="background:rgba(255,255,255,0.15);color:white;
-        border:1px solid rgba(255,255,255,0.35);padding:5px 13px;border-radius:9px;
-        font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">
-        ログアウト
-      </button>`;
+    div.innerHTML = html;
     header.appendChild(div);
   }
+
+  // メニュー外クリックで閉じる
+  document.addEventListener('click', e => {
+    const btn = document.getElementById('_takao_menubtn');
+    const menu = document.getElementById(menuId);
+    if (btn && menu && !btn.contains(e.target) && !menu.contains(e.target)) {
+      menu.style.display = 'none';
+    }
+  });
+}
+
+function _menuItemStyle(type) {
+  const base = 'width:100%;text-align:left;padding:10px 16px;border:none;background:none;font-size:13px;cursor:pointer;font-family:inherit;display:block;';
+  if (type === 'danger') return base + 'color:#b5453a;';
+  return base + 'color:#2d3b35;';
+}
+
+function _toggleUserMenu() {
+  const menu = document.getElementById('_takao_usermenu');
+  if (menu) menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+function _closeUserMenu() {
+  const menu = document.getElementById('_takao_usermenu');
+  if (menu) menu.style.display = 'none';
+}
+
+/* ===================== モーダル注入 ===================== */
+
+function _injectModals() {
+  if (document.getElementById('_takao_modals')) return;
+  const div = document.createElement('div');
+  div.id = '_takao_modals';
+  div.innerHTML = `
+  <style>
+    ._tm-overlay {
+      display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:10000;
+      align-items:center;justify-content:center;
+    }
+    ._tm-overlay.open { display:flex; }
+    ._tm-box {
+      background:white;border-radius:20px;padding:36px 32px;width:100%;max-width:420px;
+      box-shadow:0 8px 40px rgba(0,0,0,0.18);font-family:'Noto Sans JP','Hiragino Kaku Gothic Pro',sans-serif;
+      position:relative;
+    }
+    ._tm-title { font-size:17px;font-weight:700;color:#2d4a36;margin-bottom:6px; }
+    ._tm-sub { font-size:13px;color:#5c7066;margin-bottom:20px;line-height:1.6; }
+    ._tm-label { font-size:12px;font-weight:700;color:#4d7a5e;margin-bottom:5px;display:block; }
+    ._tm-input {
+      width:100%;padding:10px 14px;border:1.5px solid #c8d8cc;border-radius:9px;
+      font-size:14px;font-family:inherit;color:#2d4a36;background:#f9fbfa;outline:none;
+      margin-bottom:14px;
+    }
+    ._tm-input:focus { border-color:#4d7a5e;box-shadow:0 0 0 3px rgba(77,122,94,0.12); }
+    ._tm-btn {
+      width:100%;padding:12px;background:linear-gradient(135deg,#4d7a5e,#3d6a4e);color:white;
+      border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;
+    }
+    ._tm-btn:disabled { opacity:0.6;cursor:default; }
+    ._tm-btn-sub {
+      width:100%;padding:10px;background:#eef7f1;color:#4d7a5e;border:1px solid #b4d4c0;
+      border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px;
+    }
+    ._tm-err { background:#fdf2f2;color:#b5453a;border:1px solid #eeaaa4;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px;display:none; }
+    ._tm-ok  { background:#eef7f1;color:#2e7d52;border:1px solid #95d0aa;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px;display:none; }
+    ._tm-close { position:absolute;top:14px;right:16px;background:none;border:none;font-size:20px;cursor:pointer;color:#aaa;line-height:1; }
+    ._tm-qr { text-align:center;margin:16px 0; }
+    ._tm-secret { background:#f5f8f4;border:1px solid #c8d8cc;border-radius:8px;padding:8px 12px;font-size:12px;color:#4d7a5e;word-break:break-all;text-align:center;margin-bottom:14px; }
+    ._tm-step { display:none; }
+    ._tm-step.active { display:block; }
+    ._tm-otp { letter-spacing:0.3em;font-size:22px;text-align:center; }
+  </style>
+
+  <!-- パスワード変更モーダル -->
+  <div id="_tm_pw" class="_tm-overlay" onclick="if(event.target===this)closePasswordChangeModal()">
+    <div class="_tm-box">
+      <button class="_tm-close" onclick="closePasswordChangeModal()">×</button>
+      <div class="_tm-title">🔑 パスワード変更</div>
+      <div class="_tm-sub">新しいパスワードを設定します（8文字以上）</div>
+      <div id="_tm_pw_err" class="_tm-err"></div>
+      <div id="_tm_pw_ok" class="_tm-ok">✅ パスワードを変更しました</div>
+      <label class="_tm-label">新しいパスワード</label>
+      <input id="_tm_pw_new" class="_tm-input" type="password" placeholder="新しいパスワード（8文字以上）">
+      <label class="_tm-label">確認（再入力）</label>
+      <input id="_tm_pw_conf" class="_tm-input" type="password" placeholder="もう一度入力">
+      <button id="_tm_pw_btn" class="_tm-btn" onclick="_doChangePassword()">変更する</button>
+      <button class="_tm-btn-sub" onclick="closePasswordChangeModal()">キャンセル</button>
+    </div>
+  </div>
+
+  <!-- 二段階認証設定モーダル -->
+  <div id="_tm_totp" class="_tm-overlay" onclick="if(event.target===this)closeTotpSetupModal()">
+    <div class="_tm-box">
+      <button class="_tm-close" onclick="closeTotpSetupModal()">×</button>
+      <div class="_tm-title">🛡️ 二段階認証設定</div>
+      <div id="_tm_totp_err" class="_tm-err"></div>
+      <div id="_tm_totp_ok" class="_tm-ok"></div>
+
+      <!-- ステップ0: 現在の状態 -->
+      <div id="_tm_totp_s0" class="_tm-step active">
+        <div class="_tm-sub" id="_tm_totp_status">状態を確認中...</div>
+        <button id="_tm_totp_start_btn" class="_tm-btn" onclick="_startTotpSetup()" style="display:none;">QRコードを表示して設定開始</button>
+        <button id="_tm_totp_disable_btn" class="_tm-btn-sub" onclick="_disableTotp()" style="display:none;background:#fdf2f2;color:#b5453a;border-color:#eeaaa4;">二段階認証を解除する</button>
+        <button class="_tm-btn-sub" onclick="closeTotpSetupModal()" style="margin-top:8px;">閉じる</button>
+      </div>
+
+      <!-- ステップ1: QRコード表示 -->
+      <div id="_tm_totp_s1" class="_tm-step">
+        <div class="_tm-sub">① Google Authenticator または Microsoft Authenticator でQRコードを読み取ってください</div>
+        <div class="_tm-qr" id="_tm_qr_canvas"></div>
+        <div style="font-size:12px;color:#888;margin-bottom:6px;text-align:center;">QRコードが読めない場合はこのコードを手動入力</div>
+        <div class="_tm-secret" id="_tm_totp_secret"></div>
+        <button class="_tm-btn" onclick="_showTotpStep2()">次へ（コード入力）→</button>
+        <button class="_tm-btn-sub" onclick="_showTotpStep0()">キャンセル</button>
+      </div>
+
+      <!-- ステップ2: コード確認 -->
+      <div id="_tm_totp_s2" class="_tm-step">
+        <div class="_tm-sub">② アプリに表示されている6桁のコードを入力して設定を完了します</div>
+        <label class="_tm-label">6桁のコード</label>
+        <input id="_tm_totp_code" class="_tm-input _tm-otp" type="text" inputmode="numeric" maxlength="6" placeholder="000000">
+        <button id="_tm_totp_verify_btn" class="_tm-btn" onclick="_verifyTotpSetup()">設定を完了する</button>
+        <button class="_tm-btn-sub" onclick="_showTotpStep1()">← QRコードに戻る</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(div);
+}
+
+/* ===================== パスワード変更 ===================== */
+
+function showPasswordChangeModal() {
+  _injectModals();
+  document.getElementById('_tm_pw_new').value = '';
+  document.getElementById('_tm_pw_conf').value = '';
+  document.getElementById('_tm_pw_err').style.display = 'none';
+  document.getElementById('_tm_pw_ok').style.display = 'none';
+  document.getElementById('_tm_pw').classList.add('open');
+  setTimeout(() => document.getElementById('_tm_pw_new').focus(), 100);
+}
+
+function closePasswordChangeModal() {
+  document.getElementById('_tm_pw').classList.remove('open');
+}
+
+async function _doChangePassword() {
+  const np   = document.getElementById('_tm_pw_new').value;
+  const conf = document.getElementById('_tm_pw_conf').value;
+  const err  = document.getElementById('_tm_pw_err');
+  const ok   = document.getElementById('_tm_pw_ok');
+  const btn  = document.getElementById('_tm_pw_btn');
+  err.style.display = 'none';
+  ok.style.display = 'none';
+  if (np.length < 8) { err.textContent = 'パスワードは8文字以上で設定してください'; err.style.display = 'block'; return; }
+  if (np !== conf)   { err.textContent = 'パスワードが一致しません'; err.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = '変更中…';
+  const result = await changePassword(np);
+  btn.disabled = false; btn.textContent = '変更する';
+  if (result.ok) {
+    ok.style.display = 'block';
+    document.getElementById('_tm_pw_new').value = '';
+    document.getElementById('_tm_pw_conf').value = '';
+    setTimeout(() => closePasswordChangeModal(), 2000);
+  } else {
+    err.textContent = result.error; err.style.display = 'block';
+  }
+}
+
+/* ===================== 二段階認証設定 ===================== */
+
+let _totpFactorId = null;
+
+async function showTotpSetupModal() {
+  _injectModals();
+  _showTotpStep0();
+  document.getElementById('_tm_totp_err').style.display = 'none';
+  document.getElementById('_tm_totp_ok').style.display = 'none';
+  document.getElementById('_tm_totp').classList.add('open');
+
+  const status = document.getElementById('_tm_totp_status');
+  const startBtn  = document.getElementById('_tm_totp_start_btn');
+  const disableBtn = document.getElementById('_tm_totp_disable_btn');
+  status.textContent = '状態を確認中...';
+  startBtn.style.display = 'none';
+  disableBtn.style.display = 'none';
+
+  const factors = await getEnrolledFactors();
+  if (factors.length > 0) {
+    _totpFactorId = factors[0].id;
+    status.textContent = '✅ 二段階認証は有効です。認証アプリが設定されています。';
+    disableBtn.style.display = 'block';
+  } else {
+    status.textContent = '二段階認証は現在無効です。設定するとログイン時にアプリのコード入力が必要になります。';
+    startBtn.style.display = 'block';
+  }
+}
+
+function closeTotpSetupModal() {
+  document.getElementById('_tm_totp').classList.remove('open');
+}
+
+function _showTotpStep0() {
+  ['_tm_totp_s0','_tm_totp_s1','_tm_totp_s2'].forEach((id, i) => {
+    document.getElementById(id).classList.toggle('active', i === 0);
+  });
+}
+function _showTotpStep1() {
+  ['_tm_totp_s0','_tm_totp_s1','_tm_totp_s2'].forEach((id, i) => {
+    document.getElementById(id).classList.toggle('active', i === 1);
+  });
+}
+function _showTotpStep2() {
+  document.getElementById('_tm_totp_code').value = '';
+  ['_tm_totp_s0','_tm_totp_s1','_tm_totp_s2'].forEach((id, i) => {
+    document.getElementById(id).classList.toggle('active', i === 2);
+  });
+  setTimeout(() => document.getElementById('_tm_totp_code').focus(), 100);
+}
+
+async function _startTotpSetup() {
+  const startBtn = document.getElementById('_tm_totp_start_btn');
+  const err = document.getElementById('_tm_totp_err');
+  err.style.display = 'none';
+  startBtn.disabled = true; startBtn.textContent = 'QRコード生成中…';
+
+  const result = await enrollTotp();
+  startBtn.disabled = false; startBtn.textContent = 'QRコードを表示して設定開始';
+  if (!result.ok) { err.textContent = result.error; err.style.display = 'block'; return; }
+
+  _totpFactorId = result.factorId;
+  document.getElementById('_tm_totp_secret').textContent = result.secret || '';
+
+  // QRコード描画
+  const canvas = document.getElementById('_tm_qr_canvas');
+  canvas.innerHTML = '';
+  _loadQRLib(() => {
+    new QRCode(canvas, { text: result.totpUri, width: 200, height: 200,
+      colorDark: '#2d4a36', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  });
+
+  _showTotpStep1();
+}
+
+async function _verifyTotpSetup() {
+  const code = document.getElementById('_tm_totp_code').value.replace(/\D/g, '');
+  const err  = document.getElementById('_tm_totp_err');
+  const ok   = document.getElementById('_tm_totp_ok');
+  const btn  = document.getElementById('_tm_totp_verify_btn');
+  err.style.display = 'none';
+  if (code.length !== 6) { err.textContent = '6桁のコードを入力してください'; err.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = '確認中…';
+  const result = await verifyTotpEnrollment(_totpFactorId, code);
+  btn.disabled = false; btn.textContent = '設定を完了する';
+  if (result.ok) {
+    ok.textContent = '✅ 二段階認証の設定が完了しました！次回ログインからコード入力が必要になります。';
+    ok.style.display = 'block';
+    _showTotpStep0();
+    document.getElementById('_tm_totp_status').textContent = '✅ 二段階認証は有効です。認証アプリが設定されています。';
+    document.getElementById('_tm_totp_start_btn').style.display = 'none';
+    document.getElementById('_tm_totp_disable_btn').style.display = 'block';
+  } else {
+    err.textContent = result.error; err.style.display = 'block';
+  }
+}
+
+async function _disableTotp() {
+  if (!confirm('二段階認証を解除しますか？\nログイン時のコード入力が不要になります。')) return;
+  const result = await unenrollTotp(_totpFactorId);
+  const err = document.getElementById('_tm_totp_err');
+  const ok  = document.getElementById('_tm_totp_ok');
+  if (result.ok) {
+    ok.textContent = '二段階認証を解除しました。';
+    ok.style.display = 'block';
+    document.getElementById('_tm_totp_status').textContent = '二段階認証は現在無効です。';
+    document.getElementById('_tm_totp_start_btn').style.display = 'block';
+    document.getElementById('_tm_totp_disable_btn').style.display = 'none';
+  } else {
+    err.textContent = '解除に失敗しました。'; err.style.display = 'block';
+  }
+}
+
+function _loadQRLib(cb) {
+  if (window.QRCode) { cb(); return; }
+  const s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+  s.onload = cb;
+  document.head.appendChild(s);
 }
 
 </script>
