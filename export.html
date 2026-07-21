@@ -76,6 +76,9 @@ header a.hlink:hover { background: rgba(255,255,255,0.15); }
   outline: none; border-color: #6b9e7e; box-shadow: 0 0 0 3px rgba(107,158,126,0.18);
 }
 .range-sep { align-self: center; padding-top: 18px; color: #5c7066; font-size: 14px; }
+.date-range-row { display: flex; gap: 8px; align-items: flex-end; }
+.date-range-row .filter-field { flex: 1; }
+.date-range-row .range-sep { padding-top: 18px; flex-shrink: 0; }
 
 /* ボタン */
 .btn {
@@ -233,7 +236,9 @@ table.preview-table { width: 100%; border-collapse: collapse; font-size: 12px; }
     width: 100%;
     font-size: 16px; /* iOS: ズーム防止 */
   }
-  .range-sep { padding-top: 0; }
+  .date-range-row { flex-direction: row; align-items: flex-end; }
+  .date-range-row .filter-field input[type=date] { min-width: unset; width: 100%; }
+  .range-sep { padding-top: 0; align-self: center; }
   .quick-btns { gap: 6px; }
   .master-export-grid { grid-template-columns: 1fr; gap: 10px; }
   .preview-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -300,14 +305,16 @@ table.preview-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 
       <!-- フィルター -->
       <div class="filter-row">
-        <div class="filter-field">
-          <label>開始日</label>
-          <input type="date" id="nippo-from" />
-        </div>
-        <div class="range-sep">〜</div>
-        <div class="filter-field">
-          <label>終了日</label>
-          <input type="date" id="nippo-to" />
+        <div class="date-range-row">
+          <div class="filter-field">
+            <label>開始日</label>
+            <input type="date" id="nippo-from" />
+          </div>
+          <div class="range-sep">〜</div>
+          <div class="filter-field">
+            <label>終了日</label>
+            <input type="date" id="nippo-to" />
+          </div>
         </div>
         <div class="filter-field">
           <label>勤務種別</label>
@@ -348,14 +355,16 @@ table.preview-table { width: 100%; border-collapse: collapse; font-size: 12px; }
     <div class="panel">
       <h2>📋 配置表出力</h2>
       <div class="filter-row">
-        <div class="filter-field">
-          <label>開始日</label>
-          <input type="date" id="assign-from" />
-        </div>
-        <div class="range-sep">〜</div>
-        <div class="filter-field">
-          <label>終了日</label>
-          <input type="date" id="assign-to" />
+        <div class="date-range-row">
+          <div class="filter-field">
+            <label>開始日</label>
+            <input type="date" id="assign-from" />
+          </div>
+          <div class="range-sep">〜</div>
+          <div class="filter-field">
+            <label>終了日</label>
+            <input type="date" id="assign-to" />
+          </div>
         </div>
       </div>
       <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
