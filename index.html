@@ -157,11 +157,14 @@ footer {
 <body>
 
 <script>
-  // 未ログインの場合はログイン画面へリダイレクト
+  // 未ログイン・セッション期限切れの場合はログイン画面へリダイレクト
   (function() {
     try {
       const s = JSON.parse(localStorage.getItem('takao_session'));
-      if (!s || !s.access_token) { location.replace('login.html'); }
+      const now = Math.floor(Date.now() / 1000);
+      if (!s || !s.access_token || !s.expires_at || s.expires_at < now) {
+        location.replace('login.html');
+      }
     } catch(e) { location.replace('login.html'); }
   })();
 </script>
