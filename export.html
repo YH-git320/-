@@ -908,21 +908,37 @@ async function signIn(email, password) {
 
     const session = _saveSession(data);
 
-    // MFA登録チェック
+    // MFA登録チェック（/auth/v1/user と /auth/v1/factors の両方を試す）
     try {
-      const fRes = await fetch(`${AUTH_URL}/factors`, {
+      let totpFactor = null;
+
+      // 方法1: /auth/v1/user のfactorsフィールドで確認
+      const uRes = await fetch(`${AUTH_URL}/user`, {
         headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
       });
-      if (fRes.ok) {
-        const factors = await fRes.json();
-        const totp = Array.isArray(factors)
-          ? factors.find(f => f.factor_type === 'totp' && f.status === 'verified')
-          : null;
-        if (totp) {
-          // MFA必要 → セッションを一旦クリアし、仮トークンだけ返す
-          _clearSession();
-          return { ok: true, mfaRequired: true, factorId: totp.id, tempToken: session.access_token };
+      if (uRes.ok) {
+        const userData = await uRes.json();
+        const uf = Array.isArray(userData.factors) ? userData.factors : [];
+        totpFactor = uf.find(f => f.factor_type === 'totp' && f.status === 'verified') || null;
+      }
+
+      // 方法2: /auth/v1/factors でも確認（方法1で見つからない場合のフォールバック）
+      if (!totpFactor) {
+        const fRes = await fetch(`${AUTH_URL}/factors`, {
+          headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
+        });
+        if (fRes.ok) {
+          const fData = await fRes.json();
+          const ff = Array.isArray(fData) ? fData
+                   : Array.isArray(fData?.factors) ? fData.factors : [];
+          totpFactor = ff.find(f => f.factor_type === 'totp' && f.status === 'verified') || null;
         }
+      }
+
+      if (totpFactor) {
+        // MFA必要 → セッションを一旦クリアし、仮トークンだけ返す
+        _clearSession();
+        return { ok: true, mfaRequired: true, factorId: totpFactor.id, tempToken: session.access_token };
       }
     } catch (_) {}
 
@@ -1006,15 +1022,50 @@ async function changePassword(newPassword) {
  * TOTP登録開始（QRコードURIを返す）
  */
 async function enrollTotp() {
-  const session = _getSession();
+  let session = _getSession();
   if (!session?.access_token) return { ok: false, error: 'セッションが無効です' };
+
+  // セッションの有効期限が近い場合はリフレッシュ
+  if (_isExpired(session)) {
+    session = await _refresh(session);
+    if (!session) return { ok: false, error: 'セッションの更新に失敗しました。再ログインしてください。' };
+  }
+
   try {
+    // 未確認（unverified）のTOTPファクターのみ削除（確認済みのものは絶対に削除しない）
+    const listRes = await fetch(`${AUTH_URL}/factors`, {
+      headers: _authHeaders(session.access_token)
+    });
+    if (listRes.ok) {
+      const factors = await listRes.json();
+      if (Array.isArray(factors)) {
+        // 確認済みファクターが既にある場合はエラーを返す
+        const verified = factors.find(f => f.factor_type === 'totp' && f.status === 'verified');
+        if (verified) {
+          return { ok: false, error: '二段階認証はすでに設定済みです。一度「解除する」してから再設定してください。' };
+        }
+        // 未確認ファクターのみ削除
+        for (const f of factors) {
+          if (f.factor_type === 'totp' && f.status === 'unverified') {
+            await fetch(`${AUTH_URL}/factors/${f.id}`, {
+              method: 'DELETE',
+              headers: _authHeaders(session.access_token)
+            });
+          }
+        }
+      }
+    }
+
     const res = await fetch(`${AUTH_URL}/factors`, {
       method: 'POST',
       headers: _authHeaders(session.access_token),
-      body: JSON.stringify({ factor_type: 'totp', friendly_name: '高尾輸送サービス' })
+      body: JSON.stringify({ factor_type: 'totp', friendly_name: '高尾輸送サービス', issuer: '高尾輸送サービス' })
     });
-    if (!res.ok) return { ok: false, error: 'QRコードの生成に失敗しました' };
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const msg = errData.msg || errData.message || errData.error_description || errData.code || `エラー(${res.status})`;
+      return { ok: false, error: 'QRコードの生成に失敗しました: ' + msg };
+    }
     const d = await res.json();
     return { ok: true, factorId: d.id, totpUri: d.totp?.uri, secret: d.totp?.secret };
   } catch (e) {
@@ -1479,6 +1530,9 @@ function _loadQRLib(cb) {
   s.onload = cb;
   document.head.appendChild(s);
 }
+
+
+
 
 </script>
 </body>

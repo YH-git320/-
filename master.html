@@ -1371,20 +1371,37 @@ async function signIn(email, password) {
 
     const session = _saveSession(data);
 
-    // MFA登録チェック（/auth/v1/user でfactorsを取得）
+    // MFA登録チェック（/auth/v1/user と /auth/v1/factors の両方を試す）
     try {
+      let totpFactor = null;
+
+      // 方法1: /auth/v1/user のfactorsフィールドで確認
       const uRes = await fetch(`${AUTH_URL}/user`, {
         headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
       });
       if (uRes.ok) {
         const userData = await uRes.json();
-        const factors = Array.isArray(userData.factors) ? userData.factors : [];
-        const totp = factors.find(f => f.factor_type === 'totp' && f.status === 'verified');
-        if (totp) {
-          // MFA必要 → セッションを一旦クリアし、仮トークンだけ返す
-          _clearSession();
-          return { ok: true, mfaRequired: true, factorId: totp.id, tempToken: session.access_token };
+        const uf = Array.isArray(userData.factors) ? userData.factors : [];
+        totpFactor = uf.find(f => f.factor_type === 'totp' && f.status === 'verified') || null;
+      }
+
+      // 方法2: /auth/v1/factors でも確認（方法1で見つからない場合のフォールバック）
+      if (!totpFactor) {
+        const fRes = await fetch(`${AUTH_URL}/factors`, {
+          headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
+        });
+        if (fRes.ok) {
+          const fData = await fRes.json();
+          const ff = Array.isArray(fData) ? fData
+                   : Array.isArray(fData?.factors) ? fData.factors : [];
+          totpFactor = ff.find(f => f.factor_type === 'totp' && f.status === 'verified') || null;
         }
+      }
+
+      if (totpFactor) {
+        // MFA必要 → セッションを一旦クリアし、仮トークンだけ返す
+        _clearSession();
+        return { ok: true, mfaRequired: true, factorId: totpFactor.id, tempToken: session.access_token };
       }
     } catch (_) {}
 
@@ -1552,13 +1569,12 @@ async function getEnrolledFactors() {
   const session = _getSession();
   if (!session?.access_token) return [];
   try {
-    const res = await fetch(`${AUTH_URL}/user`, {
+    const res = await fetch(`${AUTH_URL}/factors`, {
       headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
     });
     if (!res.ok) return [];
-    const userData = await res.json();
-    const factors = Array.isArray(userData.factors) ? userData.factors : [];
-    return factors.filter(f => f.factor_type === 'totp' && f.status === 'verified');
+    const factors = await res.json();
+    return Array.isArray(factors) ? factors.filter(f => f.factor_type === 'totp' && f.status === 'verified') : [];
   } catch { return []; }
 }
 
