@@ -7,6 +7,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>データ出力 — 高尾輸送サービス</title>
+<!-- 認証前のコンテンツ表示を防ぐ -->
+<style>html { visibility: hidden; }</style>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -806,6 +808,12 @@ function loadScript(src) {
     document.head.appendChild(s);
   });
 }
+</script>
+<script src="auth.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', async function() {
+    await initAuth(['admin']);
+  });
 </script>
 </body>
 </html>
