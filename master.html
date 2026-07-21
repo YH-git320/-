@@ -711,21 +711,26 @@ async function addJobType() {
   const desc  = document.getElementById('jt-desc').value.trim();
   const order = parseInt(document.getElementById('jt-order').value) || (allJobTypes.length + 1);
   if (!name) { showStatus('status-jobtypes','error','業務名を入力してください'); return; }
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/job_types`, {
-    method: 'POST', headers: getH(),
-    body: JSON.stringify({ name, description: desc || null, sort_order: order, active: true })
-  });
-  if (res.ok) {
-    document.getElementById('jt-name').value = '';
-    document.getElementById('jt-desc').value = '';
-    document.getElementById('jt-order').value = '';
-    const det = document.getElementById('details-jobtypes-form');
-    if (det) det.removeAttribute('open');
-    await loadJobTypes();
-    showStatus('status-jobtypes','success',`✅「${name}」を追加しました`);
-  } else {
-    const err = await res.json().catch(()=>({}));
-    showStatus('status-jobtypes','error','追加に失敗しました: ' + (err.message || err.hint || res.status));
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/job_types`, {
+      method: 'POST', headers: getH(),
+      body: JSON.stringify({ name, description: desc || null, sort_order: order, active: true })
+    });
+    if (res.ok) {
+      document.getElementById('jt-name').value = '';
+      document.getElementById('jt-desc').value = '';
+      document.getElementById('jt-order').value = '';
+      const det = document.getElementById('details-jobtypes-form');
+      if (det) det.removeAttribute('open');
+      await loadJobTypes();
+      showStatus('status-jobtypes','success',`✅「${name}」を追加しました`);
+    } else {
+      const err = await res.json().catch(()=>({}));
+      const msg = err.message || err.hint || err.details || JSON.stringify(err) || res.status;
+      showStatus('status-jobtypes','error',`追加失敗 (${res.status}): ${msg}`);
+    }
+  } catch(e) {
+    showStatus('status-jobtypes','error','通信エラー: ' + e.message);
   }
 }
 
@@ -1354,6 +1359,7 @@ function splitCSV(line) {
 function showStatus(id, type, msg) {
   const el = document.getElementById(id);
   if (!el) return;
+  el.style.display = '';   // インラインstyleをリセット（前回のsuccess非表示を解除）
   el.className='status-bar '+type; el.textContent=msg;
   if (type==='success') setTimeout(()=>{ el.style.display='none'; }, 5000);
 }
