@@ -80,6 +80,16 @@ select:focus, input:focus { outline: none; border-color: #4d7a5e; box-shadow: 0 
 .form-field input, .form-field select { min-width: 150px; }
 
 /* CSV取込 */
+.add-form-details { margin-top: 12px; }
+.add-form-details > summary {
+  cursor: pointer; display: inline-block;
+  font-size: 13px; font-weight: bold; color: #4d7a5e;
+  padding: 5px 14px; border: 1.5px solid #4d7a5e; border-radius: 20px;
+  user-select: none; transition: background 0.15s;
+}
+.add-form-details > summary:hover { background: #eef7f1; }
+.add-form-details[open] > summary { background: #eef7f1; }
+
 .import-zone {
   border: 2px dashed #b4d4c0; border-radius: 12px; padding: 16px;
   text-align: center; color: #7fa88a; font-size: 13px; cursor: pointer; transition: background 0.2s; margin-bottom: 10px;
@@ -298,21 +308,24 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
           </div>
         </details>
 
-        <div class="form-row" style="margin-top:14px;">
-          <div class="form-field"><label>氏名 *</label><input type="text" id="emp-name" placeholder="山田 太郎"></div>
-          <div class="form-field"><label>フリガナ</label><input type="text" id="emp-kana" placeholder="ﾔﾏﾀﾞ ﾀﾛｳ"></div>
-          <div class="form-field"><label>部課</label><input type="text" id="emp-dept" placeholder="004:特定バス部門"></div>
-          <div class="form-field"><label>社員番号</label><input type="text" id="emp-code" placeholder="4001"></div>
-          <div class="form-field"><label>郵便番号</label><input type="text" id="emp-postal" placeholder="192-0000"></div>
-          <div class="form-field"><label>住所</label><input type="text" id="emp-address" placeholder="東京都八王子市…" style="min-width:220px;"></div>
-          <div class="form-field"><label>退職年月日</label><input type="text" id="emp-retire" placeholder="令和8年3月31日"></div>
-          <div class="form-field"><label>メールアドレス</label><input type="email" id="emp-email" placeholder="yamada@example.com"></div>
-          <div class="form-field"><label>電話番号</label><input type="tel" id="emp-phone" placeholder="090-0000-0000"></div>
-          <div class="form-field"><label>免許番号</label><input type="text" id="emp-license" placeholder="第123456号"></div>
-          <div class="form-field"><label>免許有効期限</label><input type="date" id="emp-expiry"></div>
-          <div class="form-field"><label>備考</label><input type="text" id="emp-note"></div>
-          <button class="btn btn-add" style="align-self:flex-end;" onclick="addEmployee()">＋ 追加</button>
-        </div>
+        <details class="add-form-details" id="details-employees-form">
+          <summary>＋ 新規追加</summary>
+          <div class="form-row" style="margin-top:14px;">
+            <div class="form-field"><label>氏名 *</label><input type="text" id="emp-name" placeholder="山田 太郎"></div>
+            <div class="form-field"><label>フリガナ</label><input type="text" id="emp-kana" placeholder="ﾔﾏﾀﾞ ﾀﾛｳ"></div>
+            <div class="form-field"><label>部課</label><input type="text" id="emp-dept" placeholder="004:特定バス部門"></div>
+            <div class="form-field"><label>社員番号</label><input type="text" id="emp-code" placeholder="4001"></div>
+            <div class="form-field"><label>郵便番号</label><input type="text" id="emp-postal" placeholder="192-0000"></div>
+            <div class="form-field"><label>住所</label><input type="text" id="emp-address" placeholder="東京都八王子市…" style="min-width:220px;"></div>
+            <div class="form-field"><label>退職年月日</label><input type="text" id="emp-retire" placeholder="令和8年3月31日"></div>
+            <div class="form-field"><label>メールアドレス</label><input type="email" id="emp-email" placeholder="yamada@example.com"></div>
+            <div class="form-field"><label>電話番号</label><input type="tel" id="emp-phone" placeholder="090-0000-0000"></div>
+            <div class="form-field"><label>免許番号</label><input type="text" id="emp-license" placeholder="第123456号"></div>
+            <div class="form-field"><label>免許有効期限</label><input type="date" id="emp-expiry"></div>
+            <div class="form-field"><label>備考</label><input type="text" id="emp-note"></div>
+            <button class="btn btn-add" style="align-self:flex-end;" onclick="addEmployee()">＋ 追加</button>
+          </div>
+        </details>
         <div id="status-employees" class="status-bar"></div>
       </div>
 
@@ -340,12 +353,15 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
         <div style="font-size:12px; color:#666; margin-bottom:12px;">
           ここで登録した業務種別が従業員マスタのドロップダウンに表示されます。
         </div>
-        <div class="form-row">
-          <div class="form-field"><label>業務名 *</label><input type="text" id="jt-name" placeholder="例：倉庫業務"></div>
-          <div class="form-field"><label>説明</label><input type="text" id="jt-desc" placeholder="業務の説明"></div>
-          <div class="form-field"><label>表示順</label><input type="text" id="jt-order" placeholder="5" style="min-width:60px; max-width:80px;"></div>
-          <button class="btn btn-add" style="align-self:flex-end;" onclick="addJobType()">＋ 追加</button>
-        </div>
+        <details class="add-form-details" id="details-jobtypes-form">
+          <summary>＋ 新規追加</summary>
+          <div class="form-row">
+            <div class="form-field"><label>業務名 *</label><input type="text" id="jt-name" placeholder="例：倉庫業務"></div>
+            <div class="form-field"><label>説明</label><input type="text" id="jt-desc" placeholder="業務の説明"></div>
+            <div class="form-field"><label>表示順</label><input type="text" id="jt-order" placeholder="5" style="min-width:60px; max-width:80px;"></div>
+            <button class="btn btn-add" style="align-self:flex-end;" onclick="addJobType()">＋ 追加</button>
+          </div>
+        </details>
         <div id="status-jobtypes" class="status-bar"></div>
       </div>
       <div class="panel">
@@ -375,15 +391,18 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
             <div id="preview-courses"></div>
           </div>
         </details>
-        <div class="form-row" style="margin-top:12px;">
-          <div class="form-field">
-            <label>都道府県 *</label>
-            <select id="add-courses-pref"><option value="東京都">東京都</option><option value="神奈川県">神奈川県</option></select>
+        <details class="add-form-details" id="details-courses-form">
+          <summary>＋ 新規追加</summary>
+          <div class="form-row" style="margin-top:12px;">
+            <div class="form-field">
+              <label>都道府県 *</label>
+              <select id="add-courses-pref"><option value="東京都">東京都</option><option value="神奈川県">神奈川県</option></select>
+            </div>
+            <div class="form-field"><label>学校名 *</label><input type="text" id="add-courses-school" placeholder="○○特別支援学校"></div>
+            <div class="form-field"><label>コース名 *</label><input type="text" id="add-courses-course" placeholder="○○コース"></div>
+            <button class="btn btn-add" style="align-self:flex-end;" onclick="addCourse()">＋ 追加</button>
           </div>
-          <div class="form-field"><label>学校名 *</label><input type="text" id="add-courses-school" placeholder="○○特別支援学校"></div>
-          <div class="form-field"><label>コース名 *</label><input type="text" id="add-courses-course" placeholder="○○コース"></div>
-          <button class="btn btn-add" style="align-self:flex-end;" onclick="addCourse()">＋ 追加</button>
-        </div>
+        </details>
         <div id="status-courses" class="status-bar"></div>
       </div>
       <div class="panel">
@@ -413,20 +432,23 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
             <div id="preview-vehicles"></div>
           </div>
         </details>
-        <div class="form-row" style="margin-top:12px;">
-          <div class="form-field"><label>車両番号 *</label><input type="text" id="add-vehicles-vehicle_number" placeholder="多摩 100 あ 1234"></div>
-          <div class="form-field">
-            <label>車種</label>
-            <select id="add-vehicles-vehicle_type">
-              <option value="">選択</option><option>大型バス</option><option>中型バス</option><option>マイクロバス</option><option>ハイエース</option>
-            </select>
+        <details class="add-form-details" id="details-vehicles-form">
+          <summary>＋ 新規追加</summary>
+          <div class="form-row" style="margin-top:12px;">
+            <div class="form-field"><label>車両番号 *</label><input type="text" id="add-vehicles-vehicle_number" placeholder="多摩 100 あ 1234"></div>
+            <div class="form-field">
+              <label>車種</label>
+              <select id="add-vehicles-vehicle_type">
+                <option value="">選択</option><option>大型バス</option><option>中型バス</option><option>マイクロバス</option><option>ハイエース</option>
+              </select>
+            </div>
+            <div class="form-field"><label>定員</label><input type="text" id="add-vehicles-capacity" placeholder="45"></div>
+            <div class="form-field"><label>所属営業所</label><input type="text" id="add-vehicles-office_name" placeholder="府中車庫"></div>
+            <div class="form-field"><label>車検期限</label><input type="date" id="add-vehicles-inspection_date"></div>
+            <div class="form-field"><label>備考</label><input type="text" id="add-vehicles-note"></div>
+            <button class="btn btn-add" style="align-self:flex-end;" onclick="addSimple('vehicles','vehicle_number')">＋ 追加</button>
           </div>
-          <div class="form-field"><label>定員</label><input type="text" id="add-vehicles-capacity" placeholder="45"></div>
-          <div class="form-field"><label>所属営業所</label><input type="text" id="add-vehicles-office_name" placeholder="府中車庫"></div>
-          <div class="form-field"><label>車検期限</label><input type="date" id="add-vehicles-inspection_date"></div>
-          <div class="form-field"><label>備考</label><input type="text" id="add-vehicles-note"></div>
-          <button class="btn btn-add" style="align-self:flex-end;" onclick="addSimple('vehicles','vehicle_number')">＋ 追加</button>
-        </div>
+        </details>
         <div id="status-vehicles" class="status-bar"></div>
       </div>
       <div class="panel">
@@ -456,13 +478,16 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
             <div id="preview-offices"></div>
           </div>
         </details>
-        <div class="form-row" style="margin-top:12px;">
-          <div class="form-field"><label>営業所名 *</label><input type="text" id="add-offices-name" placeholder="府中車庫"></div>
-          <div class="form-field"><label>住所</label><input type="text" id="add-offices-address" placeholder="東京都府中市○○"></div>
-          <div class="form-field"><label>電話番号</label><input type="text" id="add-offices-phone" placeholder="042-000-0000"></div>
-          <div class="form-field"><label>備考</label><input type="text" id="add-offices-note"></div>
-          <button class="btn btn-add" style="align-self:flex-end;" onclick="addSimple('offices','name')">＋ 追加</button>
-        </div>
+        <details class="add-form-details" id="details-offices-form">
+          <summary>＋ 新規追加</summary>
+          <div class="form-row" style="margin-top:12px;">
+            <div class="form-field"><label>営業所名 *</label><input type="text" id="add-offices-name" placeholder="府中車庫"></div>
+            <div class="form-field"><label>住所</label><input type="text" id="add-offices-address" placeholder="東京都府中市○○"></div>
+            <div class="form-field"><label>電話番号</label><input type="text" id="add-offices-phone" placeholder="042-000-0000"></div>
+            <div class="form-field"><label>備考</label><input type="text" id="add-offices-note"></div>
+            <button class="btn btn-add" style="align-self:flex-end;" onclick="addSimple('offices','name')">＋ 追加</button>
+          </div>
+        </details>
         <div id="status-offices" class="status-bar"></div>
       </div>
       <div class="panel">
@@ -480,15 +505,18 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     <div id="sec-permits" class="section-content">
       <div class="panel">
         <h2>📋 営業許可マスタ <span class="count-badge" id="cnt-permits">0</span></h2>
-        <div class="form-row">
-          <div class="form-field"><label>許可番号 *</label><input type="text" id="add-permits-permit_number" placeholder="関東自交旅第○号"></div>
-          <div class="form-field"><label>種別</label><input type="text" id="add-permits-permit_type" placeholder="貸切バス事業等"></div>
-          <div class="form-field"><label>交付日</label><input type="date" id="add-permits-issue_date"></div>
-          <div class="form-field"><label>有効期限</label><input type="date" id="add-permits-expiry_date"></div>
-          <div class="form-field"><label>交付機関</label><input type="text" id="add-permits-issued_by" placeholder="関東運輸局"></div>
-          <div class="form-field"><label>備考</label><input type="text" id="add-permits-note"></div>
-          <button class="btn btn-add" style="align-self:flex-end;" onclick="addSimple('permits','permit_number')">＋ 追加</button>
-        </div>
+        <details class="add-form-details" id="details-permits-form">
+          <summary>＋ 新規追加</summary>
+          <div class="form-row">
+            <div class="form-field"><label>許可番号 *</label><input type="text" id="add-permits-permit_number" placeholder="関東自交旅第○号"></div>
+            <div class="form-field"><label>種別</label><input type="text" id="add-permits-permit_type" placeholder="貸切バス事業等"></div>
+            <div class="form-field"><label>交付日</label><input type="date" id="add-permits-issue_date"></div>
+            <div class="form-field"><label>有効期限</label><input type="date" id="add-permits-expiry_date"></div>
+            <div class="form-field"><label>交付機関</label><input type="text" id="add-permits-issued_by" placeholder="関東運輸局"></div>
+            <div class="form-field"><label>備考</label><input type="text" id="add-permits-note"></div>
+            <button class="btn btn-add" style="align-self:flex-end;" onclick="addSimple('permits','permit_number')">＋ 追加</button>
+          </div>
+        </details>
         <div id="status-permits" class="status-bar"></div>
       </div>
       <div class="panel">
@@ -510,19 +538,22 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
           管理者・事務員のシステムアカウントを管理します。<br>
           アカウント作成時に仮パスワードを設定し、各自にパスワード変更をお願いしてください。
         </div>
-        <div class="form-row">
-          <div class="form-field"><label>氏名 *</label><input type="text" id="adm-name" placeholder="山田 太郎"></div>
-          <div class="form-field"><label>メールアドレス *</label><input type="email" id="adm-email" placeholder="yamada@example.com"></div>
-          <div class="form-field">
-            <label>役割 *</label>
-            <select id="adm-role">
-              <option value="staff">事務員</option>
-              <option value="admin">管理者</option>
-            </select>
+        <details class="add-form-details" id="details-admins-form">
+          <summary>＋ 新規追加</summary>
+          <div class="form-row">
+            <div class="form-field"><label>氏名 *</label><input type="text" id="adm-name" placeholder="山田 太郎"></div>
+            <div class="form-field"><label>メールアドレス *</label><input type="email" id="adm-email" placeholder="yamada@example.com"></div>
+            <div class="form-field">
+              <label>役割 *</label>
+              <select id="adm-role">
+                <option value="staff">事務員</option>
+                <option value="admin">管理者</option>
+              </select>
+            </div>
+            <div class="form-field"><label>仮パスワード *（8文字以上）</label><input type="text" id="adm-pass" placeholder="Takao2024!" autocomplete="new-password"></div>
+            <button class="btn btn-add" style="align-self:flex-end;" onclick="createAccount()">＋ 作成</button>
           </div>
-          <div class="form-field"><label>仮パスワード *（8文字以上）</label><input type="text" id="adm-pass" placeholder="Takao2024!" autocomplete="new-password"></div>
-          <button class="btn btn-add" style="align-self:flex-end;" onclick="createAccount()">＋ 作成</button>
-        </div>
+        </details>
         <div id="status-admins" class="status-bar"></div>
       </div>
       <div class="panel">
@@ -682,6 +713,8 @@ async function addJobType() {
     document.getElementById('jt-name').value = '';
     document.getElementById('jt-desc').value = '';
     document.getElementById('jt-order').value = '';
+    const det = document.getElementById('details-jobtypes-form');
+    if (det) det.removeAttribute('open');
     await loadJobTypes();
     showStatus('status-jobtypes','success',`✅「${name}」を追加しました`);
   } else { showStatus('status-jobtypes','error','追加に失敗しました'); }
@@ -884,6 +917,8 @@ async function addEmployee() {
      'emp-email','emp-phone','emp-license','emp-expiry','emp-note'].forEach(id => {
       document.getElementById(id).value = '';
     });
+    const det = document.getElementById('details-employees-form');
+    if (det) det.removeAttribute('open');
     await loadEmployees();
     showStatus('status-employees','success',`✅ ${name} さんを追加しました`);
   } else { showStatus('status-employees','error','追加に失敗しました'); }
@@ -1079,6 +1114,8 @@ async function addSimple(key, reqField) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${def.table}`, { method:'POST', headers:H, body:JSON.stringify(body) });
   if (res.ok) {
     def.fields.forEach(f => { const el = document.getElementById(`add-${key}-${f}`); if (el && el.tagName!=='SELECT') el.value=''; });
+    const det = document.getElementById('details-'+key+'-form');
+    if (det) det.removeAttribute('open');
     await loadSimple(key);
     showStatus('status-'+key,'success','✅ 追加しました');
   } else showStatus('status-'+key,'error','追加に失敗しました');
@@ -1093,6 +1130,8 @@ async function addCourse() {
   if (res.ok) {
     document.getElementById('add-courses-school').value='';
     document.getElementById('add-courses-course').value='';
+    const det = document.getElementById('details-courses-form');
+    if (det) det.removeAttribute('open');
     await loadSimple('courses');
     showStatus('status-courses','success','✅ 追加しました');
   } else showStatus('status-courses','error','追加に失敗しました');
@@ -1217,6 +1256,8 @@ async function createAccount() {
       document.getElementById('adm-name').value = '';
       document.getElementById('adm-email').value = '';
       document.getElementById('adm-pass').value = '';
+      const det = document.getElementById('details-admins-form');
+      if (det) det.removeAttribute('open');
       await loadAccounts();
       showStatus('status-admins','success','✅「' + name + '」のアカウントを作成しました。仮パスワードをご本人にお伝えください。');
     } else {
