@@ -28,6 +28,7 @@ header {
 }
 header .company { font-size: 12px; opacity: 0.75; letter-spacing: 0.05em; margin-bottom: 4px; }
 header h1 { font-size: 22px; font-weight: bold; letter-spacing: 0.03em; }
+.header-logo { height: 34px; width: auto; display: block; filter: brightness(0) invert(1); }
 
 .container {
   max-width: 960px;
@@ -145,6 +146,7 @@ footer {
     body { overflow-x: hidden; }
     header { padding: 14px 16px; }
     header h1 { font-size: 18px; }
+    .header-logo { height: 26px; }
     .container { padding: 20px 14px; }
     .card-grid {
       grid-template-columns: 1fr;
@@ -175,7 +177,7 @@ footer {
 
 <header>
   <div>
-    <div class="company">高尾輸送サービス</div>
+    <img src="logo.png" alt="TAKAO" class="header-logo">
     <h1>🚌 管理システム ポータル</h1>
   </div>
 </header>
