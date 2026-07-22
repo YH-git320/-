@@ -591,7 +591,7 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
                 <th class="vcol-duty">担当業務</th>
                 <th class="vcol-cap">定員</th>
                 <th class="vcol-firstreg">初年度登録</th>
-                <th class="vcol-status">状態</th>
+                <th class="vcol-status" style="min-width:46px;white-space:nowrap;">状態</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -1694,8 +1694,8 @@ function renderVehiclesTable() {
     const hist  = allAssignmentHistory[v.id] || [];
     const isRetired = !v.active;
     const statusBadge = isRetired
-      ? `<span style="background:#f0e0e0;color:#c0392b;border-radius:4px;padding:1px 6px;font-size:10px;">廃車${v.retired_date ? '<br><span style=\'font-size:9px;\'>'+esc(v.retired_date)+'</span>' : ''}</span>`
-      : `<span style="background:#e4f0e8;color:#2e7d52;border-radius:4px;padding:1px 6px;font-size:10px;">現役</span>`;
+      ? `<span style="background:#f0e0e0;color:#c0392b;border-radius:4px;padding:2px 6px;font-size:10px;white-space:nowrap;display:inline-block;">廃車</span>`
+      : `<span style="background:#e4f0e8;color:#2e7d52;border-radius:4px;padding:2px 6px;font-size:10px;white-space:nowrap;display:inline-block;">現役</span>`;
     const actionBtns = isRetired
       ? `<span style="color:#aaa;font-size:11px;">廃車済</span>`
       : `<button class="btn" style="font-size:11px;padding:3px 8px;" onclick="openReassign(${v.id})">配置変更</button>
