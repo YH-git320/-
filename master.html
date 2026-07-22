@@ -125,7 +125,15 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   border: 1px solid #dde8e2; font-size: 12px;
 }
 .col-toggle-bar label { display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; white-space: nowrap; }
-.col-toggle-bar input[type=checkbox] { cursor: pointer; accent-color: #4d7a5e; }
+.col-toggle-bar input[type=checkbox],
+.col-toggle-bar input[type=radio] { cursor: pointer; accent-color: #4d7a5e; }
+.filter-radio-bar {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  margin-bottom: 10px; font-size: 12px;
+}
+.filter-radio-bar span { font-weight: bold; color: #555; margin-right: 2px; }
+.filter-radio-bar label { display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; white-space: nowrap; }
+.filter-radio-bar input[type=radio] { cursor: pointer; accent-color: #4d7a5e; }
 .col-toggle-sep { border-left: 1px solid #c8d8cc; height: 14px; }
 
 /* 従業員カード */
@@ -353,9 +361,12 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
           <option value="">全員表示</option>
         </select>
         <input type="text" id="filter-name" placeholder="氏名で検索…" oninput="filterEmployees()" style="min-width:140px;">
-        <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;white-space:nowrap;">
-          <input type="checkbox" id="toggle-emp-retired" onchange="filterEmployees()">退職者を含める
-        </label>
+        <div class="filter-radio-bar" style="margin:0;">
+          <span>表示：</span>
+          <label><input type="radio" name="emp-filter" value="active" checked onchange="loadEmployees()">現役</label>
+          <label><input type="radio" name="emp-filter" value="retired" onchange="loadEmployees()">退職</label>
+          <label><input type="radio" name="emp-filter" value="all" onchange="loadEmployees()">全部</label>
+        </div>
         <span id="emp-filter-count" style="font-size:12px; color:#666;"></span>
       </div>
       <!-- 表示項目トグル -->
@@ -577,7 +588,10 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
           <label><input type="checkbox" id="vtog-firstreg" onchange="applyVehicleColVisible()">初年度登録</label>
           <label><input type="checkbox" id="vtog-status" checked onchange="applyVehicleColVisible()">状態</label>
           <span class="col-toggle-sep"></span>
-          <label><input type="checkbox" id="vtog-retired" onchange="loadVehicles()">廃車を含める</label>
+          <span style="font-size:11px;color:#888;font-weight:bold;margin-right:2px;">絞り込み：</span>
+          <label><input type="radio" name="v-filter" value="active" checked onchange="loadVehicles()">現役のみ</label>
+          <label><input type="radio" name="v-filter" value="retired" onchange="loadVehicles()">廃車のみ</label>
+          <label><input type="radio" name="v-filter" value="all" onchange="loadVehicles()">全部</label>
         </div>
         <div style="overflow-x:auto;">
           <table class="data-table" style="font-size:12px;">
@@ -647,6 +661,12 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
       </div>
       <div class="panel">
         <h2>一覧</h2>
+        <div class="filter-radio-bar">
+          <span>表示：</span>
+          <label><input type="radio" name="offices-filter" value="active" checked onchange="loadSimple('offices')">現役</label>
+          <label><input type="radio" name="offices-filter" value="inactive" onchange="loadSimple('offices')">廃止</label>
+          <label><input type="radio" name="offices-filter" value="all" onchange="loadSimple('offices')">全部</label>
+        </div>
         <div style="overflow-x:auto;">
           <table class="data-table">
             <thead><tr><th>ID</th><th>営業所名</th><th>住所</th><th>電話番号</th><th>備考</th><th>操作</th></tr></thead>
@@ -676,6 +696,12 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
       </div>
       <div class="panel">
         <h2>一覧</h2>
+        <div class="filter-radio-bar">
+          <span>表示：</span>
+          <label><input type="radio" name="permits-filter" value="active" checked onchange="loadSimple('permits')">現役</label>
+          <label><input type="radio" name="permits-filter" value="inactive" onchange="loadSimple('permits')">廃止</label>
+          <label><input type="radio" name="permits-filter" value="all" onchange="loadSimple('permits')">全部</label>
+        </div>
         <div style="overflow-x:auto;">
           <table class="data-table">
             <thead><tr><th>ID</th><th>許可番号</th><th>種別</th><th>交付日</th><th>有効期限</th><th>交付機関</th><th>備考</th><th>操作</th></tr></thead>
@@ -939,8 +965,8 @@ function getEmpColVisible() {
 function applyEmpColVisible() { filterEmployees(); }
 
 async function loadEmployees() {
-  const showRetired = document.getElementById('toggle-emp-retired')?.checked;
-  const filter = showRetired ? 'order=name' : 'active=eq.true&order=name';
+  const empFilter = document.querySelector('input[name="emp-filter"]:checked')?.value || 'active';
+  const filter = empFilter === 'all' ? 'order=name' : empFilter === 'retired' ? 'active=eq.false&order=name' : 'active=eq.true&order=name';
   try {
     // 従業員一覧
     const empRes = await fetch(
@@ -1247,7 +1273,9 @@ const simpleCache = {};
 
 async function loadSimple(key) {
   const def = SIMPLE_DEF[key];
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${def.table}?active=eq.true&order=id`, { headers: getH() });
+  const fVal = document.querySelector(`input[name="${key}-filter"]:checked`)?.value || 'active';
+  const activeQ = fVal === 'all' ? '' : fVal === 'inactive' ? 'active=eq.false&' : 'active=eq.true&';
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${def.table}?${activeQ}order=id`, { headers: getH() });
   simpleCache[key] = await res.json();
   renderSimpleTable(key);
   const cnt = document.getElementById('cnt-'+key);
@@ -1647,9 +1675,9 @@ async function saveRetire() {
 }
 
 async function loadVehicles() {
-  const showRetired = document.getElementById('vtog-retired')?.checked;
+  const vFilter = document.querySelector('input[name="v-filter"]:checked')?.value || 'active';
   try {
-    const vehicleFilter = showRetired ? 'order=chassis_number' : 'active=eq.true&order=chassis_number';
+    const vehicleFilter = vFilter === 'all' ? 'order=chassis_number' : vFilter === 'retired' ? 'active=eq.false&order=chassis_number' : 'active=eq.true&order=chassis_number';
     const [vRes, aRes, oRes, cRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/vehicles?${vehicleFilter}&select=id,chassis_number,vehicle_number,vehicle_model,permit_type,capacity,first_registration_date,length_cm,width_cm,height_cm,owner,insurance,note,active,retired_date`, { headers: getH() }),
       fetch(`${SUPABASE_URL}/rest/v1/vehicle_assignments?active=eq.true&order=created_at.desc&select=id,vehicle_id,vehicle_number,office_id,offices(id,name),fiscal_year,duty,prev_vehicle_number,is_current,note,created_at`, { headers: getH() }),
