@@ -901,6 +901,7 @@ function renderJobTypeTable() {
       <td>${jt.sort_order}</td>
       <td style="white-space:nowrap;">
         <button class="btn btn-edit btn-small" onclick="startEditJT(${jt.id})">編集</button>
+        <button class="btn btn-gray btn-small" onclick="openAuditModal('job_types',${jt.id},'業務：${escAttr(jt.name)}')">変更履歴</button>
         <button class="btn btn-danger btn-small" onclick="deleteJT(${jt.id},'${escAttr(jt.name)}')">削除</button>
       </td>
     </tr>`).join('');
@@ -1667,7 +1668,7 @@ let retireTargetId = null;
 const AUDIT_SKIP_FIELDS = ['id','created_at','updated_at','is_error','error_reason'];
 const AUDIT_TABLE_LABELS = {
   vehicles:'車両', vehicle_assignments:'配置変更', staff:'従業員',
-  courses:'コース名', offices:'営業所', permits:'営業許可'
+  courses:'コース名', offices:'営業所', permits:'営業許可', job_types:'業務マスタ'
 };
 const AUDIT_FIELD_LABELS = {
   vehicles:{
@@ -1694,7 +1695,8 @@ const AUDIT_FIELD_LABELS = {
     contract_end:'契約終了', active:'現役'
   },
   offices:{ name:'営業所名', address:'住所', phone:'電話番号', note:'備考', active:'現役' },
-  permits:{ permit_number:'許可番号', permit_type:'許可種別', office_id:'営業所ID', note:'備考', active:'現役' }
+  permits:{ permit_number:'許可番号', permit_type:'許可種別', office_id:'営業所ID', note:'備考', active:'現役' },
+  job_types:{ name:'業務名', description:'説明', sort_order:'表示順', active:'有効' }
 };
 
 let _auditTableName = null;
