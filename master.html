@@ -533,7 +533,7 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
                   </select>
                 </div>
                 <div class="form-field"><label>年度</label><input type="text" id="nv-year" placeholder="令和8年度"></div>
-                <div class="form-field"><label>担当業務</label><input type="text" id="nv-duty" placeholder="担当コース名など"></div>
+                <div class="form-field"><label>担当コース</label><select id="nv-duty"><option value="">未設定</option></select></div>
               </div>
             </div>
             <button class="btn btn-add" style="margin-top:12px;" onclick="addVehicle()">＋ 登録</button>
@@ -553,7 +553,7 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
               <select id="ra-office"><option value="">選択</option></select>
             </div>
             <div class="form-field"><label>年度</label><input type="text" id="ra-year" placeholder="令和9年度"></div>
-            <div class="form-field"><label>担当業務</label><input type="text" id="ra-duty" placeholder="担当コース名など"></div>
+            <div class="form-field"><label>担当コース</label><select id="ra-duty"><option value="">未設定</option></select></div>
             <div class="form-field" style="width:100%;"><label>備考</label><input type="text" id="ra-note"></div>
           </div>
           <div style="display:flex; gap:8px; margin-top:16px; justify-content:flex-end;">
@@ -776,6 +776,8 @@ let allVehiclesData   = [];          // 車両マスタ（新UI用）
 let currentAssignments = {};         // vehicleId → 現在の配置レコード
 let allAssignmentHistory = {};       // vehicleId → 配置変更履歴配列
 let reassignTargetId = null;         // 配置変更モーダル対象vehicleId
+let allCoursesData    = [];          // コース名マスタ
+let vehicleCourseMap  = {};          // vehicleId → [course_name, ...]
 
 // ===== セクション切り替え =====
 const SECTIONS = ['employees','jobtypes','courses','vehicles','offices','permits','admins'];
@@ -1648,14 +1650,16 @@ async function loadVehicles() {
   const showRetired = document.getElementById('vtog-retired')?.checked;
   try {
     const vehicleFilter = showRetired ? 'order=chassis_number' : 'active=eq.true&order=chassis_number';
-    const [vRes, aRes, oRes] = await Promise.all([
+    const [vRes, aRes, oRes, cRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/vehicles?${vehicleFilter}&select=id,chassis_number,vehicle_number,vehicle_model,permit_type,capacity,first_registration_date,length_cm,width_cm,height_cm,owner,insurance,note,active,retired_date`, { headers: getH() }),
       fetch(`${SUPABASE_URL}/rest/v1/vehicle_assignments?active=eq.true&order=created_at.desc&select=id,vehicle_id,vehicle_number,office_id,offices(id,name),fiscal_year,duty,prev_vehicle_number,is_current,note,created_at`, { headers: getH() }),
-      fetch(`${SUPABASE_URL}/rest/v1/offices?active=eq.true&order=name&select=id,name`, { headers: getH() })
+      fetch(`${SUPABASE_URL}/rest/v1/offices?active=eq.true&order=name&select=id,name`, { headers: getH() }),
+      fetch(`${SUPABASE_URL}/rest/v1/courses?active=eq.true&order=course_name&select=id,course_name,contract_name,vehicle_id`, { headers: getH() })
     ]);
     allVehiclesData  = vRes.ok ? await vRes.json() : [];
     const assignments = aRes.ok ? await aRes.json() : [];
     allOfficesMaster  = oRes.ok ? await oRes.json() : [];
+    allCoursesData    = cRes.ok ? await cRes.json() : [];
 
     // vehicleId → 現在の配置 / 全履歴 のマップを構築
     currentAssignments   = {};
@@ -1666,6 +1670,15 @@ async function loadVehicles() {
       if (a.is_current) currentAssignments[a.vehicle_id] = a;
     });
 
+    // vehicleId → コース名リスト のマップを構築
+    vehicleCourseMap = {};
+    allCoursesData.forEach(c => {
+      if (c.vehicle_id != null) {
+        if (!vehicleCourseMap[c.vehicle_id]) vehicleCourseMap[c.vehicle_id] = [];
+        vehicleCourseMap[c.vehicle_id].push(c.course_name || c.contract_name || '');
+      }
+    });
+
     // 車庫ドロップダウンを更新（新規登録・配置変更モーダル共通）
     const officeOpts = '<option value="">未設定</option>' +
       allOfficesMaster.map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('');
@@ -1673,6 +1686,14 @@ async function loadVehicles() {
     const raOffice = document.getElementById('ra-office');
     if (nvOffice) nvOffice.innerHTML = officeOpts;
     if (raOffice) raOffice.innerHTML = officeOpts;
+
+    // コースドロップダウンを更新（新規登録・配置変更モーダル共通）
+    const courseOpts = '<option value="">未設定</option>' +
+      allCoursesData.map(c => `<option value="${esc(c.course_name||c.contract_name||'')}">${esc(c.course_name||'')}${c.contract_name && c.contract_name !== c.course_name ? '（'+esc(c.contract_name)+'）' : ''}</option>`).join('');
+    const nvDuty = document.getElementById('nv-duty');
+    const raDuty = document.getElementById('ra-duty');
+    if (nvDuty) nvDuty.innerHTML = courseOpts;
+    if (raDuty) raDuty.innerHTML = courseOpts;
 
     document.getElementById('cnt-vehicles').textContent = allVehiclesData.length;
     renderVehiclesTable();
@@ -1690,7 +1711,7 @@ function renderVehiclesTable() {
     const cur = currentAssignments[v.id];
     const officeName = cur?.offices?.name || '';
     const vnum  = cur ? cur.vehicle_number : (v.vehicle_number || '');
-    const duty  = cur ? (cur.duty || '') : '';
+    const duty  = (vehicleCourseMap[v.id] || []).join('・') || (cur ? (cur.duty || '') : '');
     const hist  = allAssignmentHistory[v.id] || [];
     const isRetired = !v.active;
     const statusBadge = isRetired
@@ -1776,7 +1797,10 @@ function openReassign(vehicleId) {
   document.getElementById('ra-vnum').value  = '';
   document.getElementById('ra-office').value = cur && cur.office_id ? cur.office_id : '';
   document.getElementById('ra-year').value  = '';
-  document.getElementById('ra-duty').value  = cur ? (cur.duty || '') : '';
+  // コースドロップダウン：現在のvehicleCourseMapから先頭コース名をセット
+  const curCourses = vehicleCourseMap[vehicleId] || [];
+  const raDuty = document.getElementById('ra-duty');
+  if (raDuty) raDuty.value = curCourses[0] || (cur ? (cur.duty || '') : '');
   document.getElementById('ra-note').value  = '';
   document.getElementById('reassign-modal').style.display = 'flex';
 }
