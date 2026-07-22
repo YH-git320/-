@@ -118,6 +118,16 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .data-table tr:hover { background: #eaf5ef; }
 .data-table input.inline-edit { width: 100%; padding: 4px 6px; border: 1px solid #4d7a5e; border-radius: 7px; font-size: 12px; }
 
+/* 列・項目表示トグルバー */
+.col-toggle-bar {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  background: #f8fbf9; padding: 8px 12px; border-radius: 8px;
+  border: 1px solid #dde8e2; font-size: 12px;
+}
+.col-toggle-bar label { display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; white-space: nowrap; }
+.col-toggle-bar input[type=checkbox] { cursor: pointer; accent-color: #4d7a5e; }
+.col-toggle-sep { border-left: 1px solid #c8d8cc; height: 14px; }
+
 /* 従業員カード */
 .emp-grid { display: flex; flex-direction: column; gap: 10px; }
 .emp-card {
@@ -321,9 +331,10 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
             <div class="form-field"><label>フリガナ</label><input type="text" id="emp-kana" placeholder="ﾔﾏﾀﾞ ﾀﾛｳ"></div>
             <div class="form-field"><label>部課</label><input type="text" id="emp-dept" placeholder="004:特定バス部門"></div>
             <div class="form-field"><label>社員番号</label><input type="text" id="emp-code" placeholder="4001"></div>
+            <div class="form-field"><label>入社年月日</label><input type="text" id="emp-hire" placeholder="令和5年4月1日"></div>
+            <div class="form-field"><label>退職年月日</label><input type="text" id="emp-retire" placeholder="令和8年3月31日"></div>
             <div class="form-field"><label>郵便番号</label><input type="text" id="emp-postal" placeholder="192-0000"></div>
             <div class="form-field"><label>住所</label><input type="text" id="emp-address" placeholder="東京都八王子市…" style="min-width:220px;"></div>
-            <div class="form-field"><label>退職年月日</label><input type="text" id="emp-retire" placeholder="令和8年3月31日"></div>
             <div class="form-field"><label>メールアドレス</label><input type="email" id="emp-email" placeholder="yamada@example.com"></div>
             <div class="form-field"><label>電話番号</label><input type="tel" id="emp-phone" placeholder="090-0000-0000"></div>
             <div class="form-field"><label>免許番号</label><input type="text" id="emp-license" placeholder="第123456号"></div>
@@ -336,13 +347,27 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
       </div>
 
       <!-- 絞り込み -->
-      <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap;">
+      <div style="display:flex; gap:10px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
         <span style="font-size:13px; font-weight:bold; color:#555;">業務で絞り込み：</span>
         <select id="filter-jobtype" onchange="filterEmployees()" style="min-width:140px;">
           <option value="">全員表示</option>
         </select>
         <input type="text" id="filter-name" placeholder="氏名で検索…" oninput="filterEmployees()" style="min-width:140px;">
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;white-space:nowrap;">
+          <input type="checkbox" id="toggle-emp-retired" onchange="filterEmployees()">退職者を含める
+        </label>
         <span id="emp-filter-count" style="font-size:12px; color:#666;"></span>
+      </div>
+      <!-- 表示項目トグル -->
+      <div class="col-toggle-bar" style="margin-bottom:10px;">
+        <span style="font-size:11px;color:#888;font-weight:bold;margin-right:4px;">表示項目：</span>
+        <label><input type="checkbox" id="etog-dates" checked onchange="applyEmpColVisible()">📅 入社・退職日</label>
+        <span class="col-toggle-sep"></span>
+        <label><input type="checkbox" id="etog-address" onchange="applyEmpColVisible()">📮 住所</label>
+        <span class="col-toggle-sep"></span>
+        <label><input type="checkbox" id="etog-license" checked onchange="applyEmpColVisible()">🪪 免許情報</label>
+        <span class="col-toggle-sep"></span>
+        <label><input type="checkbox" id="etog-note" checked onchange="applyEmpColVisible()">📝 備考</label>
       </div>
 
       <div class="emp-grid" id="emp-grid">
@@ -540,15 +565,54 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 
       <div class="panel">
         <h2>一覧</h2>
+        <!-- 表示列トグル -->
+        <div class="col-toggle-bar" style="margin-bottom:10px;">
+          <span style="font-size:11px;color:#888;font-weight:bold;margin-right:4px;">表示列：</span>
+          <label><input type="checkbox" id="vtog-model" checked onchange="applyVehicleColVisible()">車名</label>
+          <label><input type="checkbox" id="vtog-permit" onchange="applyVehicleColVisible()">許可</label>
+          <label><input type="checkbox" id="vtog-vnum" checked onchange="applyVehicleColVisible()">車番</label>
+          <label><input type="checkbox" id="vtog-office" checked onchange="applyVehicleColVisible()">車庫</label>
+          <label><input type="checkbox" id="vtog-duty" checked onchange="applyVehicleColVisible()">業務</label>
+          <label><input type="checkbox" id="vtog-cap" onchange="applyVehicleColVisible()">定員</label>
+          <label><input type="checkbox" id="vtog-firstreg" onchange="applyVehicleColVisible()">初年度登録</label>
+          <label><input type="checkbox" id="vtog-status" checked onchange="applyVehicleColVisible()">状態</label>
+          <span class="col-toggle-sep"></span>
+          <label><input type="checkbox" id="vtog-retired" onchange="loadVehicles()">廃車を含める</label>
+        </div>
         <div style="overflow-x:auto;">
           <table class="data-table" style="font-size:12px;">
             <thead>
               <tr>
-                <th>車台番号</th><th>車名</th><th>許可</th><th>現在の車番</th><th>配置車庫</th><th>担当業務</th><th>定員</th><th>初年度登録</th><th>操作</th>
+                <th>車台番号</th>
+                <th class="vcol-model">車名</th>
+                <th class="vcol-permit">許可</th>
+                <th class="vcol-vnum">現在の車番</th>
+                <th class="vcol-office">配置車庫</th>
+                <th class="vcol-duty">担当業務</th>
+                <th class="vcol-cap">定員</th>
+                <th class="vcol-firstreg">初年度登録</th>
+                <th class="vcol-status">状態</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody id="tbody-vehicles"></tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- 廃車モーダル -->
+      <div id="retire-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:1000; align-items:center; justify-content:center;">
+        <div style="background:white; border-radius:14px; padding:24px; width:min(420px,90vw); box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+          <h3 style="margin-bottom:4px;">🚫 廃車処理</h3>
+          <p id="retire-target-label" style="font-size:12px; color:#666; margin-bottom:16px;"></p>
+          <div class="form-field" style="margin-bottom:16px;">
+            <label>廃車年月日</label>
+            <input type="text" id="retire-date-input" placeholder="令和8年3月31日" style="width:100%;">
+          </div>
+          <div style="display:flex; gap:8px; justify-content:flex-end;">
+            <button class="btn btn-gray" onclick="closeRetireModal()">キャンセル</button>
+            <button class="btn btn-danger" onclick="saveRetire()">廃車にする</button>
+          </div>
         </div>
       </div>
     </div>
@@ -861,11 +925,24 @@ async function deleteJT(id, name) {
 // ================================================
 //  従業員マスタ
 // ================================================
+// 従業員カード表示トグル状態
+function getEmpColVisible() {
+  return {
+    dates:   document.getElementById('etog-dates')?.checked ?? true,
+    address: document.getElementById('etog-address')?.checked ?? false,
+    license: document.getElementById('etog-license')?.checked ?? true,
+    note:    document.getElementById('etog-note')?.checked ?? true,
+  };
+}
+function applyEmpColVisible() { filterEmployees(); }
+
 async function loadEmployees() {
+  const showRetired = document.getElementById('toggle-emp-retired')?.checked;
+  const filter = showRetired ? 'order=name' : 'active=eq.true&order=name';
   try {
     // 従業員一覧
     const empRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/staff?active=eq.true&order=name&select=id,name,name_kana,department,email,phone,employee_code,postal_code,address,retirement_date,license_number,license_expiry,note`,
+      `${SUPABASE_URL}/rest/v1/staff?${filter}&select=id,name,name_kana,department,email,phone,employee_code,postal_code,address,hire_date,retirement_date,license_number,license_expiry,note,active`,
       { headers: getH() }
     );
     const empData = await empRes.json();
@@ -910,20 +987,22 @@ function filterEmployees() {
   if (nameQ)  filtered = filtered.filter(e => e.name.toLowerCase().includes(nameQ));
   document.getElementById('emp-filter-count').textContent =
     filtered.length < allEmployees.length ? `${filtered.length}件 表示中` : '';
-  renderEmployeeGrid(filtered);
+  renderEmployeeGrid(filtered, getEmpColVisible());
 }
 
 function chipColor(index) {
   return `chip-color-${index % 8}`;
 }
 
-function renderEmployeeGrid(employees) {
+function renderEmployeeGrid(employees, col) {
+  col = col || { dates: true, address: false, license: true, note: true };
   const grid = document.getElementById('emp-grid');
   if (employees.length === 0) {
     grid.innerHTML = '<div style="color:#999; font-size:13px; padding:20px;">該当する従業員がいません</div>';
     return;
   }
   grid.innerHTML = employees.map(emp => {
+    const isRetired = !emp.active;
     const sub = [emp.employee_code ? '社員番号：'+emp.employee_code : null,
                  emp.department || null,
                  emp.phone || null, emp.email || null].filter(Boolean).join('　|　');
@@ -938,7 +1017,7 @@ function renderEmployeeGrid(employees) {
     // 未付与の業務のみドロップダウンに表示
     const hasIds = new Set(emp.jobTypes.map(j => j.id));
     const unassigned = allJobTypes.filter(j => !hasIds.has(j.id));
-    const addChipHtml = unassigned.length > 0 ? `
+    const addChipHtml = (!isRetired && unassigned.length > 0) ? `
       <span class="add-job-wrap">
         <select id="add-jt-${emp.id}">
           <option value="">＋業務を追加…</option>
@@ -948,15 +1027,22 @@ function renderEmployeeGrid(employees) {
       </span>` : '';
 
     return `
-      <div class="emp-card" id="emp-card-${emp.id}">
+      <div class="emp-card" id="emp-card-${emp.id}" style="${isRetired ? 'opacity:0.65;border-color:#d0c0b0;' : ''}">
         <div class="emp-card-top">
           <div class="emp-info">
-            <div class="emp-name">${esc(emp.name)}${emp.name_kana ? `<span style="font-size:12px;font-weight:normal;color:#888;margin-left:8px;">${esc(emp.name_kana)}</span>` : ''}</div>
+            <div class="emp-name">
+              ${isRetired ? '<span style="font-size:11px;background:#c17f3e;color:white;padding:1px 6px;border-radius:4px;margin-right:6px;">退職</span>' : ''}
+              ${esc(emp.name)}${emp.name_kana ? `<span style="font-size:12px;font-weight:normal;color:#888;margin-left:8px;">${esc(emp.name_kana)}</span>` : ''}
+            </div>
             ${sub ? `<div class="emp-sub">${esc(sub)}</div>` : ''}
-            ${emp.postal_code || emp.address ? `<div class="emp-sub">📮 ${emp.postal_code ? esc(emp.postal_code)+'　' : ''}${esc(emp.address||'')}</div>` : ''}
-            ${emp.retirement_date ? `<div class="emp-sub" style="color:#c17f3e;">🔔 退職：${esc(emp.retirement_date)}</div>` : ''}
-            ${emp.license_number ? `<div class="emp-sub">免許：${esc(emp.license_number)}${emp.license_expiry ? '　有効期限：'+emp.license_expiry : ''}</div>` : ''}
-            ${emp.note ? `<div class="emp-sub" style="color:#888;">📝 ${esc(emp.note)}</div>` : ''}
+            ${col.dates ? `<div class="emp-sub" style="color:#5a7a65;">
+              ${emp.hire_date ? '📅 入社：'+esc(emp.hire_date) : ''}
+              ${emp.hire_date && emp.retirement_date ? '　' : ''}
+              ${emp.retirement_date ? '<span style="color:#c17f3e;">🔔 退職：'+esc(emp.retirement_date)+'</span>' : ''}
+            </div>` : (emp.retirement_date ? `<div class="emp-sub" style="color:#c17f3e;">🔔 退職：${esc(emp.retirement_date)}</div>` : '')}
+            ${col.address && (emp.postal_code || emp.address) ? `<div class="emp-sub">📮 ${emp.postal_code ? esc(emp.postal_code)+'　' : ''}${esc(emp.address||'')}</div>` : ''}
+            ${col.license && emp.license_number ? `<div class="emp-sub">🪪 免許：${esc(emp.license_number)}${emp.license_expiry ? '　有効期限：'+emp.license_expiry : ''}</div>` : ''}
+            ${col.note && emp.note ? `<div class="emp-sub" style="color:#888;">📝 ${esc(emp.note)}</div>` : ''}
           </div>
           <div class="emp-actions">
             <button class="btn btn-edit btn-small" onclick="startEditEmp(${emp.id})">編集</button>
@@ -1001,9 +1087,10 @@ async function addEmployee() {
   const kana    = document.getElementById('emp-kana').value.trim();
   const dept    = document.getElementById('emp-dept').value.trim();
   const empCode = document.getElementById('emp-code').value.trim();
+  const hire    = document.getElementById('emp-hire').value.trim();
+  const retire  = document.getElementById('emp-retire').value.trim();
   const postal  = document.getElementById('emp-postal').value.trim();
   const addr    = document.getElementById('emp-address').value.trim();
-  const retire  = document.getElementById('emp-retire').value.trim();
   const email   = document.getElementById('emp-email').value.trim();
   const phone   = document.getElementById('emp-phone').value.trim();
   const license = document.getElementById('emp-license').value.trim();
@@ -1014,14 +1101,15 @@ async function addEmployee() {
     method: 'POST', headers: getH(),
     body: JSON.stringify({
       name, name_kana:kana||null, department:dept||null,
-      employee_code:empCode||null, postal_code:postal||null, address:addr||null,
+      employee_code:empCode||null, hire_date:hire||null,
+      postal_code:postal||null, address:addr||null,
       retirement_date:retire||null, email:email||null, phone:phone||null,
       license_number:license||null, license_expiry:expiry||null, note:note||null
     })
   });
   if (res.ok) {
-    ['emp-name','emp-kana','emp-dept','emp-code','emp-postal','emp-address','emp-retire',
-     'emp-email','emp-phone','emp-license','emp-expiry','emp-note'].forEach(id => {
+    ['emp-name','emp-kana','emp-dept','emp-code','emp-hire','emp-retire',
+     'emp-postal','emp-address','emp-email','emp-phone','emp-license','emp-expiry','emp-note'].forEach(id => {
       document.getElementById(id).value = '';
     });
     const det = document.getElementById('details-employees-form');
@@ -1044,6 +1132,7 @@ function startEditEmp(id) {
       <div class="form-field"><label>社員番号</label><input type="text" id="ee-code-${id}" value="${esc(emp.employee_code||'')}" style="min-width:100px;"></div>
       <div class="form-field"><label>郵便番号</label><input type="text" id="ee-postal-${id}" value="${esc(emp.postal_code||'')}" style="min-width:100px;"></div>
       <div class="form-field"><label>住所</label><input type="text" id="ee-addr-${id}" value="${esc(emp.address||'')}" style="min-width:240px;"></div>
+      <div class="form-field"><label>入社年月日</label><input type="text" id="ee-hire-${id}" value="${esc(emp.hire_date||'')}" placeholder="令和5年4月1日" style="min-width:140px;"></div>
       <div class="form-field"><label>退職年月日</label><input type="text" id="ee-retire-${id}" value="${esc(emp.retirement_date||'')}" placeholder="令和8年3月31日" style="min-width:140px;"></div>
       <div class="form-field"><label>メール</label><input type="email" id="ee-email-${id}" value="${esc(emp.email||'')}" style="min-width:180px;"></div>
       <div class="form-field"><label>電話番号</label><input type="tel" id="ee-phone-${id}" value="${esc(emp.phone||'')}" style="min-width:140px;"></div>
@@ -1064,6 +1153,7 @@ async function saveEditEmp(id) {
   const empCode = document.getElementById(`ee-code-${id}`).value.trim();
   const postal  = document.getElementById(`ee-postal-${id}`).value.trim();
   const addr    = document.getElementById(`ee-addr-${id}`).value.trim();
+  const hire    = document.getElementById(`ee-hire-${id}`).value.trim();
   const retire  = document.getElementById(`ee-retire-${id}`).value.trim();
   const email   = document.getElementById(`ee-email-${id}`).value.trim();
   const phone   = document.getElementById(`ee-phone-${id}`).value.trim();
@@ -1075,7 +1165,7 @@ async function saveEditEmp(id) {
     method: 'PATCH', headers: getH(),
     body: JSON.stringify({
       name, name_kana:kana||null, department:dept||null,
-      employee_code:empCode||null, postal_code:postal||null, address:addr||null,
+      employee_code:empCode||null, hire_date:hire||null, postal_code:postal||null, address:addr||null,
       retirement_date:retire||null, email:email||null, phone:phone||null,
       license_number:license||null, license_expiry:expiry||null, note:note||null
     })
@@ -1483,10 +1573,83 @@ function dlCSV(csv, filename) {
 //  車両マスタ（新UI）
 // ================================================
 
-async function loadVehicles() {
+function applyVehicleColVisible() {
+  const cols = {
+    model:    document.getElementById('vtog-model')?.checked ?? true,
+    permit:   document.getElementById('vtog-permit')?.checked ?? false,
+    vnum:     document.getElementById('vtog-vnum')?.checked ?? true,
+    office:   document.getElementById('vtog-office')?.checked ?? true,
+    duty:     document.getElementById('vtog-duty')?.checked ?? true,
+    cap:      document.getElementById('vtog-cap')?.checked ?? false,
+    firstreg: document.getElementById('vtog-firstreg')?.checked ?? false,
+    status:   document.getElementById('vtog-status')?.checked ?? true,
+  };
+  const map = {
+    model:'vcol-model', permit:'vcol-permit', vnum:'vcol-vnum',
+    office:'vcol-office', duty:'vcol-duty', cap:'vcol-cap',
+    firstreg:'vcol-firstreg', status:'vcol-status'
+  };
+  for (const [key, cls] of Object.entries(map)) {
+    document.querySelectorAll('.' + cls).forEach(el => {
+      el.style.display = cols[key] ? '' : 'none';
+    });
+  }
+}
+
+let retireTargetId = null;
+
+function openRetireModal(vehicleId) {
+  retireTargetId = vehicleId;
+  const v = allVehiclesData.find(vv => vv.id === vehicleId);
+  const cur = currentAssignments[vehicleId];
+  const label = document.getElementById('retire-target-label');
+  if (label && v) {
+    label.textContent = `車台番号: ${v.chassis_number || '—'}　現在の車番: ${cur ? cur.vehicle_number : '未設定'}`;
+  }
+  document.getElementById('retire-date-input').value = '';
+  document.getElementById('retire-modal').style.display = 'flex';
+}
+
+function closeRetireModal() {
+  document.getElementById('retire-modal').style.display = 'none';
+  retireTargetId = null;
+}
+
+async function saveRetire() {
+  if (!retireTargetId) return;
+  const retiredDate = document.getElementById('retire-date-input').value.trim();
   try {
+    // vehicles テーブルの active=false + retired_date を設定
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/vehicles?id=eq.${retireTargetId}`, {
+      method: 'PATCH', headers: getH(),
+      body: JSON.stringify({ active: false, retired_date: retiredDate || null })
+    });
+    if (res.ok) {
+      // 現在の配置も is_current=false に
+      const cur = currentAssignments[retireTargetId];
+      if (cur) {
+        await fetch(`${SUPABASE_URL}/rest/v1/vehicle_assignments?id=eq.${cur.id}`, {
+          method: 'PATCH', headers: getH(), body: JSON.stringify({ is_current: false })
+        });
+      }
+      closeRetireModal();
+      await loadVehicles();
+      showStatus('status-vehicles', 'success', '✅ 廃車処理を完了しました');
+    } else {
+      showStatus('status-vehicles', 'error', '廃車処理に失敗しました');
+    }
+  } catch(e) {
+    console.error('saveRetire error:', e);
+    showStatus('status-vehicles', 'error', 'エラーが発生しました');
+  }
+}
+
+async function loadVehicles() {
+  const showRetired = document.getElementById('vtog-retired')?.checked;
+  try {
+    const vehicleFilter = showRetired ? 'order=chassis_number' : 'active=eq.true&order=chassis_number';
     const [vRes, aRes, oRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/vehicles?active=eq.true&order=chassis_number&select=id,chassis_number,vehicle_number,vehicle_model,permit_type,capacity,first_registration_date,length_cm,width_cm,height_cm,owner,insurance,note`, { headers: getH() }),
+      fetch(`${SUPABASE_URL}/rest/v1/vehicles?${vehicleFilter}&select=id,chassis_number,vehicle_number,vehicle_model,permit_type,capacity,first_registration_date,length_cm,width_cm,height_cm,owner,insurance,note,active,retired_date`, { headers: getH() }),
       fetch(`${SUPABASE_URL}/rest/v1/vehicle_assignments?active=eq.true&order=created_at.desc&select=id,vehicle_id,vehicle_number,office_id,offices(id,name),fiscal_year,duty,prev_vehicle_number,is_current,note,created_at`, { headers: getH() }),
       fetch(`${SUPABASE_URL}/rest/v1/offices?active=eq.true&order=name&select=id,name`, { headers: getH() })
     ]);
@@ -1520,32 +1683,38 @@ function renderVehiclesTable() {
   const tbody = document.getElementById('tbody-vehicles');
   if (!tbody) return;
   if (!allVehiclesData.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;padding:20px;">データがありません</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:20px;">データがありません</td></tr>';
     return;
   }
   tbody.innerHTML = allVehiclesData.map(v => {
     const cur = currentAssignments[v.id];
-    // offices はリレーション埋め込みで直接取得
     const officeName = cur?.offices?.name || '';
     const vnum  = cur ? cur.vehicle_number : (v.vehicle_number || '');
     const duty  = cur ? (cur.duty || '') : '';
     const hist  = allAssignmentHistory[v.id] || [];
+    const isRetired = !v.active;
+    const statusBadge = isRetired
+      ? `<span style="background:#f0e0e0;color:#c0392b;border-radius:4px;padding:1px 6px;font-size:10px;">廃車${v.retired_date ? '<br><span style=\'font-size:9px;\'>'+esc(v.retired_date)+'</span>' : ''}</span>`
+      : `<span style="background:#e4f0e8;color:#2e7d52;border-radius:4px;padding:1px 6px;font-size:10px;">現役</span>`;
+    const actionBtns = isRetired
+      ? `<span style="color:#aaa;font-size:11px;">廃車済</span>`
+      : `<button class="btn" style="font-size:11px;padding:3px 8px;" onclick="openReassign(${v.id})">配置変更</button>
+         <button class="btn btn-danger" style="font-size:11px;padding:3px 8px;margin-left:3px;" onclick="openRetireModal(${v.id})">廃車</button>`;
     return `
-      <tr>
+      <tr style="${isRetired ? 'opacity:0.6;' : ''}">
         <td><a href="#" style="color:#4d7a5e;" onclick="toggleVehicleDetail(${v.id});return false;">${esc(v.chassis_number || '—')}</a></td>
-        <td>${esc(v.vehicle_model || '')}</td>
-        <td style="font-size:11px;">${esc(v.permit_type || '')}</td>
-        <td>${esc(vnum)}</td>
-        <td style="font-size:11px;">${esc(officeName)}</td>
-        <td style="font-size:11px;">${esc(duty)}</td>
-        <td style="text-align:center;">${v.capacity != null ? v.capacity : ''}</td>
-        <td style="font-size:11px;">${esc(v.first_registration_date || '')}</td>
-        <td>
-          <button class="btn" style="font-size:11px;padding:3px 8px;" onclick="openReassign(${v.id})">配置変更</button>
-        </td>
+        <td class="vcol-model">${esc(v.vehicle_model || '')}</td>
+        <td class="vcol-permit" style="font-size:11px;">${esc(v.permit_type || '')}</td>
+        <td class="vcol-vnum">${esc(vnum)}</td>
+        <td class="vcol-office" style="font-size:11px;">${esc(officeName)}</td>
+        <td class="vcol-duty" style="font-size:11px;">${esc(duty)}</td>
+        <td class="vcol-cap" style="text-align:center;">${v.capacity != null ? v.capacity : ''}</td>
+        <td class="vcol-firstreg" style="font-size:11px;">${esc(v.first_registration_date || '')}</td>
+        <td class="vcol-status" style="text-align:center;">${statusBadge}</td>
+        <td style="white-space:nowrap;">${actionBtns}</td>
       </tr>
       <tr id="detail-${v.id}" style="display:none;">
-        <td colspan="9" style="padding:12px;background:#f0f8f0;border-bottom:1px solid #dde;">
+        <td colspan="10" style="padding:12px;background:#f0f8f0;border-bottom:1px solid #dde;">
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px;font-size:12px;margin-bottom:10px;">
             <div><span style="color:#666;">定員:</span> ${v.capacity != null ? v.capacity+'名' : '—'}</div>
             <div><span style="color:#666;">全長:</span> ${v.length_cm ? v.length_cm+'cm' : '—'}</div>
@@ -1553,6 +1722,7 @@ function renderVehiclesTable() {
             <div><span style="color:#666;">全高:</span> ${v.height_cm ? v.height_cm+'cm' : '—'}</div>
             <div><span style="color:#666;">所有者:</span> ${esc(v.owner || '—')}</div>
             <div><span style="color:#666;">保険:</span> ${esc(v.insurance || '—')}</div>
+            ${v.retired_date ? `<div><span style="color:#666;">廃車日:</span> ${esc(v.retired_date)}</div>` : ''}
             ${v.note ? `<div style="grid-column:1/-1;"><span style="color:#666;">備考:</span> ${esc(v.note)}</div>` : ''}
           </div>
           ${hist.length > 0 ? `
@@ -1585,6 +1755,8 @@ function renderVehiclesTable() {
         </td>
       </tr>`;
   }).join('');
+  // トグル状態を再適用
+  applyVehicleColVisible();
 }
 
 function toggleVehicleDetail(id) {
