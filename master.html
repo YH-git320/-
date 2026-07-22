@@ -1718,20 +1718,28 @@ async function openAuditModal(tableName, recordId, label) {
   _auditTableName = tableName;
   _auditRecordId  = recordId;
   _auditLabel     = label;
+  const modal = document.getElementById('audit-modal');
+  const list  = document.getElementById('audit-log-list');
   document.getElementById('audit-modal-label').textContent = label;
-  document.getElementById('audit-log-list').innerHTML =
-    '<div style="text-align:center;padding:24px;color:#888;">読み込み中…</div>';
-  document.getElementById('audit-modal').style.display = 'flex';
+  list.innerHTML = '<div style="text-align:center;padding:24px;color:#888;">読み込み中…</div>';
+  modal.style.display = 'flex';
+  // ブラウザに描画の機会を与えてからフェッチ開始（モーダルを即座に表示するため）
+  await new Promise(r => requestAnimationFrame(r));
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000); // 5秒でタイムアウト
   try {
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/audit_log?table_name=eq.${encodeURIComponent(tableName)}&record_id=eq.${recordId}&order=changed_at.desc&limit=100`,
-      { headers: getH() }
+      { headers: getH(), signal: controller.signal }
     );
+    clearTimeout(timer);
     _auditLogs = res.ok ? await res.json() : [];
     _renderAuditList();
   } catch(e) {
-    document.getElementById('audit-log-list').innerHTML =
-      '<div style="color:#c0392b;padding:12px;">履歴の取得に失敗しました</div>';
+    clearTimeout(timer);
+    // タイムアウト・通信エラーどちらも「履歴なし」として静かに表示
+    list.innerHTML = '<div style="text-align:center;padding:24px;color:#888;">変更履歴がありません</div>';
   }
 }
 
