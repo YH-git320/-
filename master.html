@@ -1729,8 +1729,7 @@ function renderVehiclesTable() {
       : `<span style="background:#e4f0e8;color:#2e7d52;border-radius:4px;padding:2px 6px;font-size:10px;white-space:nowrap;display:inline-block;">現役</span>`;
     const actionBtns = isRetired
       ? `<span style="color:#aaa;font-size:11px;">廃車済</span>`
-      : `<button class="btn" style="font-size:11px;padding:3px 8px;" onclick="openReassign(${v.id})">配置変更</button>
-         <button class="btn btn-danger" style="font-size:11px;padding:3px 8px;margin-left:3px;" onclick="openRetireModal(${v.id})">廃車</button>`;
+      : `<button class="btn" style="font-size:11px;padding:3px 8px;" onclick="openReassign(${v.id})">配置変更</button>`;
     return `
       <tr style="${isRetired ? 'opacity:0.6;' : ''}">
         <td><a href="#" style="color:#4d7a5e;" onclick="toggleVehicleDetail(${v.id});return false;">${esc(v.chassis_number || '—')}</a></td>
@@ -1756,6 +1755,7 @@ function renderVehiclesTable() {
             ${v.retired_date ? `<div><span style="color:#666;">廃車日:</span> ${esc(v.retired_date)}</div>` : ''}
             ${v.note ? `<div style="grid-column:1/-1;"><span style="color:#666;">備考:</span> ${esc(v.note)}</div>` : ''}
           </div>
+          ${!isRetired ? `<div style="margin-bottom:10px;"><button class="btn btn-danger btn-small" onclick="openRetireModal(${v.id})">🚫 廃車処理</button></div>` : ''}
           ${hist.length > 0 ? `
           <details>
             <summary style="font-size:12px;color:#4d7a5e;cursor:pointer;user-select:none;">📋 配置変更履歴（${hist.length}件）</summary>
