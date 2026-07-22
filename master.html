@@ -1487,7 +1487,7 @@ async function loadVehicles() {
   try {
     const [vRes, aRes, oRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/vehicles?active=eq.true&order=chassis_number&select=id,chassis_number,vehicle_number,vehicle_model,permit_type,capacity,first_registration_date,length_cm,width_cm,height_cm,owner,insurance,note`, { headers: getH() }),
-      fetch(`${SUPABASE_URL}/rest/v1/vehicle_assignments?active=eq.true&order=created_at.desc&select=id,vehicle_id,vehicle_number,office_id,fiscal_year,duty,prev_vehicle_number,is_current,note,created_at`, { headers: getH() }),
+      fetch(`${SUPABASE_URL}/rest/v1/vehicle_assignments?active=eq.true&order=created_at.desc&select=id,vehicle_id,vehicle_number,office_id,offices(id,name),fiscal_year,duty,prev_vehicle_number,is_current,note,created_at`, { headers: getH() }),
       fetch(`${SUPABASE_URL}/rest/v1/offices?active=eq.true&order=name&select=id,name`, { headers: getH() })
     ]);
     allVehiclesData  = vRes.ok ? await vRes.json() : [];
@@ -1525,9 +1525,8 @@ function renderVehiclesTable() {
   }
   tbody.innerHTML = allVehiclesData.map(v => {
     const cur = currentAssignments[v.id];
-    const officeName = (cur && cur.office_id)
-      ? (allOfficesMaster.find(o => o.id === cur.office_id)?.name || '')
-      : '';
+    // offices はリレーション埋め込みで直接取得
+    const officeName = cur?.offices?.name || '';
     const vnum  = cur ? cur.vehicle_number : (v.vehicle_number || '');
     const duty  = cur ? (cur.duty || '') : '';
     const hist  = allAssignmentHistory[v.id] || [];
@@ -1571,7 +1570,7 @@ function renderVehiclesTable() {
               </thead>
               <tbody>
                 ${hist.map(a => {
-                  const on = allOfficesMaster.find(o => o.id === a.office_id)?.name || '';
+                  const on = a.offices?.name || '';
                   return `<tr style="${a.is_current ? 'font-weight:bold;background:#fafff8;' : 'color:#888;'}">
                     <td style="padding:3px 6px;">${esc(a.vehicle_number)}</td>
                     <td style="padding:3px 6px;">${esc(on)}</td>
