@@ -1505,8 +1505,18 @@ async function saveEditCourse(id) {
     contract_end:  document.getElementById(`ec-end-${id}`).value.trim() || null
   };
   const res = await fetch(`${SUPABASE_URL}/rest/v1/courses?id=eq.${id}`, { method:'PATCH', headers:getH(), body:JSON.stringify(body) });
-  if (res.ok) { await loadCourses(); showStatus('status-courses','success','✅ 更新しました'); }
-  else showStatus('status-courses','error','更新に失敗しました');
+  if (res.ok) {
+    // 車庫変更があれば vehicle_assignments にも同期
+    if (body.vehicle_id && body.office_id) {
+      await fetch(`${SUPABASE_URL}/rest/v1/vehicle_assignments?vehicle_id=eq.${body.vehicle_id}&is_current=eq.true`, {
+        method: 'PATCH', headers: getH(), body: JSON.stringify({ office_id: body.office_id })
+      });
+    }
+    await loadCourses();
+    showStatus('status-courses','success','✅ 更新しました');
+  } else {
+    showStatus('status-courses','error','更新に失敗しました');
+  }
 }
 
 async function deleteCourse(id, label) {
@@ -1679,7 +1689,9 @@ async function loadVehicles() {
   try {
     const vehicleFilter = vFilter === 'all' ? 'order=chassis_number' : vFilter === 'retired' ? 'active=eq.false&order=chassis_number' : 'active=eq.true&order=chassis_number';
     const [vRes, aRes, oRes, cRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/vehicles?${vehicleFilter}&select=id,chassis_number,vehicle_number,vehicle_model,permit_type,capacity,first_registration_date,length_cm,width_cm,height_cm,owner,insurance,note,active,retired_date`, { headers: getH() }),
+      // ビュー（vehicles_with_office）から車両+現在の配置・車庫名を一括取得
+      fetch(`${SUPABASE_URL}/rest/v1/vehicles_with_office?${vehicleFilter}&select=*`, { headers: getH() }),
+      // 全配置履歴（履歴パネル表示用）
       fetch(`${SUPABASE_URL}/rest/v1/vehicle_assignments?active=eq.true&order=created_at.desc&select=id,vehicle_id,vehicle_number,office_id,fiscal_year,duty,prev_vehicle_number,is_current,note,created_at`, { headers: getH() }),
       fetch(`${SUPABASE_URL}/rest/v1/offices?order=name&select=id,name`, { headers: getH() }),
       fetch(`${SUPABASE_URL}/rest/v1/courses?active=eq.true&order=course_name&select=id,course_name,contract_name,school_name,vehicle_id,office_id`, { headers: getH() })
@@ -1689,18 +1701,37 @@ async function loadVehicles() {
     allOfficesMaster  = oRes.ok ? await oRes.json() : [];
     allCoursesData    = cRes.ok ? await cRes.json() : [];
 
-    // vehicleId → 現在の配置 / 全履歴 のマップを構築
-    currentAssignments   = {};
+    // ビューデータから currentAssignments を構築（サーバー側JOINで確実に取得）
+    currentAssignments = {};
+    allVehiclesData.forEach(v => {
+      if (v.assignment_id != null) {
+        currentAssignments[v.id] = {
+          id:                  v.assignment_id,
+          vehicle_id:          v.id,
+          vehicle_number:      v.current_vehicle_number || '',
+          office_id:           v.current_office_id,
+          fiscal_year:         v.current_fiscal_year || '',
+          duty:                v.current_duty || '',
+          prev_vehicle_number: v.current_prev_vehicle_number || '',
+          is_current:          true,
+          note:                v.assignment_note || ''
+        };
+      }
+    });
+
+    // 全配置履歴マップ（履歴パネル用）
     allAssignmentHistory = {};
     assignments.forEach(a => {
       if (!allAssignmentHistory[a.vehicle_id]) allAssignmentHistory[a.vehicle_id] = [];
       allAssignmentHistory[a.vehicle_id].push(a);
-      if (a.is_current) currentAssignments[a.vehicle_id] = a;
+      // ビューで取得できなかった場合のフォールバック
+      if (a.is_current && !currentAssignments[a.vehicle_id]) {
+        currentAssignments[a.vehicle_id] = a;
+      }
     });
 
-    // vehicleId → { school_name, course_name, office_id }リスト のマップを構築
+    // vehicleId → { school_name, course_name }リスト のマップを構築
     vehicleCourseMap = {};
-    const vehicleOfficeMap = {};
     allCoursesData.forEach(c => {
       if (c.vehicle_id != null) {
         if (!vehicleCourseMap[c.vehicle_id]) vehicleCourseMap[c.vehicle_id] = [];
@@ -1708,11 +1739,8 @@ async function loadVehicles() {
           school: c.school_name || '',
           course: c.course_name || c.contract_name || ''
         });
-        if (c.office_id != null) vehicleOfficeMap[c.vehicle_id] = c.office_id;
       }
     });
-    // グローバルに保存（renderVehiclesTable()でも参照）
-    window._vehicleOfficeMap = vehicleOfficeMap;
 
     // 車庫ドロップダウンを更新（新規登録・配置変更モーダル共通）
     const officeOpts = '<option value="">未設定</option>' +
@@ -1748,9 +1776,8 @@ function renderVehiclesTable() {
   }
   tbody.innerHTML = allVehiclesData.map(v => {
     const cur = currentAssignments[v.id];
-    const _vom = window._vehicleOfficeMap || {};
-    const _officeId = _vom[v.id] || cur?.office_id;
-    const officeName = _officeId ? (allOfficesMaster.find(o => o.id === _officeId)?.name || '') : '';
+    // ビューが current_office_name を持つ場合はそれを優先、なければ allOfficesMaster から検索
+    const officeName = v.current_office_name || (cur?.office_id ? (allOfficesMaster.find(o => o.id === cur.office_id)?.name || '') : '');
     const vnum  = cur ? cur.vehicle_number : (v.vehicle_number || '');
     const courseInfo = vehicleCourseMap[v.id]?.[0];
     const dutyHtml = courseInfo
@@ -1884,6 +1911,12 @@ async function saveReassign() {
       method: 'POST', headers: getH(), body: JSON.stringify(body)
     });
     if (res.ok) {
+      // コース名マスタの vehicle_id が一致するコースの車庫も同期
+      if (body.office_id) {
+        await fetch(`${SUPABASE_URL}/rest/v1/courses?vehicle_id=eq.${reassignTargetId}&active=eq.true`, {
+          method: 'PATCH', headers: getH(), body: JSON.stringify({ office_id: body.office_id })
+        });
+      }
       closeReassign();
       await loadVehicles();
       showStatus('status-vehicles', 'success', '✅ 配置変更を記録しました');
