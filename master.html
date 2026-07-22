@@ -1664,6 +1664,20 @@ function applyVehicleColVisible() {
 
 let retireTargetId = null;
 
+// ===== 車検満了日ステータス =====
+function getInspectionStatus(dateStr) {
+  if (!dateStr) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const expiry = new Date(dateStr);
+  expiry.setHours(0, 0, 0, 0);
+  const diffMs = expiry - today;
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays < 0) return { status: 'expired', days: Math.abs(diffDays) };
+  if (diffDays <= 30) return { status: 'warning', days: diffDays };
+  return { status: 'ok', days: diffDays };
+}
+
 // ===== 変更履歴モーダル（全マスター共通） =====
 const AUDIT_SKIP_FIELDS = ['id','created_at','updated_at','is_error','error_reason'];
 const AUDIT_TABLE_LABELS = {
@@ -1675,7 +1689,8 @@ const AUDIT_FIELD_LABELS = {
     chassis_number:'車台番号', vehicle_number:'車番', vehicle_model:'車名',
     permit_type:'許可種別', capacity:'定員', first_registration_date:'初年度登録',
     length_cm:'全長(cm)', width_cm:'全幅(cm)', height_cm:'全高(cm)',
-    owner:'所有者', insurance:'保険', note:'備考', active:'現役', retired_date:'廃車日'
+    owner:'所有者', insurance:'保険', note:'備考', active:'現役', retired_date:'廃車日',
+    inspection_expiry_date:'車検満了日'
   },
   vehicle_assignments:{
     vehicle_number:'車番', office_id:'車庫ID', fiscal_year:'年度',
@@ -2069,6 +2084,14 @@ function renderVehiclesTable() {
     const statusBadge = isRetired
       ? `<span style="background:#f0e0e0;color:#c0392b;border-radius:4px;padding:2px 6px;font-size:10px;white-space:nowrap;display:inline-block;">廃車</span>`
       : `<span style="background:#e4f0e8;color:#2e7d52;border-radius:4px;padding:2px 6px;font-size:10px;white-space:nowrap;display:inline-block;">現役</span>`;
+    const inspStatus = getInspectionStatus(v.inspection_expiry_date);
+    const inspBadge = !isRetired && inspStatus ? (
+      inspStatus.status === 'expired'
+        ? `<br><span style="background:#f0e0e0;color:#c0392b;border-radius:4px;padding:2px 5px;font-size:10px;white-space:nowrap;display:inline-block;margin-top:2px;">🚨 車検切れ</span>`
+        : inspStatus.status === 'warning'
+        ? `<br><span style="background:#fff3cd;color:#856404;border-radius:4px;padding:2px 5px;font-size:10px;white-space:nowrap;display:inline-block;margin-top:2px;">⚠️ 車検あと${inspStatus.days}日</span>`
+        : ''
+    ) : '';
     const auditVBtn = `<button class="btn btn-gray" style="font-size:11px;padding:3px 8px;" onclick="openAuditModal('vehicles',${v.id},'車両：${escAttr(v.chassis_number||'')}')">変更履歴</button>`;
     const actionBtns = isRetired
       ? `${auditVBtn}<span style="color:#aaa;font-size:11px;">廃車済</span>`
@@ -2083,7 +2106,7 @@ function renderVehiclesTable() {
         <td class="vcol-duty" style="line-height:1.5;">${dutyHtml}</td>
         <td class="vcol-cap" style="text-align:center;">${v.capacity != null ? v.capacity : ''}</td>
         <td class="vcol-firstreg" style="font-size:11px;">${esc(v.first_registration_date || '')}</td>
-        <td class="vcol-status" style="text-align:center;">${statusBadge}</td>
+        <td class="vcol-status" style="text-align:center;">${statusBadge}${inspBadge}</td>
         <td style="white-space:nowrap;">${actionBtns}</td>
       </tr>
       <tr id="detail-${v.id}" style="display:none;">
@@ -2096,6 +2119,13 @@ function renderVehiclesTable() {
               <div><span style="color:#666;">全高:</span> ${v.height_cm ? v.height_cm+'cm' : '—'}</div>
               <div><span style="color:#666;">所有者:</span> ${esc(v.owner || '—')}</div>
               <div><span style="color:#666;">保険:</span> ${esc(v.insurance || '—')}</div>
+              <div>${(() => {
+                const is = getInspectionStatus(v.inspection_expiry_date);
+                if (!v.inspection_expiry_date) return '<span style="color:#666;">車検満了日:</span> —';
+                if (is && is.status === 'expired') return `<span style="color:#666;">車検満了日:</span> <span style="background:#f0e0e0;color:#c0392b;border-radius:4px;padding:1px 6px;font-size:11px;">🚨 ${esc(v.inspection_expiry_date)}（切れ）</span>`;
+                if (is && is.status === 'warning') return `<span style="color:#666;">車検満了日:</span> <span style="background:#fff3cd;color:#856404;border-radius:4px;padding:1px 6px;font-size:11px;">⚠️ ${esc(v.inspection_expiry_date)}（あと${is.days}日）</span>`;
+                return `<span style="color:#666;">車検満了日:</span> ${esc(v.inspection_expiry_date)}`;
+              })()}</div>
               ${v.retired_date ? `<div><span style="color:#666;">廃車日:</span> ${esc(v.retired_date)}</div>` : ''}
               ${v.note ? `<div style="grid-column:1/-1;"><span style="color:#666;">備考:</span> ${esc(v.note)}</div>` : ''}
             </div>
@@ -2174,6 +2204,8 @@ function startEditVehicleDetail(id) {
         <input class="inline-edit" id="ved-own-${id}" value="${escAttr(v.owner ?? '')}" style="width:100%;"></div>
       <div><label style="color:#666;display:block;margin-bottom:3px;">保険</label>
         <input class="inline-edit" id="ved-ins-${id}" value="${escAttr(v.insurance ?? '')}" style="width:100%;"></div>
+      <div><label style="color:#666;display:block;margin-bottom:3px;">車検満了日</label>
+        <input class="inline-edit" id="ved-insp-${id}" type="date" value="${v.inspection_expiry_date ?? ''}" style="width:100%;"></div>
       <div style="grid-column:1/-1;"><label style="color:#666;display:block;margin-bottom:3px;">備考</label>
         <input class="inline-edit" id="ved-note-${id}" value="${escAttr(v.note ?? '')}" style="width:100%;"></div>
     </div>
@@ -2199,6 +2231,7 @@ async function saveEditVehicleDetail(id) {
     height_cm: numOrNull(val(`ved-hei-${id}`)),
     owner:     strOrNull(val(`ved-own-${id}`)),
     insurance: strOrNull(val(`ved-ins-${id}`)),
+    inspection_expiry_date: strOrNull(val(`ved-insp-${id}`)),
     note:      strOrNull(val(`ved-note-${id}`)),
   };
   const res = await fetch(`${SUPABASE_URL}/rest/v1/vehicles?id=eq.${id}`, {
