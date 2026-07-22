@@ -385,6 +385,22 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     <div id="sec-courses" class="section-content">
       <div class="panel">
         <h2>🏫 コース名マスタ <span class="count-badge" id="cnt-courses">0</span></h2>
+
+        <!-- 列表示切替 -->
+        <details style="margin-bottom:12px;">
+          <summary style="cursor:pointer; font-size:13px; font-weight:bold; color:#4d7a5e;">⚙️ 表示列の設定</summary>
+          <div style="display:flex; flex-wrap:wrap; gap:12px; margin-top:10px; font-size:13px; color:#333;">
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="col-contract_name" onchange="toggleCourseCol('contract_name')"> 契約名</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="col-office" checked onchange="toggleCourseCol('office')"> 車庫</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="col-vehicle" checked onchange="toggleCourseCol('vehicle')"> 車番</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="col-permit" onchange="toggleCourseCol('permit')"> 許可</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="col-vehicle_type" checked onchange="toggleCourseCol('vehicle_type')"> 車両タイプ</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="col-contract_start" onchange="toggleCourseCol('contract_start')"> 契約始期</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="col-contract_end" onchange="toggleCourseCol('contract_end')"> 契約終了</label>
+          </div>
+        </details>
+
+        <!-- CSV一括取込 -->
         <details>
           <summary style="cursor:pointer; font-size:13px; font-weight:bold; color:#4d7a5e; margin-bottom:10px;">📥 CSVで一括取込</summary>
           <div style="margin-top:10px;">
@@ -397,6 +413,8 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
             <div id="preview-courses"></div>
           </div>
         </details>
+
+        <!-- 新規追加フォーム -->
         <details class="add-form-details" id="details-courses-form">
           <summary>＋ 新規追加</summary>
           <div class="form-row" style="margin-top:12px;">
@@ -405,17 +423,49 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
               <select id="add-courses-pref"><option value="東京都">東京都</option><option value="神奈川県">神奈川県</option></select>
             </div>
             <div class="form-field"><label>学校名 *</label><input type="text" id="add-courses-school" placeholder="○○特別支援学校"></div>
+            <div class="form-field"><label>契約名</label><input type="text" id="add-courses-contract" placeholder="令和8年度スクールバス運行業務" style="min-width:200px;"></div>
             <div class="form-field"><label>コース名 *</label><input type="text" id="add-courses-course" placeholder="○○コース"></div>
+            <div class="form-field">
+              <label>車庫（営業所）</label>
+              <select id="add-courses-office"><option value="">未設定</option></select>
+            </div>
+            <div class="form-field">
+              <label>車番</label>
+              <select id="add-courses-vehicle" onchange="onCourseVehicleChangeAdd()"><option value="">未設定</option></select>
+            </div>
+            <div class="form-field">
+              <label>許可</label>
+              <select id="add-courses-permit"><option value="">未設定</option></select>
+            </div>
+            <div class="form-field"><label>車両タイプ</label><input type="text" id="add-courses-vtype" placeholder="中型バス" style="min-width:100px;"></div>
+            <div class="form-field"><label>契約始期年月</label><input type="text" id="add-courses-start" placeholder="令和7年4月" style="min-width:100px;"></div>
+            <div class="form-field"><label>契約終了年月</label><input type="text" id="add-courses-end" placeholder="令和8年3月" style="min-width:100px;"></div>
             <button class="btn btn-add" style="align-self:flex-end;" onclick="addCourse()">＋ 追加</button>
           </div>
         </details>
         <div id="status-courses" class="status-bar"></div>
       </div>
+
       <div class="panel">
         <h2>一覧</h2>
         <div style="overflow-x:auto;">
-          <table class="data-table">
-            <thead><tr><th>ID</th><th>都道府県</th><th>学校名</th><th>コース名</th><th>操作</th></tr></thead>
+          <table class="data-table" id="table-courses">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>都道府県</th>
+                <th>学校名</th>
+                <th class="col-contract_name" style="display:none;">契約名</th>
+                <th>コース名</th>
+                <th class="col-office">車庫</th>
+                <th class="col-vehicle">車番</th>
+                <th class="col-permit" style="display:none;">許可</th>
+                <th class="col-vehicle_type">車両タイプ</th>
+                <th class="col-contract_start" style="display:none;">契約始期</th>
+                <th class="col-contract_end" style="display:none;">契約終了</th>
+                <th>操作</th>
+              </tr>
+            </thead>
             <tbody id="tbody-courses"></tbody>
           </table>
         </div>
@@ -619,6 +669,10 @@ const H = getH();
 // ===== グローバルキャッシュ =====
 let allEmployees = [];   // {id, name, email, phone, employee_code, license_number, license_expiry, note, jobTypes:[{id,name}]}
 let allJobTypes  = [];   // {id, name, description, sort_order}
+let allCourses   = [];
+let allVehiclesMaster = [];
+let allOfficesMaster  = [];
+let allPermitsMaster  = [];
 
 // ===== セクション切り替え =====
 const SECTIONS = ['employees','jobtypes','courses','vehicles','offices','permits','admins'];
@@ -629,7 +683,7 @@ function switchSection(key) {
   document.querySelectorAll('.sidebar-item')[SECTIONS.indexOf(key)].classList.add('active');
   if (key === 'employees') loadEmployees();
   else if (key === 'jobtypes') loadJobTypes();
-  else if (key === 'courses') loadSimple('courses');
+  else if (key === 'courses') loadCourses();
   else if (key === 'vehicles') loadSimple('vehicles');
   else if (key === 'offices') loadSimple('offices');
   else if (key === 'permits') loadSimple('permits');
@@ -1135,18 +1189,203 @@ async function addSimple(key, reqField) {
   } else showStatus('status-'+key,'error','追加に失敗しました');
 }
 
+// ================================================
+//  コース名マスタ（拡張版）
+// ================================================
+const courseColVisible = {
+  contract_name: false, office: true, vehicle: true,
+  permit: false, vehicle_type: true, contract_start: false, contract_end: false
+};
+
+function toggleCourseCol(col) {
+  courseColVisible[col] = document.getElementById('col-' + col).checked;
+  applyCourseColVisibility();
+}
+
+function applyCourseColVisibility() {
+  Object.entries(courseColVisible).forEach(([col, visible]) => {
+    document.querySelectorAll('.col-' + col).forEach(el => { el.style.display = visible ? '' : 'none'; });
+    const cb = document.getElementById('col-' + col);
+    if (cb) cb.checked = visible;
+  });
+}
+
+async function loadCourses() {
+  try {
+    const [vRes, oRes, pRes, cRes] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/vehicles?active=eq.true&order=vehicle_number&select=id,vehicle_number,vehicle_type,office_name`, { headers: getH() }),
+      fetch(`${SUPABASE_URL}/rest/v1/offices?active=eq.true&order=name&select=id,name`, { headers: getH() }),
+      fetch(`${SUPABASE_URL}/rest/v1/permits?active=eq.true&order=permit_number&select=id,permit_number,permit_type`, { headers: getH() }),
+      fetch(`${SUPABASE_URL}/rest/v1/courses?active=eq.true&order=id&select=id,prefecture,school_name,contract_name,course_name,vehicle_id,office_id,permit_id,vehicle_type,contract_start,contract_end`, { headers: getH() })
+    ]);
+    allVehiclesMaster = vRes.ok ? (await vRes.json()) : [];
+    allOfficesMaster  = oRes.ok ? (await oRes.json()) : [];
+    allPermitsMaster  = pRes.ok ? (await pRes.json()) : [];
+    allCourses        = cRes.ok ? (await cRes.json()) : [];
+    populateCourseDropdowns('add-courses');
+    document.getElementById('cnt-courses').textContent = allCourses.length;
+    renderCoursesTable();
+    applyCourseColVisibility();
+  } catch(e) { console.error('loadCourses error:', e); }
+}
+
+function populateCourseDropdowns(prefix) {
+  const vSel = document.getElementById(prefix + '-vehicle');
+  const oSel = document.getElementById(prefix + '-office');
+  const pSel = document.getElementById(prefix + '-permit');
+  if (vSel) {
+    const cur = vSel.value;
+    vSel.innerHTML = '<option value="">未設定</option>' +
+      allVehiclesMaster.map(v => `<option value="${v.id}" ${v.id==cur?'selected':''}>${esc(v.vehicle_number)}</option>`).join('');
+  }
+  if (oSel) {
+    const cur = oSel.value;
+    oSel.innerHTML = '<option value="">未設定</option>' +
+      allOfficesMaster.map(o => `<option value="${o.id}" ${o.id==cur?'selected':''}>${esc(o.name)}</option>`).join('');
+  }
+  if (pSel) {
+    const cur = pSel.value;
+    pSel.innerHTML = '<option value="">未設定</option>' +
+      allPermitsMaster.map(p => `<option value="${p.id}" ${p.id==cur?'selected':''}>${esc(p.permit_number)}</option>`).join('');
+  }
+}
+
+function onCourseVehicleChangeAdd() {
+  const vid = parseInt(document.getElementById('add-courses-vehicle').value);
+  const vtEl = document.getElementById('add-courses-vtype');
+  if (vid && vtEl && !vtEl.value) {
+    const v = allVehiclesMaster.find(vv => vv.id === vid);
+    if (v && v.vehicle_type) vtEl.value = v.vehicle_type;
+  }
+}
+
+function onCourseVehicleChangeEdit(id) {
+  const vid = parseInt(document.getElementById(`ec-vehicle-${id}`).value);
+  const vtEl = document.getElementById(`ec-vtype-${id}`);
+  if (vid && vtEl && !vtEl.value) {
+    const v = allVehiclesMaster.find(vv => vv.id === vid);
+    if (v && v.vehicle_type) vtEl.value = v.vehicle_type;
+  }
+}
+
+function renderCoursesTable() {
+  const tbody = document.getElementById('tbody-courses');
+  if (!tbody) return;
+  if (allCourses.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#999;padding:20px;">データがありません</td></tr>';
+    return;
+  }
+  tbody.innerHTML = allCourses.map(c => {
+    const vehicle = allVehiclesMaster.find(v => v.id === c.vehicle_id);
+    const office  = allOfficesMaster.find(o => o.id === c.office_id);
+    const permit  = allPermitsMaster.find(p => p.id === c.permit_id);
+    return `<tr id="cr-${c.id}">
+      <td>${c.id}</td>
+      <td>${esc(c.prefecture||'')}</td>
+      <td>${esc(c.school_name||'')}</td>
+      <td class="col-contract_name">${esc(c.contract_name||'')}</td>
+      <td>${esc(c.course_name||'')}</td>
+      <td class="col-office">${esc(office?.name||'')}</td>
+      <td class="col-vehicle">${esc(vehicle?.vehicle_number||'')}</td>
+      <td class="col-permit">${esc(permit?.permit_number||'')}</td>
+      <td class="col-vehicle_type">${esc(c.vehicle_type||'')}</td>
+      <td class="col-contract_start">${esc(c.contract_start||'')}</td>
+      <td class="col-contract_end">${esc(c.contract_end||'')}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-edit btn-small" onclick="startEditCourse(${c.id})">編集</button>
+        <button class="btn btn-danger btn-small" onclick="deleteCourse(${c.id},'${escAttr(c.course_name||'')}')">削除</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function startEditCourse(id) {
+  const c = allCourses.find(r => r.id === id);
+  if (!c) return;
+  const tr = document.getElementById(`cr-${id}`);
+  const prefOpts = ['東京都','神奈川県'].map(p => `<option value="${p}" ${c.prefecture===p?'selected':''}>${p}</option>`).join('');
+  const vOpts = '<option value="">未設定</option>' + allVehiclesMaster.map(v => `<option value="${v.id}" ${v.id===c.vehicle_id?'selected':''}>${esc(v.vehicle_number)}</option>`).join('');
+  const oOpts = '<option value="">未設定</option>' + allOfficesMaster.map(o => `<option value="${o.id}" ${o.id===c.office_id?'selected':''}>${esc(o.name)}</option>`).join('');
+  const pOpts = '<option value="">未設定</option>' + allPermitsMaster.map(p => `<option value="${p.id}" ${p.id===c.permit_id?'selected':''}>${esc(p.permit_number)}</option>`).join('');
+  tr.innerHTML = `
+    <td>${c.id}</td>
+    <td><select id="ec-pref-${id}">${prefOpts}</select></td>
+    <td><input class="inline-edit" id="ec-school-${id}" value="${esc(c.school_name||'')}"></td>
+    <td class="col-contract_name"><input class="inline-edit" id="ec-contract-${id}" value="${esc(c.contract_name||'')}"></td>
+    <td><input class="inline-edit" id="ec-course-${id}" value="${esc(c.course_name||'')}"></td>
+    <td class="col-office"><select id="ec-office-${id}">${oOpts}</select></td>
+    <td class="col-vehicle"><select id="ec-vehicle-${id}" onchange="onCourseVehicleChangeEdit(${id})">${vOpts}</select></td>
+    <td class="col-permit"><select id="ec-permit-${id}">${pOpts}</select></td>
+    <td class="col-vehicle_type"><input class="inline-edit" id="ec-vtype-${id}" value="${esc(c.vehicle_type||'')}"></td>
+    <td class="col-contract_start"><input class="inline-edit" id="ec-start-${id}" value="${esc(c.contract_start||'')}"></td>
+    <td class="col-contract_end"><input class="inline-edit" id="ec-end-${id}" value="${esc(c.contract_end||'')}"></td>
+    <td style="white-space:nowrap;">
+      <button class="btn btn-success btn-small" onclick="saveEditCourse(${id})">保存</button>
+      <button class="btn btn-gray btn-small" onclick="renderCoursesTable(); applyCourseColVisibility();">取消</button>
+    </td>`;
+  applyCourseColVisibility();
+}
+
+async function saveEditCourse(id) {
+  const school = document.getElementById(`ec-school-${id}`).value.trim();
+  const course = document.getElementById(`ec-course-${id}`).value.trim();
+  if (!school || !course) { showStatus('status-courses','error','学校名・コース名を入力してください'); return; }
+  const vId = document.getElementById(`ec-vehicle-${id}`).value;
+  const oId = document.getElementById(`ec-office-${id}`).value;
+  const pId = document.getElementById(`ec-permit-${id}`).value;
+  const body = {
+    prefecture:    document.getElementById(`ec-pref-${id}`).value,
+    school_name:   school,
+    contract_name: document.getElementById(`ec-contract-${id}`).value.trim() || null,
+    course_name:   course,
+    office_id:     oId ? parseInt(oId) : null,
+    vehicle_id:    vId ? parseInt(vId) : null,
+    permit_id:     pId ? parseInt(pId) : null,
+    vehicle_type:  document.getElementById(`ec-vtype-${id}`).value.trim() || null,
+    contract_start:document.getElementById(`ec-start-${id}`).value.trim() || null,
+    contract_end:  document.getElementById(`ec-end-${id}`).value.trim() || null
+  };
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/courses?id=eq.${id}`, { method:'PATCH', headers:getH(), body:JSON.stringify(body) });
+  if (res.ok) { await loadCourses(); showStatus('status-courses','success','✅ 更新しました'); }
+  else showStatus('status-courses','error','更新に失敗しました');
+}
+
+async function deleteCourse(id, label) {
+  if (!confirm(`「${label}」を削除しますか？`)) return;
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/courses?id=eq.${id}`, { method:'PATCH', headers:getH(), body:JSON.stringify({active:false}) });
+  if (res.ok) { await loadCourses(); showStatus('status-courses','success',`「${label}」を削除しました`); }
+  else showStatus('status-courses','error','削除に失敗しました');
+}
+
 async function addCourse() {
-  const pref   = document.getElementById('add-courses-pref').value;
   const school = document.getElementById('add-courses-school').value.trim();
   const course = document.getElementById('add-courses-course').value.trim();
-  if (!school||!course) { showStatus('status-courses','error','学校名・コース名を入力してください'); return; }
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/courses`, { method:'POST', headers:H, body:JSON.stringify({prefecture:pref, school_name:school, course_name:course, active:true}) });
+  if (!school || !course) { showStatus('status-courses','error','学校名・コース名を入力してください'); return; }
+  const vId = document.getElementById('add-courses-vehicle').value;
+  const oId = document.getElementById('add-courses-office').value;
+  const pId = document.getElementById('add-courses-permit').value;
+  const body = {
+    prefecture:    document.getElementById('add-courses-pref').value,
+    school_name:   school,
+    contract_name: document.getElementById('add-courses-contract').value.trim() || null,
+    course_name:   course,
+    office_id:     oId ? parseInt(oId) : null,
+    vehicle_id:    vId ? parseInt(vId) : null,
+    permit_id:     pId ? parseInt(pId) : null,
+    vehicle_type:  document.getElementById('add-courses-vtype').value.trim() || null,
+    contract_start:document.getElementById('add-courses-start').value.trim() || null,
+    contract_end:  document.getElementById('add-courses-end').value.trim() || null,
+    active: true
+  };
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/courses`, { method:'POST', headers:getH(), body:JSON.stringify(body) });
   if (res.ok) {
-    document.getElementById('add-courses-school').value='';
-    document.getElementById('add-courses-course').value='';
+    ['add-courses-school','add-courses-contract','add-courses-course','add-courses-vtype','add-courses-start','add-courses-end'].forEach(id => { document.getElementById(id).value=''; });
+    document.getElementById('add-courses-vehicle').value='';
+    document.getElementById('add-courses-office').value='';
+    document.getElementById('add-courses-permit').value='';
     const det = document.getElementById('details-courses-form');
     if (det) det.removeAttribute('open');
-    await loadSimple('courses');
+    await loadCourses();
     showStatus('status-courses','success','✅ 追加しました');
   } else showStatus('status-courses','error','追加に失敗しました');
 }
@@ -1182,8 +1421,11 @@ async function importSimple(key, parsedJson) {
   const def = SIMPLE_DEF[key];
   const rows = JSON.parse(parsedJson).filter(p=>!p.hasErr).map(p=>{const r={...p.row};Object.keys(r).forEach(k=>{if(r[k]==='')r[k]=null;});return r;});
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${def.table}`, {method:'POST',headers:H,body:JSON.stringify(rows)});
-  if (res.ok) { document.getElementById('preview-'+key).innerHTML=''; await loadSimple(key); showStatus('status-'+key,'success',`✅ ${rows.length}件を取込みました`); }
-  else showStatus('status-'+key,'error','取込に失敗しました');
+  if (res.ok) {
+    document.getElementById('preview-'+key).innerHTML='';
+    if (key === 'courses') await loadCourses(); else await loadSimple(key);
+    showStatus('status-'+key,'success',`✅ ${rows.length}件を取込みました`);
+  } else showStatus('status-'+key,'error','取込に失敗しました');
 }
 const TEMPLATES = {
   courses:  '都道府県,学校名,コース名\n東京都,○○特別支援学校,○○コース\n',
