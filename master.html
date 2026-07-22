@@ -1682,7 +1682,7 @@ async function loadVehicles() {
       fetch(`${SUPABASE_URL}/rest/v1/vehicles?${vehicleFilter}&select=id,chassis_number,vehicle_number,vehicle_model,permit_type,capacity,first_registration_date,length_cm,width_cm,height_cm,owner,insurance,note,active,retired_date`, { headers: getH() }),
       fetch(`${SUPABASE_URL}/rest/v1/vehicle_assignments?active=eq.true&order=created_at.desc&select=id,vehicle_id,vehicle_number,office_id,fiscal_year,duty,prev_vehicle_number,is_current,note,created_at`, { headers: getH() }),
       fetch(`${SUPABASE_URL}/rest/v1/offices?order=name&select=id,name`, { headers: getH() }),
-      fetch(`${SUPABASE_URL}/rest/v1/courses?active=eq.true&order=course_name&select=id,course_name,contract_name,school_name,vehicle_id`, { headers: getH() })
+      fetch(`${SUPABASE_URL}/rest/v1/courses?active=eq.true&order=course_name&select=id,course_name,contract_name,school_name,vehicle_id,office_id`, { headers: getH() })
     ]);
     allVehiclesData  = vRes.ok ? await vRes.json() : [];
     const assignments = aRes.ok ? await aRes.json() : [];
@@ -1698,8 +1698,9 @@ async function loadVehicles() {
       if (a.is_current) currentAssignments[a.vehicle_id] = a;
     });
 
-    // vehicleId → { school_name, course_name }リスト のマップを構築
+    // vehicleId → { school_name, course_name, office_id }リスト のマップを構築
     vehicleCourseMap = {};
+    const vehicleOfficeMap = {};
     allCoursesData.forEach(c => {
       if (c.vehicle_id != null) {
         if (!vehicleCourseMap[c.vehicle_id]) vehicleCourseMap[c.vehicle_id] = [];
@@ -1707,8 +1708,11 @@ async function loadVehicles() {
           school: c.school_name || '',
           course: c.course_name || c.contract_name || ''
         });
+        if (c.office_id != null) vehicleOfficeMap[c.vehicle_id] = c.office_id;
       }
     });
+    // グローバルに保存（renderVehiclesTable()でも参照）
+    window._vehicleOfficeMap = vehicleOfficeMap;
 
     // 車庫ドロップダウンを更新（新規登録・配置変更モーダル共通）
     const officeOpts = '<option value="">未設定</option>' +
@@ -1744,7 +1748,9 @@ function renderVehiclesTable() {
   }
   tbody.innerHTML = allVehiclesData.map(v => {
     const cur = currentAssignments[v.id];
-    const officeName = cur?.office_id ? (allOfficesMaster.find(o => o.id === cur.office_id)?.name || '') : '';
+    const _vom = window._vehicleOfficeMap || {};
+    const _officeId = _vom[v.id] || cur?.office_id;
+    const officeName = _officeId ? (allOfficesMaster.find(o => o.id === _officeId)?.name || '') : '';
     const vnum  = cur ? cur.vehicle_number : (v.vehicle_number || '');
     const courseInfo = vehicleCourseMap[v.id]?.[0];
     const dutyHtml = courseInfo
