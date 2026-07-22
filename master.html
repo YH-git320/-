@@ -423,18 +423,16 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
         <h2>🏫 コース名マスタ <span class="count-badge" id="cnt-courses">0</span></h2>
 
         <!-- 列表示切替 -->
-        <details style="margin-bottom:12px;">
-          <summary style="cursor:pointer; font-size:13px; font-weight:bold; color:#4d7a5e;">⚙️ 表示列の設定</summary>
-          <div style="display:flex; flex-wrap:wrap; gap:12px; margin-top:10px; font-size:13px; color:#333;">
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="col-contract_name" onchange="toggleCourseCol('contract_name')"> 契約名</label>
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="col-office" checked onchange="toggleCourseCol('office')"> 車庫</label>
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="col-vehicle" checked onchange="toggleCourseCol('vehicle')"> 車番</label>
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="col-permit" onchange="toggleCourseCol('permit')"> 許可</label>
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="col-vehicle_type" checked onchange="toggleCourseCol('vehicle_type')"> 車両タイプ</label>
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="col-contract_start" onchange="toggleCourseCol('contract_start')"> 契約始期</label>
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="col-contract_end" onchange="toggleCourseCol('contract_end')"> 契約終了</label>
-          </div>
-        </details>
+        <div class="col-toggle-bar" style="margin-bottom:10px;">
+          <span style="font-size:11px;color:#888;font-weight:bold;margin-right:4px;">表示列：</span>
+          <label><input type="checkbox" id="col-contract_name" onchange="toggleCourseCol('contract_name')">契約名</label>
+          <label><input type="checkbox" id="col-office" checked onchange="toggleCourseCol('office')">車庫</label>
+          <label><input type="checkbox" id="col-vehicle" checked onchange="toggleCourseCol('vehicle')">車番</label>
+          <label><input type="checkbox" id="col-permit" onchange="toggleCourseCol('permit')">許可</label>
+          <label><input type="checkbox" id="col-vehicle_type" checked onchange="toggleCourseCol('vehicle_type')">車両タイプ</label>
+          <label><input type="checkbox" id="col-contract_start" onchange="toggleCourseCol('contract_start')">契約始期</label>
+          <label><input type="checkbox" id="col-contract_end" onchange="toggleCourseCol('contract_end')">契約終了</label>
+        </div>
 
         <!-- CSV一括取込 -->
         <details>
