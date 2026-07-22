@@ -2088,16 +2088,22 @@ function renderVehiclesTable() {
       </tr>
       <tr id="detail-${v.id}" style="display:none;">
         <td colspan="10" style="padding:12px;background:#f0f8f0;border-bottom:1px solid #dde;">
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px;font-size:12px;margin-bottom:10px;">
-            <div><span style="color:#666;">定員:</span> ${v.capacity != null ? v.capacity+'名' : '—'}</div>
-            <div><span style="color:#666;">全長:</span> ${v.length_cm ? v.length_cm+'cm' : '—'}</div>
-            <div><span style="color:#666;">全幅:</span> ${v.width_cm ? v.width_cm+'cm' : '—'}</div>
-            <div><span style="color:#666;">全高:</span> ${v.height_cm ? v.height_cm+'cm' : '—'}</div>
-            <div><span style="color:#666;">所有者:</span> ${esc(v.owner || '—')}</div>
-            <div><span style="color:#666;">保険:</span> ${esc(v.insurance || '—')}</div>
-            ${v.retired_date ? `<div><span style="color:#666;">廃車日:</span> ${esc(v.retired_date)}</div>` : ''}
-            ${v.note ? `<div style="grid-column:1/-1;"><span style="color:#666;">備考:</span> ${esc(v.note)}</div>` : ''}
+          <div id="vdetail-view-${v.id}">
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px;font-size:12px;margin-bottom:8px;">
+              <div><span style="color:#666;">定員:</span> ${v.capacity != null ? v.capacity+'名' : '—'}</div>
+              <div><span style="color:#666;">全長:</span> ${v.length_cm ? v.length_cm+'cm' : '—'}</div>
+              <div><span style="color:#666;">全幅:</span> ${v.width_cm ? v.width_cm+'cm' : '—'}</div>
+              <div><span style="color:#666;">全高:</span> ${v.height_cm ? v.height_cm+'cm' : '—'}</div>
+              <div><span style="color:#666;">所有者:</span> ${esc(v.owner || '—')}</div>
+              <div><span style="color:#666;">保険:</span> ${esc(v.insurance || '—')}</div>
+              ${v.retired_date ? `<div><span style="color:#666;">廃車日:</span> ${esc(v.retired_date)}</div>` : ''}
+              ${v.note ? `<div style="grid-column:1/-1;"><span style="color:#666;">備考:</span> ${esc(v.note)}</div>` : ''}
+            </div>
+            <div style="margin-bottom:10px;">
+              <button class="btn btn-edit btn-small" onclick="startEditVehicleDetail(${v.id})">✏️ 詳細を編集</button>
+            </div>
           </div>
+          <div id="vdetail-edit-${v.id}" style="display:none;"></div>
           ${hist.length > 0 ? `
           <details>
             <summary style="font-size:12px;color:#4d7a5e;cursor:pointer;user-select:none;">📋 配置変更履歴（${hist.length}件）</summary>
@@ -2146,6 +2152,67 @@ function renderVehiclesTable() {
 function toggleVehicleDetail(id) {
   const el = document.getElementById('detail-' + id);
   if (el) el.style.display = (el.style.display === 'none' || el.style.display === '') ? 'table-row' : 'none';
+}
+
+function startEditVehicleDetail(id) {
+  const v = allVehiclesData.find(x => x.id === id);
+  if (!v) return;
+  document.getElementById('vdetail-view-' + id).style.display = 'none';
+  const editDiv = document.getElementById('vdetail-edit-' + id);
+  editDiv.style.display = '';
+  editDiv.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;font-size:12px;margin-bottom:10px;">
+      <div><label style="color:#666;display:block;margin-bottom:3px;">定員（名）</label>
+        <input class="inline-edit" id="ved-cap-${id}" type="number" value="${v.capacity ?? ''}" style="width:100%;"></div>
+      <div><label style="color:#666;display:block;margin-bottom:3px;">全長（cm）</label>
+        <input class="inline-edit" id="ved-len-${id}" type="number" value="${v.length_cm ?? ''}" style="width:100%;"></div>
+      <div><label style="color:#666;display:block;margin-bottom:3px;">全幅（cm）</label>
+        <input class="inline-edit" id="ved-wid-${id}" type="number" value="${v.width_cm ?? ''}" style="width:100%;"></div>
+      <div><label style="color:#666;display:block;margin-bottom:3px;">全高（cm）</label>
+        <input class="inline-edit" id="ved-hei-${id}" type="number" value="${v.height_cm ?? ''}" style="width:100%;"></div>
+      <div><label style="color:#666;display:block;margin-bottom:3px;">所有者</label>
+        <input class="inline-edit" id="ved-own-${id}" value="${escAttr(v.owner ?? '')}" style="width:100%;"></div>
+      <div><label style="color:#666;display:block;margin-bottom:3px;">保険</label>
+        <input class="inline-edit" id="ved-ins-${id}" value="${escAttr(v.insurance ?? '')}" style="width:100%;"></div>
+      <div style="grid-column:1/-1;"><label style="color:#666;display:block;margin-bottom:3px;">備考</label>
+        <input class="inline-edit" id="ved-note-${id}" value="${escAttr(v.note ?? '')}" style="width:100%;"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:4px;">
+      <button class="btn btn-success btn-small" onclick="saveEditVehicleDetail(${id})">保存</button>
+      <button class="btn btn-gray btn-small" onclick="cancelEditVehicleDetail(${id})">取消</button>
+    </div>`;
+}
+
+function cancelEditVehicleDetail(id) {
+  document.getElementById('vdetail-view-' + id).style.display = '';
+  document.getElementById('vdetail-edit-' + id).style.display = 'none';
+}
+
+async function saveEditVehicleDetail(id) {
+  const val = (elId) => document.getElementById(elId)?.value ?? '';
+  const numOrNull = (s) => s !== '' ? Number(s) : null;
+  const strOrNull = (s) => s.trim() !== '' ? s.trim() : null;
+  const body = {
+    capacity:  numOrNull(val(`ved-cap-${id}`)),
+    length_cm: numOrNull(val(`ved-len-${id}`)),
+    width_cm:  numOrNull(val(`ved-wid-${id}`)),
+    height_cm: numOrNull(val(`ved-hei-${id}`)),
+    owner:     strOrNull(val(`ved-own-${id}`)),
+    insurance: strOrNull(val(`ved-ins-${id}`)),
+    note:      strOrNull(val(`ved-note-${id}`)),
+  };
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/vehicles?id=eq.${id}`, {
+    method: 'PATCH', headers: getH(), body: JSON.stringify(body)
+  });
+  if (res.ok) {
+    await loadVehicles();
+    // 詳細パネルを再表示
+    const el = document.getElementById('detail-' + id);
+    if (el) el.style.display = 'table-row';
+    showStatus('status-vehicles', 'success', '✅ 車両情報を更新しました');
+  } else {
+    showStatus('status-vehicles', 'error', '更新に失敗しました');
+  }
 }
 
 function openReassign(vehicleId) {
