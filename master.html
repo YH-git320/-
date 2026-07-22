@@ -614,6 +614,28 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
         </div>
       </div>
 
+      <!-- 誤入力訂正モーダル -->
+      <div id="error-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:1100; align-items:center; justify-content:center;">
+        <div style="background:white; border-radius:14px; padding:24px; width:min(460px,92vw); box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+          <h3 style="margin-bottom:4px; color:#c0392b;">⚠️ 誤入力訂正</h3>
+          <p style="font-size:12px; color:#666; margin-bottom:14px;">この配置記録を「誤入力」としてマークします。記録自体は履歴に残ります。</p>
+          <div class="form-field" style="margin-bottom:14px;">
+            <label>訂正理由（必須）</label>
+            <textarea id="error-reason-input" rows="3" placeholder="例：車番を誤って入力したため" style="width:100%;resize:vertical;"></textarea>
+          </div>
+          <div id="error-revert-wrap" style="margin-bottom:16px; padding:10px; background:#fff8e8; border-radius:8px; font-size:12px;">
+            <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer;">
+              <input type="checkbox" id="error-revert-check" style="margin-top:2px; accent-color:#4d7a5e;">
+              <span>この記録が「現在の配置」になっている場合、<strong>ひとつ前の配置に戻す</strong></span>
+            </label>
+          </div>
+          <div style="display:flex; gap:8px; justify-content:flex-end;">
+            <button class="btn btn-gray" onclick="closeErrorModal()">キャンセル</button>
+            <button class="btn btn-danger" onclick="saveErrorCorrection()">誤入力として訂正する</button>
+          </div>
+        </div>
+      </div>
+
       <!-- 廃車モーダル -->
       <div id="retire-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:1000; align-items:center; justify-content:center;">
         <div style="background:white; border-radius:14px; padding:24px; width:min(420px,90vw); box-shadow:0 8px 32px rgba(0,0,0,0.2);">
@@ -1638,6 +1660,74 @@ function applyVehicleColVisible() {
 
 let retireTargetId = null;
 
+// ===== 誤入力訂正 =====
+let errorTargetAssignmentId = null;
+let errorTargetVehicleId    = null;
+let errorTargetHistIndex    = null;
+
+function openErrorModal(assignmentId, vehicleId, histIndex) {
+  errorTargetAssignmentId = assignmentId;
+  errorTargetVehicleId    = vehicleId;
+  errorTargetHistIndex    = histIndex;
+  document.getElementById('error-reason-input').value = '';
+  document.getElementById('error-revert-check').checked = false;
+  // 現在の配置の場合のみ「戻す」オプションを表示
+  const hist = allAssignmentHistory[vehicleId] || [];
+  const a    = hist.find(h => h.id === assignmentId);
+  document.getElementById('error-revert-wrap').style.display = (a && a.is_current) ? 'block' : 'none';
+  const m = document.getElementById('error-modal');
+  m.style.display = 'flex';
+}
+
+function closeErrorModal() {
+  document.getElementById('error-modal').style.display = 'none';
+  errorTargetAssignmentId = null;
+  errorTargetVehicleId    = null;
+}
+
+async function saveErrorCorrection() {
+  const reason = document.getElementById('error-reason-input').value.trim();
+  if (!reason) { alert('訂正理由を入力してください'); return; }
+  const revert = document.getElementById('error-revert-check').checked;
+
+  try {
+    // 対象レコードを is_error=true にマーク（is_current も外す）
+    const hist = allAssignmentHistory[errorTargetVehicleId] || [];
+    const target = hist.find(h => h.id === errorTargetAssignmentId);
+    const patchBody = { is_error: true, error_reason: reason };
+    if (target && target.is_current) patchBody.is_current = false;
+
+    const res1 = await fetch(`${SUPABASE_URL}/rest/v1/vehicle_assignments?id=eq.${errorTargetAssignmentId}`, {
+      method: 'PATCH', headers: getH(), body: JSON.stringify(patchBody)
+    });
+    if (!res1.ok) { alert('更新に失敗しました'); return; }
+
+    // 「ひとつ前の配置に戻す」が選択されていた場合
+    if (revert && target && target.is_current) {
+      // histIndex より下（古い）で is_error でないレコードを探す
+      const prevAssignment = hist.find(h => h.id !== errorTargetAssignmentId && !h.is_error);
+      if (prevAssignment) {
+        await fetch(`${SUPABASE_URL}/rest/v1/vehicle_assignments?id=eq.${prevAssignment.id}`, {
+          method: 'PATCH', headers: getH(), body: JSON.stringify({ is_current: true })
+        });
+        // コース名マスタの車庫も同期
+        if (prevAssignment.office_id) {
+          await fetch(`${SUPABASE_URL}/rest/v1/courses?vehicle_id=eq.${errorTargetVehicleId}&active=eq.true`, {
+            method: 'PATCH', headers: getH(), body: JSON.stringify({ office_id: prevAssignment.office_id })
+          });
+        }
+      }
+    }
+
+    closeErrorModal();
+    await loadVehicles();
+    showStatus('status-vehicles', 'success', '✅ 誤入力として訂正しました（履歴には記録が残ります）');
+  } catch(e) {
+    console.error('saveErrorCorrection error:', e);
+    alert('エラーが発生しました');
+  }
+}
+
 function openRetireModal(vehicleId) {
   retireTargetId = vehicleId;
   const v = allVehiclesData.find(vv => vv.id === vehicleId);
@@ -1692,7 +1782,7 @@ async function loadVehicles() {
       // ビュー（vehicles_with_office）から車両+現在の配置・車庫名を一括取得
       fetch(`${SUPABASE_URL}/rest/v1/vehicles_with_office?${vehicleFilter}&select=*`, { headers: getH() }),
       // 全配置履歴（履歴パネル表示用）
-      fetch(`${SUPABASE_URL}/rest/v1/vehicle_assignments?active=eq.true&order=created_at.desc&select=id,vehicle_id,vehicle_number,office_id,fiscal_year,duty,prev_vehicle_number,is_current,note,created_at`, { headers: getH() }),
+      fetch(`${SUPABASE_URL}/rest/v1/vehicle_assignments?active=eq.true&order=created_at.desc&select=id,vehicle_id,vehicle_number,office_id,fiscal_year,duty,prev_vehicle_number,is_current,is_error,error_reason,note,created_at`, { headers: getH() }),
       fetch(`${SUPABASE_URL}/rest/v1/offices?order=name&select=id,name`, { headers: getH() }),
       fetch(`${SUPABASE_URL}/rest/v1/courses?active=eq.true&order=course_name&select=id,course_name,contract_name,school_name,vehicle_id,office_id`, { headers: getH() })
     ]);
@@ -1828,17 +1918,28 @@ function renderVehiclesTable() {
                   <th style="text-align:left;padding:4px 6px;">年度</th>
                   <th style="text-align:left;padding:4px 6px;">業務</th>
                   <th style="text-align:left;padding:4px 6px;">備考</th>
+                  <th style="text-align:left;padding:4px 6px;"></th>
                 </tr>
               </thead>
               <tbody>
-                ${hist.map(a => {
+                ${hist.map((a, idx) => {
                   const on = a.office_id ? (allOfficesMaster.find(o => o.id === a.office_id)?.name || '') : '';
-                  return `<tr style="${a.is_current ? 'font-weight:bold;background:#fafff8;' : 'color:#888;'}">
+                  const errBadge = a.is_error
+                    ? `<span style="background:#fff0f0;color:#c0392b;border-radius:3px;padding:1px 5px;font-size:10px;white-space:nowrap;" title="${esc(a.error_reason||'')}">⚠️ 誤入力</span>${a.error_reason ? `<br><span style="color:#c0392b;font-size:10px;">${esc(a.error_reason)}</span>` : ''}`
+                    : '';
+                  const corrBtn = !a.is_error
+                    ? `<button class="btn btn-gray btn-small" style="font-size:10px;padding:2px 6px;" onclick="openErrorModal(${a.id},${v.id},${idx})">誤入力訂正</button>`
+                    : '';
+                  const rowStyle = a.is_error
+                    ? 'color:#bbb;background:#fff8f8;text-decoration:line-through;'
+                    : a.is_current ? 'font-weight:bold;background:#fafff8;' : 'color:#888;';
+                  return `<tr style="${rowStyle}">
                     <td style="padding:3px 6px;">${esc(a.vehicle_number)}</td>
                     <td style="padding:3px 6px;">${esc(on)}</td>
                     <td style="padding:3px 6px;">${esc(a.fiscal_year || '')}</td>
                     <td style="padding:3px 6px;">${esc(a.duty || '')}</td>
                     <td style="padding:3px 6px;">${esc(a.note || '')}</td>
+                    <td style="padding:3px 6px;white-space:nowrap;">${errBadge}${corrBtn}</td>
                   </tr>`;
                 }).join('')}
               </tbody>
