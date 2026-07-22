@@ -475,43 +475,78 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     <!-- ===== 車両マスタ ===== -->
     <div id="sec-vehicles" class="section-content">
       <div class="panel">
-        <h2>🚗 車両マスタ <span class="count-badge" id="cnt-vehicles">0</span></h2>
-        <details>
-          <summary style="cursor:pointer; font-size:13px; font-weight:bold; color:#4d7a5e; margin-bottom:10px;">📥 CSVで一括取込</summary>
-          <div style="margin-top:10px;">
-            <div style="font-size:12px; color:#555; margin-bottom:8px;">【フォーマット】車両番号,車種,定員,所属営業所,車検期限(YYYY-MM-DD),備考</div>
-            <button class="btn btn-dl btn-small" onclick="downloadTemplate('vehicles')">📄 テンプレートDL</button>
-            <div class="import-zone" style="margin-top:8px;" onclick="document.getElementById('file-vehicles').click()">
-              <input type="file" id="file-vehicles" accept=".csv,.txt" onchange="handleFile('vehicles', this)">
-              📂 CSVをドロップ / クリックして選択
-            </div>
-            <div id="preview-vehicles"></div>
-          </div>
-        </details>
+        <h2>🚌 車両マスタ <span class="count-badge" id="cnt-vehicles">0</span></h2>
+        <p style="font-size:12px;color:#666;margin-bottom:12px;">車台番号が同一車両の不変識別子です。車番・車庫・担当業務は「配置変更」で年度ごとに記録されます。</p>
+
         <details class="add-form-details" id="details-vehicles-form">
-          <summary>＋ 新規追加</summary>
-          <div class="form-row" style="margin-top:12px;">
-            <div class="form-field"><label>車両番号 *</label><input type="text" id="add-vehicles-vehicle_number" placeholder="多摩 100 あ 1234"></div>
-            <div class="form-field">
-              <label>車種</label>
-              <select id="add-vehicles-vehicle_type">
-                <option value="">選択</option><option>大型バス</option><option>中型バス</option><option>マイクロバス</option><option>ハイエース</option>
-              </select>
+          <summary>＋ 新規登録（車両追加）</summary>
+          <div style="margin-top:14px;">
+            <div class="form-row">
+              <div class="form-field"><label>車台番号 *</label><input type="text" id="nv-chassis" placeholder="GDB110-0010097"></div>
+              <div class="form-field"><label>車名（車種）</label><input type="text" id="nv-model" placeholder="リエッセII"></div>
+              <div class="form-field"><label>許可種別</label>
+                <select id="nv-permit">
+                  <option value="">選択</option><option>特定</option><option>貸切</option><option>請負</option><option>乗用</option><option>自家用</option>
+                </select>
+              </div>
+              <div class="form-field"><label>初年度登録</label><input type="text" id="nv-firstreg" placeholder="令和8年3月"></div>
+              <div class="form-field"><label>定員</label><input type="number" id="nv-cap" placeholder="29"></div>
+              <div class="form-field"><label>全長(cm)</label><input type="number" id="nv-len" placeholder="699"></div>
+              <div class="form-field"><label>全幅(cm)</label><input type="number" id="nv-wid" placeholder="208"></div>
+              <div class="form-field"><label>全高(cm)</label><input type="number" id="nv-hei" placeholder="263"></div>
+              <div class="form-field"><label>所有者</label><input type="text" id="nv-owner" placeholder="鈴与"></div>
+              <div class="form-field"><label>保険会社</label><input type="text" id="nv-ins" placeholder="三井住友海上"></div>
+              <div class="form-field"><label>備考</label><input type="text" id="nv-note"></div>
             </div>
-            <div class="form-field"><label>定員</label><input type="text" id="add-vehicles-capacity" placeholder="45"></div>
-            <div class="form-field"><label>所属営業所</label><input type="text" id="add-vehicles-office_name" placeholder="府中車庫"></div>
-            <div class="form-field"><label>車検期限</label><input type="date" id="add-vehicles-inspection_date"></div>
-            <div class="form-field"><label>備考</label><input type="text" id="add-vehicles-note"></div>
-            <button class="btn btn-add" style="align-self:flex-end;" onclick="addSimple('vehicles','vehicle_number')">＋ 追加</button>
+            <div style="margin-top:12px; padding:12px; background:#f0f8f0; border-radius:8px;">
+              <strong style="font-size:13px;">初回配置情報</strong>
+              <div class="form-row" style="margin-top:8px;">
+                <div class="form-field"><label>車番 *</label><input type="text" id="nv-vnum" placeholder="八王子200あ123"></div>
+                <div class="form-field"><label>配置車庫 *</label>
+                  <select id="nv-office">
+                    <option value="">選択</option>
+                  </select>
+                </div>
+                <div class="form-field"><label>年度</label><input type="text" id="nv-year" placeholder="令和8年度"></div>
+                <div class="form-field"><label>担当業務</label><input type="text" id="nv-duty" placeholder="担当コース名など"></div>
+              </div>
+            </div>
+            <button class="btn btn-add" style="margin-top:12px;" onclick="addVehicle()">＋ 登録</button>
           </div>
         </details>
         <div id="status-vehicles" class="status-bar"></div>
       </div>
+
+      <!-- 配置変更モーダル -->
+      <div id="reassign-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:1000; align-items:center; justify-content:center;">
+        <div style="background:white; border-radius:14px; padding:24px; width:min(560px,90vw); box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+          <h3 style="margin-bottom:4px;">🔄 配置変更</h3>
+          <p id="reassign-target-label" style="font-size:12px; color:#666; margin-bottom:16px;"></p>
+          <div class="form-row">
+            <div class="form-field"><label>新しい車番 *</label><input type="text" id="ra-vnum" placeholder="横浜200か1234"></div>
+            <div class="form-field"><label>新しい配置車庫 *</label>
+              <select id="ra-office"><option value="">選択</option></select>
+            </div>
+            <div class="form-field"><label>年度</label><input type="text" id="ra-year" placeholder="令和9年度"></div>
+            <div class="form-field"><label>担当業務</label><input type="text" id="ra-duty" placeholder="担当コース名など"></div>
+            <div class="form-field" style="width:100%;"><label>備考</label><input type="text" id="ra-note"></div>
+          </div>
+          <div style="display:flex; gap:8px; margin-top:16px; justify-content:flex-end;">
+            <button class="btn btn-gray" onclick="closeReassign()">キャンセル</button>
+            <button class="btn btn-success" onclick="saveReassign()">配置変更を保存</button>
+          </div>
+        </div>
+      </div>
+
       <div class="panel">
         <h2>一覧</h2>
         <div style="overflow-x:auto;">
-          <table class="data-table">
-            <thead><tr><th>ID</th><th>車両番号</th><th>車種</th><th>定員</th><th>営業所</th><th>車検期限</th><th>備考</th><th>操作</th></tr></thead>
+          <table class="data-table" style="font-size:12px;">
+            <thead>
+              <tr>
+                <th>車台番号</th><th>車名</th><th>許可</th><th>現在の車番</th><th>配置車庫</th><th>担当業務</th><th>定員</th><th>初年度登録</th><th>操作</th>
+              </tr>
+            </thead>
             <tbody id="tbody-vehicles"></tbody>
           </table>
         </div>
@@ -673,6 +708,10 @@ let allCourses   = [];
 let allVehiclesMaster = [];
 let allOfficesMaster  = [];
 let allPermitsMaster  = [];
+let allVehiclesData   = [];          // 車両マスタ（新UI用）
+let currentAssignments = {};         // vehicleId → 現在の配置レコード
+let allAssignmentHistory = {};       // vehicleId → 配置変更履歴配列
+let reassignTargetId = null;         // 配置変更モーダル対象vehicleId
 
 // ===== セクション切り替え =====
 const SECTIONS = ['employees','jobtypes','courses','vehicles','offices','permits','admins'];
@@ -684,7 +723,7 @@ function switchSection(key) {
   if (key === 'employees') loadEmployees();
   else if (key === 'jobtypes') loadJobTypes();
   else if (key === 'courses') loadCourses();
-  else if (key === 'vehicles') loadSimple('vehicles');
+  else if (key === 'vehicles') loadVehicles();
   else if (key === 'offices') loadSimple('offices');
   else if (key === 'permits') loadSimple('permits');
   else if (key === 'admins') loadAccounts();
@@ -1439,6 +1478,253 @@ function dlCSV(csv, filename) {
   const a = document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url);
 }
 
+
+// ================================================
+//  車両マスタ（新UI）
+// ================================================
+
+async function loadVehicles() {
+  try {
+    const [vRes, aRes, oRes] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/vehicles?active=eq.true&order=chassis_number&select=id,chassis_number,vehicle_number,vehicle_model,permit_type,capacity,first_registration_date,length_cm,width_cm,height_cm,owner,insurance,note`, { headers: getH() }),
+      fetch(`${SUPABASE_URL}/rest/v1/vehicle_assignments?active=eq.true&order=created_at.desc&select=id,vehicle_id,vehicle_number,office_id,fiscal_year,duty,prev_vehicle_number,is_current,note,created_at`, { headers: getH() }),
+      fetch(`${SUPABASE_URL}/rest/v1/offices?active=eq.true&order=name&select=id,name`, { headers: getH() })
+    ]);
+    allVehiclesData  = vRes.ok ? await vRes.json() : [];
+    const assignments = aRes.ok ? await aRes.json() : [];
+    allOfficesMaster  = oRes.ok ? await oRes.json() : [];
+
+    // vehicleId → 現在の配置 / 全履歴 のマップを構築
+    currentAssignments   = {};
+    allAssignmentHistory = {};
+    assignments.forEach(a => {
+      if (!allAssignmentHistory[a.vehicle_id]) allAssignmentHistory[a.vehicle_id] = [];
+      allAssignmentHistory[a.vehicle_id].push(a);
+      if (a.is_current) currentAssignments[a.vehicle_id] = a;
+    });
+
+    // 車庫ドロップダウンを更新（新規登録・配置変更モーダル共通）
+    const officeOpts = '<option value="">未設定</option>' +
+      allOfficesMaster.map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('');
+    const nvOffice = document.getElementById('nv-office');
+    const raOffice = document.getElementById('ra-office');
+    if (nvOffice) nvOffice.innerHTML = officeOpts;
+    if (raOffice) raOffice.innerHTML = officeOpts;
+
+    document.getElementById('cnt-vehicles').textContent = allVehiclesData.length;
+    renderVehiclesTable();
+  } catch(e) { console.error('loadVehicles error:', e); }
+}
+
+function renderVehiclesTable() {
+  const tbody = document.getElementById('tbody-vehicles');
+  if (!tbody) return;
+  if (!allVehiclesData.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;padding:20px;">データがありません</td></tr>';
+    return;
+  }
+  tbody.innerHTML = allVehiclesData.map(v => {
+    const cur = currentAssignments[v.id];
+    const officeName = (cur && cur.office_id)
+      ? (allOfficesMaster.find(o => o.id === cur.office_id)?.name || '')
+      : '';
+    const vnum  = cur ? cur.vehicle_number : (v.vehicle_number || '');
+    const duty  = cur ? (cur.duty || '') : '';
+    const hist  = allAssignmentHistory[v.id] || [];
+    return `
+      <tr>
+        <td><a href="#" style="color:#4d7a5e;" onclick="toggleVehicleDetail(${v.id});return false;">${esc(v.chassis_number || '—')}</a></td>
+        <td>${esc(v.vehicle_model || '')}</td>
+        <td style="font-size:11px;">${esc(v.permit_type || '')}</td>
+        <td>${esc(vnum)}</td>
+        <td style="font-size:11px;">${esc(officeName)}</td>
+        <td style="font-size:11px;">${esc(duty)}</td>
+        <td style="text-align:center;">${v.capacity != null ? v.capacity : ''}</td>
+        <td style="font-size:11px;">${esc(v.first_registration_date || '')}</td>
+        <td>
+          <button class="btn" style="font-size:11px;padding:3px 8px;" onclick="openReassign(${v.id})">配置変更</button>
+        </td>
+      </tr>
+      <tr id="detail-${v.id}" style="display:none;">
+        <td colspan="9" style="padding:12px;background:#f0f8f0;border-bottom:1px solid #dde;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px;font-size:12px;margin-bottom:10px;">
+            <div><span style="color:#666;">定員:</span> ${v.capacity != null ? v.capacity+'名' : '—'}</div>
+            <div><span style="color:#666;">全長:</span> ${v.length_cm ? v.length_cm+'cm' : '—'}</div>
+            <div><span style="color:#666;">全幅:</span> ${v.width_cm ? v.width_cm+'cm' : '—'}</div>
+            <div><span style="color:#666;">全高:</span> ${v.height_cm ? v.height_cm+'cm' : '—'}</div>
+            <div><span style="color:#666;">所有者:</span> ${esc(v.owner || '—')}</div>
+            <div><span style="color:#666;">保険:</span> ${esc(v.insurance || '—')}</div>
+            ${v.note ? `<div style="grid-column:1/-1;"><span style="color:#666;">備考:</span> ${esc(v.note)}</div>` : ''}
+          </div>
+          ${hist.length > 0 ? `
+          <details>
+            <summary style="font-size:12px;color:#4d7a5e;cursor:pointer;user-select:none;">📋 配置変更履歴（${hist.length}件）</summary>
+            <table style="font-size:11px;width:100%;margin-top:8px;border-collapse:collapse;">
+              <thead>
+                <tr style="background:#e8f4ec;">
+                  <th style="text-align:left;padding:4px 6px;">車番</th>
+                  <th style="text-align:left;padding:4px 6px;">車庫</th>
+                  <th style="text-align:left;padding:4px 6px;">年度</th>
+                  <th style="text-align:left;padding:4px 6px;">業務</th>
+                  <th style="text-align:left;padding:4px 6px;">備考</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${hist.map(a => {
+                  const on = allOfficesMaster.find(o => o.id === a.office_id)?.name || '';
+                  return `<tr style="${a.is_current ? 'font-weight:bold;background:#fafff8;' : 'color:#888;'}">
+                    <td style="padding:3px 6px;">${esc(a.vehicle_number)}</td>
+                    <td style="padding:3px 6px;">${esc(on)}</td>
+                    <td style="padding:3px 6px;">${esc(a.fiscal_year || '')}</td>
+                    <td style="padding:3px 6px;">${esc(a.duty || '')}</td>
+                    <td style="padding:3px 6px;">${esc(a.note || '')}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </details>` : ''}
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function toggleVehicleDetail(id) {
+  const el = document.getElementById('detail-' + id);
+  if (el) el.style.display = (el.style.display === 'none' || el.style.display === '') ? 'table-row' : 'none';
+}
+
+function openReassign(vehicleId) {
+  reassignTargetId = vehicleId;
+  const v   = allVehiclesData.find(vv => vv.id === vehicleId);
+  const cur = currentAssignments[vehicleId];
+  const label = document.getElementById('reassign-target-label');
+  if (label && v) {
+    label.textContent = `車台番号: ${v.chassis_number || '—'}　現在の車番: ${cur ? cur.vehicle_number : '未設定'}`;
+  }
+  // フィールドリセット
+  document.getElementById('ra-vnum').value  = '';
+  document.getElementById('ra-office').value = cur && cur.office_id ? cur.office_id : '';
+  document.getElementById('ra-year').value  = '';
+  document.getElementById('ra-duty').value  = cur ? (cur.duty || '') : '';
+  document.getElementById('ra-note').value  = '';
+  document.getElementById('reassign-modal').style.display = 'flex';
+}
+
+function closeReassign() {
+  document.getElementById('reassign-modal').style.display = 'none';
+  reassignTargetId = null;
+}
+
+async function saveReassign() {
+  if (!reassignTargetId) return;
+  const vnum     = document.getElementById('ra-vnum').value.trim();
+  const officeId = document.getElementById('ra-office').value;
+  if (!vnum) { alert('新しい車番は必須です'); return; }
+
+  const cur = currentAssignments[reassignTargetId];
+  try {
+    // 1. 現在の配置を is_current=false に更新
+    if (cur) {
+      await fetch(`${SUPABASE_URL}/rest/v1/vehicle_assignments?id=eq.${cur.id}`, {
+        method: 'PATCH', headers: getH(), body: JSON.stringify({ is_current: false })
+      });
+    }
+    // 2. 新しい配置を挿入
+    const body = {
+      vehicle_id:          reassignTargetId,
+      vehicle_number:      vnum,
+      office_id:           officeId ? parseInt(officeId) : null,
+      fiscal_year:         document.getElementById('ra-year').value.trim() || null,
+      duty:                document.getElementById('ra-duty').value.trim() || null,
+      prev_vehicle_number: cur ? cur.vehicle_number : null,
+      prev_duty:           cur ? (cur.duty || null) : null,
+      note:                document.getElementById('ra-note').value.trim() || null,
+      is_current:          true
+    };
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/vehicle_assignments`, {
+      method: 'POST', headers: getH(), body: JSON.stringify(body)
+    });
+    if (res.ok) {
+      closeReassign();
+      await loadVehicles();
+      showStatus('status-vehicles', 'success', '✅ 配置変更を記録しました');
+    } else {
+      showStatus('status-vehicles', 'error', '配置変更の保存に失敗しました');
+    }
+  } catch(e) {
+    console.error('saveReassign error:', e);
+    showStatus('status-vehicles', 'error', 'エラーが発生しました');
+  }
+}
+
+async function addVehicle() {
+  const chassis = document.getElementById('nv-chassis').value.trim();
+  const vnum    = document.getElementById('nv-vnum').value.trim();
+  if (!chassis) { alert('車台番号は必須です'); return; }
+  if (!vnum)    { alert('車番は必須です'); return; }
+
+  const officeId = document.getElementById('nv-office').value;
+  const cap  = document.getElementById('nv-cap').value;
+  const len  = document.getElementById('nv-len').value;
+  const wid  = document.getElementById('nv-wid').value;
+  const hei  = document.getElementById('nv-hei').value;
+
+  const vehicleBody = {
+    chassis_number:        chassis,
+    vehicle_number:        vnum,   // 後方互換のため vehicles にも保持
+    vehicle_model:         document.getElementById('nv-model').value.trim() || null,
+    permit_type:           document.getElementById('nv-permit').value || null,
+    first_registration_date: document.getElementById('nv-firstreg').value.trim() || null,
+    capacity:              cap ? parseInt(cap) : null,
+    length_cm:             len ? parseInt(len) : null,
+    width_cm:              wid ? parseInt(wid) : null,
+    height_cm:             hei ? parseInt(hei) : null,
+    owner:                 document.getElementById('nv-owner').value.trim() || null,
+    insurance:             document.getElementById('nv-ins').value.trim() || null,
+    note:                  document.getElementById('nv-note').value.trim() || null,
+  };
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/vehicles`, {
+      method: 'POST', headers: getH(), body: JSON.stringify(vehicleBody)
+    });
+    if (!res.ok) { showStatus('status-vehicles', 'error', '車両の登録に失敗しました'); return; }
+
+    const created = await res.json();
+    const vehicleId = Array.isArray(created) ? created[0].id : created.id;
+
+    // 初回配置を vehicle_assignments に挿入
+    const assignBody = {
+      vehicle_id:     vehicleId,
+      vehicle_number: vnum,
+      office_id:      officeId ? parseInt(officeId) : null,
+      fiscal_year:    document.getElementById('nv-year').value.trim() || null,
+      duty:           document.getElementById('nv-duty').value.trim() || null,
+      is_current:     true
+    };
+    const aRes = await fetch(`${SUPABASE_URL}/rest/v1/vehicle_assignments`, {
+      method: 'POST', headers: getH(), body: JSON.stringify(assignBody)
+    });
+
+    if (aRes.ok) {
+      // フォームリセット
+      ['nv-chassis','nv-model','nv-firstreg','nv-owner','nv-ins','nv-note',
+       'nv-vnum','nv-year','nv-duty','nv-cap','nv-len','nv-wid','nv-hei']
+        .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+      document.getElementById('nv-permit').value = '';
+      document.getElementById('nv-office').value = '';
+      const det = document.getElementById('details-vehicles-form');
+      if (det) det.removeAttribute('open');
+      await loadVehicles();
+      showStatus('status-vehicles', 'success', '✅ 車両を登録しました');
+    } else {
+      showStatus('status-vehicles', 'error', '初回配置情報の登録に失敗しました');
+    }
+  } catch(e) {
+    console.error('addVehicle error:', e);
+    showStatus('status-vehicles', 'error', 'エラーが発生しました');
+  }
+}
 
 // ================================================
 //  アカウント管理（Supabase Auth RPC）
