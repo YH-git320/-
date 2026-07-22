@@ -1680,7 +1680,7 @@ async function loadVehicles() {
     const vehicleFilter = vFilter === 'all' ? 'order=chassis_number' : vFilter === 'retired' ? 'active=eq.false&order=chassis_number' : 'active=eq.true&order=chassis_number';
     const [vRes, aRes, oRes, cRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/vehicles?${vehicleFilter}&select=id,chassis_number,vehicle_number,vehicle_model,permit_type,capacity,first_registration_date,length_cm,width_cm,height_cm,owner,insurance,note,active,retired_date`, { headers: getH() }),
-      fetch(`${SUPABASE_URL}/rest/v1/vehicle_assignments?active=eq.true&order=created_at.desc&select=id,vehicle_id,vehicle_number,office_id,offices(id,name),fiscal_year,duty,prev_vehicle_number,is_current,note,created_at`, { headers: getH() }),
+      fetch(`${SUPABASE_URL}/rest/v1/vehicle_assignments?active=eq.true&order=created_at.desc&select=id,vehicle_id,vehicle_number,office_id,fiscal_year,duty,prev_vehicle_number,is_current,note,created_at`, { headers: getH() }),
       fetch(`${SUPABASE_URL}/rest/v1/offices?order=name&select=id,name`, { headers: getH() }),
       fetch(`${SUPABASE_URL}/rest/v1/courses?active=eq.true&order=course_name&select=id,course_name,contract_name,school_name,vehicle_id`, { headers: getH() })
     ]);
@@ -1744,8 +1744,7 @@ function renderVehiclesTable() {
   }
   tbody.innerHTML = allVehiclesData.map(v => {
     const cur = currentAssignments[v.id];
-    const officeName = cur?.offices?.name
-      || (cur?.office_id ? (allOfficesMaster.find(o => o.id === cur.office_id)?.name || '') : '');
+    const officeName = cur?.office_id ? (allOfficesMaster.find(o => o.id === cur.office_id)?.name || '') : '';
     const vnum  = cur ? cur.vehicle_number : (v.vehicle_number || '');
     const courseInfo = vehicleCourseMap[v.id]?.[0];
     const dutyHtml = courseInfo
@@ -1800,8 +1799,7 @@ function renderVehiclesTable() {
               </thead>
               <tbody>
                 ${hist.map(a => {
-                  const on = a.offices?.name
-                    || (a.office_id ? (allOfficesMaster.find(o => o.id === a.office_id)?.name || '') : '');
+                  const on = a.office_id ? (allOfficesMaster.find(o => o.id === a.office_id)?.name || '') : '';
                   return `<tr style="${a.is_current ? 'font-weight:bold;background:#fafff8;' : 'color:#888;'}">
                     <td style="padding:3px 6px;">${esc(a.vehicle_number)}</td>
                     <td style="padding:3px 6px;">${esc(on)}</td>
