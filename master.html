@@ -1108,7 +1108,7 @@ function renderEmployeeGrid(employees, col) {
           </div>
           <div class="emp-actions">
             <button class="btn btn-edit btn-small" onclick="startEditEmp(${emp.id})">編集</button>
-            <button class="btn btn-gray btn-small" onclick="openAuditModal('staff',${emp.id},'従業員：${escAttr(emp.name)}')">📋</button>
+            <button class="btn btn-gray btn-small" onclick="openAuditModal('staff',${emp.id},'従業員：${escAttr(emp.name)}')">変更履歴</button>
             <button class="btn btn-danger btn-small" onclick="deleteEmployee(${emp.id},'${escAttr(emp.name)}')">削除</button>
           </div>
         </div>
@@ -1329,7 +1329,7 @@ function renderSimpleTable(key) {
     return `<tr id="sr-${key}-${row.id}">${cells}
       <td style="white-space:nowrap;">
         <button class="btn btn-edit btn-small" onclick="startEditSimple('${key}',${row.id})">編集</button>
-        <button class="btn btn-gray btn-small" onclick="openAuditModal('${def.table}',${row.id},'${escAttr(req)}')">📋</button>
+        <button class="btn btn-gray btn-small" onclick="openAuditModal('${def.table}',${row.id},'${escAttr(req)}')">変更履歴</button>
         <button class="btn btn-danger btn-small" onclick="deleteSimple('${key}',${row.id},'${escAttr(req)}')">削除</button>
       </td></tr>`;
   }).join('');
@@ -1488,7 +1488,7 @@ function renderCoursesTable() {
       <td class="col-contract_end">${esc(c.contract_end||'')}</td>
       <td style="white-space:nowrap;">
         <button class="btn btn-edit btn-small" onclick="startEditCourse(${c.id})">編集</button>
-        <button class="btn btn-gray btn-small" onclick="openAuditModal('courses',${c.id},'コース：${escAttr(c.course_name||c.contract_name||'')}')">📋</button>
+        <button class="btn btn-gray btn-small" onclick="openAuditModal('courses',${c.id},'コース：${escAttr(c.course_name||c.contract_name||'')}')">変更履歴</button>
         <button class="btn btn-danger btn-small" onclick="deleteCourse(${c.id},'${escAttr(c.course_name||'')}')">削除</button>
       </td>
     </tr>`;
@@ -2071,7 +2071,7 @@ function renderVehiclesTable() {
     const statusBadge = isRetired
       ? `<span style="background:#f0e0e0;color:#c0392b;border-radius:4px;padding:2px 6px;font-size:10px;white-space:nowrap;display:inline-block;">廃車</span>`
       : `<span style="background:#e4f0e8;color:#2e7d52;border-radius:4px;padding:2px 6px;font-size:10px;white-space:nowrap;display:inline-block;">現役</span>`;
-    const auditVBtn = `<button class="btn btn-gray" style="font-size:11px;padding:3px 8px;" onclick="openAuditModal('vehicles',${v.id},'車両：${escAttr(v.chassis_number||'')}')">📋</button>`;
+    const auditVBtn = `<button class="btn btn-gray" style="font-size:11px;padding:3px 8px;" onclick="openAuditModal('vehicles',${v.id},'車両：${escAttr(v.chassis_number||'')}')">変更履歴</button>`;
     const actionBtns = isRetired
       ? `${auditVBtn}<span style="color:#aaa;font-size:11px;">廃車済</span>`
       : `${auditVBtn}<button class="btn" style="font-size:11px;padding:3px 8px;" onclick="openReassign(${v.id})">配置変更</button>`;
