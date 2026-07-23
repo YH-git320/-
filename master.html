@@ -845,9 +845,35 @@ function switchSection(key) {
   else if (key === 'admins') loadAccounts();
 }
 
+// ===== ロール・権限に応じたセクション制御 =====
+function applySectionPermissions() {
+  const role  = sessionStorage.getItem('takao_role');
+  const perms = getPermissions();
+  const isSuperAdmin = role === 'super_admin';
+  const isOperator   = role === 'operator';
+  const items = document.querySelectorAll('.sidebar-item');
+
+  // 管理者アカウント管理: super_admin のみ表示
+  const adminIdx = SECTIONS.indexOf('admins');
+  if (adminIdx >= 0 && items[adminIdx]) {
+    items[adminIdx].style.display = isSuperAdmin ? '' : 'none';
+  }
+
+  // operator: permissions JSONB に従ってセクションを制限
+  if (isOperator) {
+    ['employees','jobtypes','courses','vehicles','offices','permits'].forEach(sec => {
+      const visible = perms[sec] !== false;  // 未設定はデフォルト表示
+      const idx = SECTIONS.indexOf(sec);
+      if (idx >= 0 && items[idx]) {
+        items[idx].style.display = visible ? '' : 'none';
+      }
+    });
+  }
+}
+
 // ===== 初期化 =====
 document.addEventListener('DOMContentLoaded', async () => {
-  const authorized = await initAuth(['admin']);
+  const authorized = await initAuth(['super_admin','admin','operator']);
   if (!authorized) return;
 
   // ログイン済みユーザーのJWTをAPIヘッダーに使用
@@ -856,9 +882,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     H['Authorization'] = 'Bearer ' + _sess.access_token;
   }
 
+  applySectionPermissions();   // ロール/権限に応じてサイドバーを制御
+
+  // operator は新規追加フォーム・CSVインポートを非表示
+  if (sessionStorage.getItem('takao_role') === 'operator') {
+    const style = document.createElement('style');
+    style.textContent = '.add-form-details, .import-zone, .import-section, details.add-form-details { display: none !important; }';
+    document.head.appendChild(style);
+  }
+
   await loadJobTypes();   // 業務マスタを先に読む（従業員表示で使う）
-  // 前回開いていたセクションに復元（更新時もそのページにとどまる）
-  const _savedSection = sessionStorage.getItem('master_section') || 'employees';
+
+  // 前回開いていたセクションに復元（権限がないセクションは先頭の許可セクションへ）
+  const _role = sessionStorage.getItem('takao_role');
+  let _savedSection = sessionStorage.getItem('master_section') || 'employees';
+  if (_savedSection === 'admins' && _role !== 'super_admin') _savedSection = 'employees';
+  if (_role === 'operator') {
+    const _perms = getPermissions();
+    if (_perms[_savedSection] === false) {
+      _savedSection = SECTIONS.find(s => s !== 'admins' && _perms[s] !== false) || 'employees';
+    }
+  }
   switchSection(_savedSection);
   // ドラッグ&ドロップ
   document.querySelectorAll('.import-zone').forEach(zone => {
@@ -897,6 +941,7 @@ function renderJobTypeTable() {
     tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;padding:20px;">データがありません</td></tr>';
     return;
   }
+  const _isAdminJT = ['super_admin','admin'].includes(sessionStorage.getItem('takao_role'));
   tbody.innerHTML = allJobTypes.map(jt => `
     <tr id="jt-row-${jt.id}">
       <td>${jt.id}</td>
@@ -904,9 +949,9 @@ function renderJobTypeTable() {
       <td>${esc(jt.description || '')}</td>
       <td>${jt.sort_order}</td>
       <td style="white-space:nowrap;">
-        <button class="btn btn-edit btn-small" onclick="startEditJT(${jt.id})">編集</button>
+        ${_isAdminJT ? `<button class="btn btn-edit btn-small" onclick="startEditJT(${jt.id})">編集</button>` : ''}
         <button class="btn btn-gray btn-small" onclick="openAuditModal('job_types',${jt.id},'業務：${escAttr(jt.name)}')">変更履歴</button>
-        <button class="btn btn-danger btn-small" onclick="deleteJT(${jt.id},'${escAttr(jt.name)}')">削除</button>
+        ${_isAdminJT ? `<button class="btn btn-danger btn-small" onclick="deleteJT(${jt.id},'${escAttr(jt.name)}')">削除</button>` : ''}
       </td>
     </tr>`).join('');
 }
@@ -995,9 +1040,10 @@ async function loadEmployees() {
   const empFilter = document.querySelector('input[name="emp-filter"]:checked')?.value || 'active';
   const filter = empFilter === 'all' ? 'order=name' : empFilter === 'retired' ? 'active=eq.false&order=name' : 'active=eq.true&order=name';
   try {
-    // 従業員一覧
+    // 従業員一覧（operatorは住所・連絡先マスク済みビューから取得）
+    const _staffTable = sessionStorage.getItem('takao_role') === 'operator' ? 'staff_safe' : 'staff';
     const empRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/staff?${filter}&select=id,name,name_kana,department,email,phone,employee_code,postal_code,address,hire_date,retirement_date,license_number,license_expiry,note,active`,
+      `${SUPABASE_URL}/rest/v1/${_staffTable}?${filter}&select=id,name,name_kana,department,email,phone,employee_code,postal_code,address,hire_date,retirement_date,license_number,license_expiry,note,active`,
       { headers: getH() }
     );
     const empData = await empRes.json();
@@ -1051,6 +1097,8 @@ function chipColor(index) {
 
 function renderEmployeeGrid(employees, col) {
   col = col || { dates: true, address: false, license: true, note: true };
+  const _empRole = sessionStorage.getItem('takao_role');
+  const _isAdminEmp = ['super_admin','admin'].includes(_empRole);
   const grid = document.getElementById('emp-grid');
   if (employees.length === 0) {
     grid.innerHTML = '<div style="color:#999; font-size:13px; padding:20px;">該当する従業員がいません</div>';
@@ -1058,21 +1106,25 @@ function renderEmployeeGrid(employees, col) {
   }
   grid.innerHTML = employees.map(emp => {
     const isRetired = !emp.active;
+    // operatorは電話・メールを表示するが「マスク済み」ラベルを付与
+    const phoneTxt = emp.phone ? (_isAdminEmp ? emp.phone : emp.phone) : null;
+    const emailTxt = emp.email ? (_isAdminEmp ? emp.email : emp.email) : null;
     const sub = [emp.employee_code ? '社員番号：'+emp.employee_code : null,
                  emp.department || null,
-                 emp.phone || null, emp.email || null].filter(Boolean).join('　|　');
+                 phoneTxt || null, emailTxt || null].filter(Boolean).join('　|　');
+    // 業務チップ: operator は削除×ボタンなし
     const chips = emp.jobTypes.map((jt, i) => {
       const ci = allJobTypes.findIndex(j => j.id === jt.id);
       return `<span class="job-chip ${chipColor(ci)}">
         ${esc(jt.name)}
-        <span class="chip-del" onclick="removeJobType(${emp.id},${jt.id})" title="削除">×</span>
+        ${_isAdminEmp ? `<span class="chip-del" onclick="removeJobType(${emp.id},${jt.id})" title="削除">×</span>` : ''}
       </span>`;
     }).join('');
 
-    // 未付与の業務のみドロップダウンに表示
+    // 業務追加: admin以上のみ
     const hasIds = new Set(emp.jobTypes.map(j => j.id));
     const unassigned = allJobTypes.filter(j => !hasIds.has(j.id));
-    const addChipHtml = (!isRetired && unassigned.length > 0) ? `
+    const addChipHtml = (_isAdminEmp && !isRetired && unassigned.length > 0) ? `
       <span class="add-job-wrap">
         <select id="add-jt-${emp.id}">
           <option value="">＋業務を追加…</option>
@@ -1080,6 +1132,11 @@ function renderEmployeeGrid(employees, col) {
         </select>
         <button class="btn btn-add btn-small" onclick="addJobTypeToEmp(${emp.id})">追加</button>
       </span>` : '';
+
+    // 住所表示: operatorはマスク済みデータがDBから来るが、マスク中注記を付ける
+    const addrHtml = col.address && (emp.postal_code || emp.address)
+      ? `<div class="emp-sub">📮 ${emp.postal_code ? esc(emp.postal_code)+'　' : ''}${esc(emp.address||'')}${!_isAdminEmp ? '<span style="font-size:10px;color:#aaa;margin-left:4px;">(表示制限中)</span>' : ''}</div>`
+      : '';
 
     return `
       <div class="emp-card" id="emp-card-${emp.id}" style="${isRetired ? 'opacity:0.65;border-color:#d0c0b0;' : ''}">
@@ -1095,14 +1152,14 @@ function renderEmployeeGrid(employees, col) {
               ${emp.hire_date && emp.retirement_date ? '　' : ''}
               ${emp.retirement_date ? '<span style="color:#c17f3e;">🔔 退職：'+esc(emp.retirement_date)+'</span>' : ''}
             </div>` : (emp.retirement_date ? `<div class="emp-sub" style="color:#c17f3e;">🔔 退職：${esc(emp.retirement_date)}</div>` : '')}
-            ${col.address && (emp.postal_code || emp.address) ? `<div class="emp-sub">📮 ${emp.postal_code ? esc(emp.postal_code)+'　' : ''}${esc(emp.address||'')}</div>` : ''}
+            ${addrHtml}
             ${col.license && emp.license_number ? `<div class="emp-sub">🪪 免許：${esc(emp.license_number)}${emp.license_expiry ? '　有効期限：'+emp.license_expiry : ''}</div>` : ''}
             ${col.note && emp.note ? `<div class="emp-sub" style="color:#888;">📝 ${esc(emp.note)}</div>` : ''}
           </div>
           <div class="emp-actions">
-            <button class="btn btn-edit btn-small" onclick="startEditEmp(${emp.id})">編集</button>
+            ${_isAdminEmp ? `<button class="btn btn-edit btn-small" onclick="startEditEmp(${emp.id})">編集</button>` : ''}
             <button class="btn btn-gray btn-small" onclick="openAuditModal('staff',${emp.id},'従業員：${escAttr(emp.name)}')">変更履歴</button>
-            <button class="btn btn-danger btn-small" onclick="deleteEmployee(${emp.id},'${escAttr(emp.name)}')">削除</button>
+            ${_isAdminEmp ? `<button class="btn btn-danger btn-small" onclick="deleteEmployee(${emp.id},'${escAttr(emp.name)}')">削除</button>` : ''}
           </div>
         </div>
         <div class="job-chips">
@@ -1316,14 +1373,15 @@ function renderSimpleTable(key) {
   const tbody = document.getElementById('tbody-'+key);
   if (!tbody) return;
   if (data.length === 0) { tbody.innerHTML = `<tr><td colspan="${def.cols.length+1}" style="text-align:center;color:#999;padding:20px;">データがありません</td></tr>`; return; }
+  const _isAdminST = ['super_admin','admin'].includes(sessionStorage.getItem('takao_role'));
   tbody.innerHTML = data.map(row => {
     const cells = def.cols.map(c => `<td>${esc(String(row[c]??''))}</td>`).join('');
     const req = row[def.req] || '';
     return `<tr id="sr-${key}-${row.id}">${cells}
       <td style="white-space:nowrap;">
-        <button class="btn btn-edit btn-small" onclick="startEditSimple('${key}',${row.id})">編集</button>
+        ${_isAdminST ? `<button class="btn btn-edit btn-small" onclick="startEditSimple('${key}',${row.id})">編集</button>` : ''}
         <button class="btn btn-gray btn-small" onclick="openAuditModal('${def.table}',${row.id},'${escAttr(req)}')">変更履歴</button>
-        <button class="btn btn-danger btn-small" onclick="deleteSimple('${key}',${row.id},'${escAttr(req)}')">削除</button>
+        ${_isAdminST ? `<button class="btn btn-danger btn-small" onclick="deleteSimple('${key}',${row.id},'${escAttr(req)}')">削除</button>` : ''}
       </td></tr>`;
   }).join('');
 }
@@ -1480,9 +1538,9 @@ function renderCoursesTable() {
       <td class="col-contract_start">${esc(c.contract_start||'')}</td>
       <td class="col-contract_end">${esc(c.contract_end||'')}</td>
       <td style="white-space:nowrap;">
-        <button class="btn btn-edit btn-small" onclick="startEditCourse(${c.id})">編集</button>
+        ${['super_admin','admin'].includes(sessionStorage.getItem('takao_role')) ? `<button class="btn btn-edit btn-small" onclick="startEditCourse(${c.id})">編集</button>` : ''}
         <button class="btn btn-gray btn-small" onclick="openAuditModal('courses',${c.id},'コース：${escAttr(c.course_name||c.contract_name||'')}')">変更履歴</button>
-        <button class="btn btn-danger btn-small" onclick="deleteCourse(${c.id},'${escAttr(c.course_name||'')}')">削除</button>
+        ${['super_admin','admin'].includes(sessionStorage.getItem('takao_role')) ? `<button class="btn btn-danger btn-small" onclick="deleteCourse(${c.id},'${escAttr(c.course_name||'')}')">削除</button>` : ''}
       </td>
     </tr>`;
   }).join('');
@@ -2097,9 +2155,12 @@ function renderVehiclesTable() {
         : ''
     ) : '';
     const auditVBtn = `<button class="btn btn-gray btn-small" onclick="openAuditModal('vehicles',${v.id},'車両：${escAttr(v.chassis_number||'')}')">変更履歴</button>`;
+    const _isAdminV = ['super_admin','admin'].includes(sessionStorage.getItem('takao_role'));
     const actionBtns = isRetired
       ? `${auditVBtn}<span style="color:#aaa;font-size:11px;">廃車済</span>`
-      : `<button class="btn btn-edit btn-small" onclick="openReassign(${v.id})">変更</button>${auditVBtn}<button class="btn btn-danger btn-small" onclick="openRetireModal(${v.id})">廃車</button>`;
+      : (_isAdminV
+          ? `<button class="btn btn-edit btn-small" onclick="openReassign(${v.id})">変更</button>${auditVBtn}<button class="btn btn-danger btn-small" onclick="openRetireModal(${v.id})">廃車</button>`
+          : auditVBtn);
     return `
       <tr style="${isRetired ? 'opacity:0.6;' : ''}">
         <td><a href="#" style="color:#4d7a5e;" onclick="toggleVehicleDetail(${v.id});return false;">${esc(v.chassis_number || '—')}</a></td>
@@ -2133,9 +2194,9 @@ function renderVehiclesTable() {
               ${v.retired_date ? `<div><span style="color:#666;">廃車日:</span> ${esc(v.retired_date)}</div>` : ''}
               ${v.note ? `<div style="grid-column:1/-1;"><span style="color:#666;">備考:</span> ${esc(v.note)}</div>` : ''}
             </div>
-            <div style="margin-bottom:10px;">
+            ${['super_admin','admin'].includes(sessionStorage.getItem('takao_role')) ? `<div style="margin-bottom:10px;">
               <button class="btn btn-edit btn-small" onclick="startEditVehicleDetail(${v.id})">✏️ 詳細を編集</button>
-            </div>
+            </div>` : ''}
           </div>
           <div id="vdetail-edit-${v.id}" style="display:none;"></div>
           ${hist.length > 0 ? `
@@ -2569,7 +2630,7 @@ const AUTH_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/auth/v1';
 const REST_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/rest/v1';
 const ANON_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4ZHlxa3lxdGl6aHRrd3RwdnJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NzYxODEsImV4cCI6MjA5OTQ1MjE4MX0.yVbClXBk2JVeglevsBLY5sH2_m2ybCf71u4i_YYWyHE';
 
-const ROLE_LABEL = { admin: '管理者', staff: '事務員' };
+const ROLE_LABEL = { super_admin: '権限付与者', admin: '管理者', operator: '担当者', staff: '事務員' };
 
 /* ===================== セッション管理 ===================== */
 
@@ -2594,6 +2655,17 @@ function _clearSession() {
   sessionStorage.removeItem('takao_session');
   sessionStorage.removeItem('takao_role');
   sessionStorage.removeItem('takao_name');
+  sessionStorage.removeItem('takao_permissions');
+  sessionStorage.removeItem('takao_mfa_enforced');
+}
+
+function getPermissions() {
+  try { return JSON.parse(sessionStorage.getItem('takao_permissions') || '{}'); }
+  catch { return {}; }
+}
+
+function isMfaEnforced() {
+  return sessionStorage.getItem('takao_mfa_enforced') !== 'false';
 }
 
 function _isExpired(session) {
@@ -2627,7 +2699,7 @@ async function _getRole(accessToken) {
   const cached = sessionStorage.getItem('takao_role');
   if (cached) return cached;
   try {
-    const res = await fetch(`${REST_URL}/user_roles?select=role,display_name`, {
+    const res = await fetch(`${REST_URL}/user_roles?select=role,display_name,permissions,mfa_enforced`, {
       headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${accessToken}` },
     });
     if (!res.ok) return null;
@@ -2635,6 +2707,8 @@ async function _getRole(accessToken) {
     const row = data[0];
     if (!row) return null;
     sessionStorage.setItem('takao_role', row.role);
+    sessionStorage.setItem('takao_permissions', JSON.stringify(row.permissions || {}));
+    sessionStorage.setItem('takao_mfa_enforced', String(row.mfa_enforced !== false));
     if (row.display_name) sessionStorage.setItem('takao_name', row.display_name);
     return row.role;
   } catch { return null; }
@@ -2945,7 +3019,10 @@ function _injectUserInfo(email, role) {
 
   const name = sessionStorage.getItem('takao_name') || email;
   const label = ROLE_LABEL[role] || role;
-  const badgeColor = role === 'admin' ? '#9b7eb8' : '#4d7a5e';
+  const badgeColor = role === 'super_admin' ? '#c0392b'
+                 : role === 'admin'       ? '#9b7eb8'
+                 : role === 'operator'    ? '#2980b9'
+                 : '#6b9e7e';
   const badgeBg    = 'transparent';
   const badgeBorder = 'transparent';
 
@@ -3180,11 +3257,25 @@ async function showTotpSetupModal() {
   startBtn.style.display = 'none';
   disableBtn.style.display = 'none';
 
+  const canDisable = !isMfaEnforced() || sessionStorage.getItem('takao_role') === 'super_admin';
+
   const factors = await getEnrolledFactors();
   if (factors.length > 0) {
     _totpFactorId = factors[0].id;
     status.textContent = '✅ 二段階認証は有効です。認証アプリが設定されています。';
-    disableBtn.style.display = 'block';
+    if (canDisable) {
+      disableBtn.style.display = 'block';
+    } else {
+      disableBtn.style.display = 'none';
+      const noteId = '_tm_totp_mfa_note';
+      if (!document.getElementById(noteId)) {
+        const note = document.createElement('p');
+        note.id = noteId;
+        note.style.cssText = 'font-size:12px;color:#888;margin-top:8px;';
+        note.textContent = '🔒 二段階認証の解除は権限付与者のみ行えます。';
+        status.parentNode.insertBefore(note, disableBtn);
+      }
+    }
   } else {
     status.textContent = '二段階認証は現在無効です。設定するとログイン時にアプリのコード入力が必要になります。';
     startBtn.style.display = 'block';
