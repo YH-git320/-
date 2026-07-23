@@ -232,6 +232,36 @@
     </form>
   </div>
 
+  <!-- Step 3: 二段階認証 初回設定（スキップ不可） -->
+  <div class="login-card" id="step3-card" style="display:none;max-width:420px;">
+    <div class="logo-area">
+      <img src="logo.png" alt="TAKAO corporation" class="logo-img">
+      <div class="system-name">二段階認証の設定</div>
+    </div>
+    <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:13px;color:#5d4037;line-height:1.6;">
+      🔒 <strong>二段階認証の設定が必要です</strong><br>
+      セキュリティポリシーにより、認証アプリによる二段階認証を設定してからシステムをご利用ください。
+    </div>
+    <div id="step3-s1" style="display:block;">
+      <p style="font-size:13px;color:#5c7066;margin-bottom:14px;">① Google Authenticator または Microsoft Authenticator でQRコードを読み取ってください</p>
+      <div id="step3-qr" style="text-align:center;margin:16px 0;"></div>
+      <div style="font-size:12px;color:#888;margin-bottom:6px;text-align:center;">QRコードが読めない場合はこのコードを手動入力</div>
+      <div id="step3-secret" style="background:#f5f8f4;border:1px solid #c8d8cc;border-radius:8px;padding:8px 12px;font-size:12px;color:#4d7a5e;word-break:break-all;text-align:center;margin-bottom:14px;"></div>
+      <button onclick="step3GoVerify()" class="btn-login" style="margin:0;">次へ（コード入力）→</button>
+    </div>
+    <div id="step3-s2" style="display:none;">
+      <p style="font-size:13px;color:#5c7066;margin-bottom:14px;">② アプリに表示されている6桁のコードを入力して設定を完了します</p>
+      <div class="form-group">
+        <label for="step3Code">6桁のコード</label>
+        <input type="text" id="step3Code" inputmode="numeric" maxlength="6" placeholder="000000"
+          style="width:100%;letter-spacing:0.3em;font-size:22px;text-align:center;padding:13px 14px;border:1.5px solid #c8d8cc;border-radius:10px;font-family:inherit;">
+      </div>
+      <div class="error-msg" id="step3ErrMsg" style="display:none;background:#fdf2f2;color:#b5453a;border:1px solid #eeaaa4;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:10px;"></div>
+      <button onclick="step3Verify()" class="btn-login" id="step3VerifyBtn" style="margin:0;">設定を完了してログイン</button>
+      <button onclick="step3GoQR()" style="width:100%;margin-top:10px;padding:10px;background:none;border:none;color:#7a9e86;font-size:13px;cursor:pointer;font-family:inherit;">← QRコードに戻る</button>
+    </div>
+  </div>
+
   <!-- Step 2: TOTP 二段階認証 -->
   <div class="login-card" id="step2-card" style="display:none;">
     <div class="logo-area">
@@ -274,7 +304,7 @@ const AUTH_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/auth/v1';
 const REST_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/rest/v1';
 const ANON_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4ZHlxa3lxdGl6aHRrd3RwdnJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NzYxODEsImV4cCI6MjA5OTQ1MjE4MX0.yVbClXBk2JVeglevsBLY5sH2_m2ybCf71u4i_YYWyHE';
 
-const ROLE_LABEL = { admin: '管理者', staff: '事務員' };
+const ROLE_LABEL = { super_admin: '権限付与者', admin: '管理者', operator: '担当者', staff: '事務員' };
 
 /* ===================== セッション管理 ===================== */
 
@@ -299,6 +329,19 @@ function _clearSession() {
   sessionStorage.removeItem('takao_session');
   sessionStorage.removeItem('takao_role');
   sessionStorage.removeItem('takao_name');
+  sessionStorage.removeItem('takao_permissions');
+  sessionStorage.removeItem('takao_mfa_enforced');
+}
+
+/** 現在のユーザーの権限オブジェクトを返す */
+function getPermissions() {
+  try { return JSON.parse(sessionStorage.getItem('takao_permissions') || '{}'); }
+  catch { return {}; }
+}
+
+/** 現在のユーザーの2FA解除が管理者によって制限されているか */
+function isMfaEnforced() {
+  return sessionStorage.getItem('takao_mfa_enforced') !== 'false';
 }
 
 function _isExpired(session) {
@@ -332,7 +375,7 @@ async function _getRole(accessToken) {
   const cached = sessionStorage.getItem('takao_role');
   if (cached) return cached;
   try {
-    const res = await fetch(`${REST_URL}/user_roles?select=role,display_name`, {
+    const res = await fetch(`${REST_URL}/user_roles?select=role,display_name,permissions,mfa_enforced`, {
       headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${accessToken}` },
     });
     if (!res.ok) return null;
@@ -340,6 +383,8 @@ async function _getRole(accessToken) {
     const row = data[0];
     if (!row) return null;
     sessionStorage.setItem('takao_role', row.role);
+    sessionStorage.setItem('takao_permissions', JSON.stringify(row.permissions || {}));
+    sessionStorage.setItem('takao_mfa_enforced', String(row.mfa_enforced !== false));
     if (row.display_name) sessionStorage.setItem('takao_name', row.display_name);
     return row.role;
   } catch { return null; }
@@ -400,10 +445,9 @@ async function signIn(email, password) {
       }
     } catch (_) {}
 
-    // MFA不要
+    // TOTP未設定 → 2FA設定を強制（スキップ不可）
     const role = await _getRole(session.access_token);
-    // ロール取得に失敗してもセッションは有効なので消去しない
-    return { ok: true, role: role || null };
+    return { ok: true, mfaSetupRequired: true, role: role || null };
   } catch (e) {
     return { ok: false, error: 'ネットワークエラー: ' + e.message };
   }
@@ -651,7 +695,10 @@ function _injectUserInfo(email, role) {
 
   const name = sessionStorage.getItem('takao_name') || email;
   const label = ROLE_LABEL[role] || role;
-  const badgeColor = role === 'admin' ? '#9b7eb8' : '#6b9e7e';
+  const badgeColor = role === 'super_admin' ? '#c0392b'
+                   : role === 'admin'       ? '#9b7eb8'
+                   : role === 'operator'    ? '#2980b9'
+                   : '#6b9e7e';
 
   const menuId = '_takao_usermenu';
   const html = `
@@ -885,10 +932,20 @@ async function showTotpSetupModal() {
   disableBtn.style.display = 'none';
 
   const factors = await getEnrolledFactors();
+  // mfa_enforced=true かつ super_admin でない場合は解除ボタンを非表示
+  const canDisable = !isMfaEnforced() || sessionStorage.getItem('takao_role') === 'super_admin';
   if (factors.length > 0) {
     _totpFactorId = factors[0].id;
     status.textContent = '✅ 二段階認証は有効です。認証アプリが設定されています。';
-    disableBtn.style.display = 'block';
+    if (canDisable) {
+      disableBtn.style.display = 'block';
+    } else {
+      disableBtn.style.display = 'none';
+      const note = document.createElement('p');
+      note.style.cssText = 'font-size:12px;color:#888;margin-top:8px;';
+      note.textContent = '🔒 二段階認証の解除は権限付与者のみ行えます。';
+      status.parentNode.insertBefore(note, disableBtn);
+    }
   } else {
     status.textContent = '二段階認証は現在無効です。設定するとログイン時にアプリのコード入力が必要になります。';
     startBtn.style.display = 'block';
@@ -1014,6 +1071,57 @@ function _loadQRLib(cb) {
     var _mfaTempToken = null;
     var _loginEmail = '';
     var _loginPassword = '';
+    var _step3FactorId = null;
+
+    // ===== Step3: 2FA 強制セットアップ =====
+    async function step3StartSetup() {
+      var result = await enrollTotp();
+      if (!result.ok) {
+        // すでに設定済みの場合はそのままログイン画面に飛ばす
+        var params = new URLSearchParams(location.search);
+        var redirect = params.get('redirect');
+        window.location.href = (redirect && redirect.startsWith('/')) ? redirect : 'index.html';
+        return;
+      }
+      _step3FactorId = result.factorId;
+      document.getElementById('step3-secret').textContent = result.secret || '';
+      var canvas = document.getElementById('step3-qr');
+      canvas.innerHTML = '';
+      _loadQRLib(function() {
+        new QRCode(canvas, { text: result.totpUri, width: 200, height: 200,
+          colorDark: '#2d4a36', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+      });
+    }
+
+    function step3GoVerify() {
+      document.getElementById('step3-s1').style.display = 'none';
+      document.getElementById('step3-s2').style.display = 'block';
+      setTimeout(function() { document.getElementById('step3Code').focus(); }, 100);
+    }
+
+    function step3GoQR() {
+      document.getElementById('step3-s2').style.display = 'none';
+      document.getElementById('step3-s1').style.display = 'block';
+    }
+
+    async function step3Verify() {
+      var code = document.getElementById('step3Code').value.replace(/\D/g, '');
+      var errEl = document.getElementById('step3ErrMsg');
+      var btn   = document.getElementById('step3VerifyBtn');
+      errEl.style.display = 'none';
+      if (code.length !== 6) { errEl.textContent = '6桁のコードを入力してください'; errEl.style.display = 'block'; return; }
+      btn.disabled = true; btn.textContent = '確認中…';
+      var result = await verifyTotpEnrollment(_step3FactorId, code);
+      btn.disabled = false; btn.textContent = '設定を完了してログイン';
+      if (result.ok) {
+        var params = new URLSearchParams(location.search);
+        var redirect = params.get('redirect');
+        window.location.href = (redirect && redirect.startsWith('/')) ? redirect : 'index.html';
+      } else {
+        errEl.textContent = result.error || '認証コードが正しくありません';
+        errEl.style.display = 'block';
+      }
+    }
 
     function backToStep1() {
       document.getElementById('step2-card').style.display = 'none';
@@ -1054,6 +1162,11 @@ function _loadQRLib(cb) {
         document.getElementById('step1-card').style.display = 'none';
         document.getElementById('step2-card').style.display = 'block';
         setTimeout(function() { document.getElementById('totpCode').focus(); }, 100);
+      } else if (result.ok && result.mfaSetupRequired) {
+        // 2FA未設定 → セットアップ画面へ（スキップ不可）
+        document.getElementById('step1-card').style.display = 'none';
+        document.getElementById('step3-card').style.display = 'block';
+        await step3StartSetup();
       } else if (result.ok) {
         if (window.PasswordCredential) {
           try {

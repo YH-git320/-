@@ -470,6 +470,14 @@ const H = {
   'Authorization': 'Bearer ' + SUPABASE_KEY,
   'Content-Type': 'application/json'
 };
+function getH() {
+  let token = SUPABASE_KEY;
+  try {
+    const s = JSON.parse(sessionStorage.getItem('takao_session'));
+    if (s && s.access_token) token = s.access_token;
+  } catch(e) {}
+  return { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+}
 
 /* ===== ユーティリティ（タイムゾーン対応） ===== */
 function localDateStr(d) {
@@ -524,7 +532,7 @@ async function fetchAll(table, params='') {
   let rows = [], offset = 0, limit = 1000;
   while (true) {
     const url = `${SUPABASE_URL}/rest/v1/${table}?${params}${params?'&':''}offset=${offset}&limit=${limit}`;
-    const res = await fetch(url, { headers: H });
+    const res = await fetch(url, { headers: getH() });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
     rows = rows.concat(data);
@@ -672,6 +680,7 @@ async function exportNippo() {
     const from = document.getElementById('nippo-from').value;
     const to   = document.getElementById('nippo-to').value;
     downloadCSV(rows, `日報_${from}_${to}.csv`);
+    await logExportOperation('日報CSV', { count: rows.length, from, to });
     setStatus('nippo-status', rows.length + ' 件をダウンロードしました', 'success');
   } catch(e) {
     setStatus('nippo-status', 'エラー：' + e.message, 'error');
@@ -718,6 +727,7 @@ async function exportAssign() {
     const params = `work_date=gte.${from}&work_date=lte.${to}&order=work_date.asc,school_name.asc`;
     const data = assignData.length > 0 ? assignData : await fetchAll('assignments', params);
     downloadCSV(data, `配置表_${from}_${to}.csv`);
+    await logExportOperation('配置表CSV', { count: data.length, from, to });
     setStatus('assign-status', data.length + ' 件をダウンロードしました', 'success');
   } catch(e) {
     setStatus('assign-status', 'エラー：' + e.message, 'error');
@@ -740,6 +750,7 @@ async function exportMaster(table) {
   try {
     const data = await fetchAll(table, 'active=eq.true&order=id');
     downloadCSV(data, MASTER_LABEL[table] + '.csv');
+    await logExportOperation('マスターCSV', { table, label: MASTER_LABEL[table], count: data.length });
     setStatus('master-status', MASTER_LABEL[table] + '：' + data.length + ' 件をダウンロードしました', 'success');
   } catch(e) {
     setStatus('master-status', 'エラー：' + e.message, 'error');
@@ -765,6 +776,7 @@ async function exportEmpJobTypes() {
       '登録日': r.created_at || '',
     }));
     downloadCSV(rows, '従業員業務紐付け.csv');
+    await logExportOperation('マスターCSV', { table: 'employee_job_types', label: '従業員業務紐付け', count: rows.length });
     setStatus('master-status', rows.length + ' 件をダウンロードしました', 'success');
   } catch(e) {
     setStatus('master-status', 'エラー：' + e.message, 'error');
@@ -847,6 +859,7 @@ async function runFullBackup() {
     a.click();
     URL.revokeObjectURL(url);
 
+    await logExportOperation('全データバックアップ', { tables: targets.length, errors: errors.length, filename: `高尾輸送バックアップ_${dateStr}_${timeStr}.zip` });
     if (errors.length > 0) {
       label.textContent = '⚠️ 一部エラー: ' + errors.join(' / ');
       label.style.color = '#c17f3e';
@@ -890,6 +903,29 @@ function loadScript(src) {
     document.head.appendChild(s);
   });
 }
+
+// エクスポート操作ログ記録
+async function logExportOperation(operation, details) {
+  try {
+    const s = JSON.parse(sessionStorage.getItem('takao_session') || '{}');
+    const body = {
+      user_id: s.user_id || null,
+      user_email: s.email || null,
+      user_role: sessionStorage.getItem('takao_role') || null,
+      operation,
+      details: details || null,
+    };
+    await fetch(`${SUPABASE_URL}/rest/v1/export_log`, {
+      method: 'POST',
+      headers: getH(),
+      body: JSON.stringify(body)
+    });
+  } catch(e) { console.warn('export_log failed:', e); }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  initAuth(['super_admin', 'admin']);
+});
 </script>
 <script>
 // ===== 高尾輸送サービス 管理システム 共通認証モジュール =====
@@ -900,7 +936,7 @@ const AUTH_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/auth/v1';
 const REST_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/rest/v1';
 const ANON_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4ZHlxa3lxdGl6aHRrd3RwdnJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NzYxODEsImV4cCI6MjA5OTQ1MjE4MX0.yVbClXBk2JVeglevsBLY5sH2_m2ybCf71u4i_YYWyHE';
 
-const ROLE_LABEL = { admin: '管理者', staff: '事務員' };
+const ROLE_LABEL = { super_admin: '権限付与者', admin: '管理者', operator: '担当者', staff: '事務員' };
 
 /* ===================== セッション管理 ===================== */
 
@@ -925,6 +961,17 @@ function _clearSession() {
   sessionStorage.removeItem('takao_session');
   sessionStorage.removeItem('takao_role');
   sessionStorage.removeItem('takao_name');
+  sessionStorage.removeItem('takao_permissions');
+  sessionStorage.removeItem('takao_mfa_enforced');
+}
+
+function getPermissions() {
+  try { return JSON.parse(sessionStorage.getItem('takao_permissions') || '{}'); }
+  catch { return {}; }
+}
+
+function isMfaEnforced() {
+  return sessionStorage.getItem('takao_mfa_enforced') !== 'false';
 }
 
 function _isExpired(session) {
@@ -958,7 +1005,7 @@ async function _getRole(accessToken) {
   const cached = sessionStorage.getItem('takao_role');
   if (cached) return cached;
   try {
-    const res = await fetch(`${REST_URL}/user_roles?select=role,display_name`, {
+    const res = await fetch(`${REST_URL}/user_roles?select=role,display_name,permissions,mfa_enforced`, {
       headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${accessToken}` },
     });
     if (!res.ok) return null;
@@ -966,6 +1013,8 @@ async function _getRole(accessToken) {
     const row = data[0];
     if (!row) return null;
     sessionStorage.setItem('takao_role', row.role);
+    sessionStorage.setItem('takao_permissions', JSON.stringify(row.permissions || {}));
+    sessionStorage.setItem('takao_mfa_enforced', String(row.mfa_enforced !== false));
     if (row.display_name) sessionStorage.setItem('takao_name', row.display_name);
     return row.role;
   } catch { return null; }
@@ -1276,7 +1325,10 @@ function _injectUserInfo(email, role) {
 
   const name = sessionStorage.getItem('takao_name') || email;
   const label = ROLE_LABEL[role] || role;
-  const badgeColor = role === 'admin' ? '#9b7eb8' : '#4d7a5e';
+  const badgeColor = role === 'super_admin' ? '#c0392b'
+                   : role === 'admin'       ? '#9b7eb8'
+                   : role === 'operator'    ? '#2980b9'
+                   : '#6b9e7e';
   const badgeBg    = 'transparent';
   const badgeBorder = 'transparent';
 
@@ -1511,11 +1563,24 @@ async function showTotpSetupModal() {
   startBtn.style.display = 'none';
   disableBtn.style.display = 'none';
 
+  const canDisable = !isMfaEnforced() || sessionStorage.getItem('takao_role') === 'super_admin';
   const factors = await getEnrolledFactors();
   if (factors.length > 0) {
     _totpFactorId = factors[0].id;
     status.textContent = '✅ 二段階認証は有効です。認証アプリが設定されています。';
-    disableBtn.style.display = 'block';
+    if (canDisable) {
+      disableBtn.style.display = 'block';
+    } else {
+      disableBtn.style.display = 'none';
+      const noteId = '_tm_totp_mfa_note';
+      if (!document.getElementById(noteId)) {
+        const note = document.createElement('p');
+        note.id = noteId;
+        note.style.cssText = 'font-size:12px;color:#888;margin-top:8px;';
+        note.textContent = '🔒 二段階認証の解除は権限付与者のみ行えます。';
+        status.parentNode.insertBefore(note, disableBtn);
+      }
+    }
   } else {
     status.textContent = '二段階認証は現在無効です。設定するとログイン時にアプリのコード入力が必要になります。';
     startBtn.style.display = 'block';
