@@ -835,6 +835,7 @@ function switchSection(key) {
   document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
   document.getElementById('sec-' + key).classList.add('active');
   document.querySelectorAll('.sidebar-item')[SECTIONS.indexOf(key)].classList.add('active');
+  sessionStorage.setItem('master_section', key);
   if (key === 'employees') loadEmployees();
   else if (key === 'jobtypes') loadJobTypes();
   else if (key === 'courses') loadCourses();
@@ -856,7 +857,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   await loadJobTypes();   // 業務マスタを先に読む（従業員表示で使う）
-  await loadEmployees();
+  // 前回開いていたセクションに復元（更新時もそのページにとどまる）
+  const _savedSection = sessionStorage.getItem('master_section') || 'employees';
+  switchSection(_savedSection);
   // ドラッグ&ドロップ
   document.querySelectorAll('.import-zone').forEach(zone => {
     zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
