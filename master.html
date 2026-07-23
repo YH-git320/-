@@ -739,23 +739,46 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
       <div class="panel">
         <h2>🔑 アカウント管理 <span class="count-badge" id="cnt-admins">0</span></h2>
         <div style="font-size:13px; color:#555; margin-bottom:16px; line-height:1.7;">
-          管理者・事務員のシステムアカウントを管理します。<br>
-          アカウント作成時に仮パスワードを設定し、各自にパスワード変更をお願いしてください。
+          システムのアカウントを管理します。アカウント作成時に仮パスワードを設定し、各自に初回ログイン後のパスワード変更と二段階認証の設定をお願いしてください。
         </div>
         <details class="add-form-details" id="details-admins-form">
-          <summary>＋ 新規追加</summary>
-          <div class="form-row">
-            <div class="form-field"><label>氏名 *</label><input type="text" id="adm-name" placeholder="山田 太郎"></div>
-            <div class="form-field"><label>メールアドレス *</label><input type="email" id="adm-email" placeholder="yamada@example.com"></div>
-            <div class="form-field">
-              <label>役割 *</label>
-              <select id="adm-role">
-                <option value="staff">事務員</option>
-                <option value="admin">管理者</option>
-              </select>
+          <summary>＋ 新規アカウント追加</summary>
+          <div style="padding:16px 0 8px;">
+            <div class="form-row">
+              <div class="form-field"><label>氏名 *</label><input type="text" id="adm-name" placeholder="山田 太郎"></div>
+              <div class="form-field"><label>メールアドレス *</label><input type="email" id="adm-email" placeholder="yamada@example.com"></div>
+              <div class="form-field">
+                <label>役割 *</label>
+                <select id="adm-role" onchange="onAdmRoleChange()">
+                  <option value="staff">事務員</option>
+                  <option value="operator">操作担当者</option>
+                  <option value="admin">管理者</option>
+                  <option value="super_admin" id="adm-role-superadmin" style="display:none;">権限付与者</option>
+                </select>
+              </div>
+              <div class="form-field"><label>仮パスワード *（8文字以上）</label><input type="text" id="adm-pass" placeholder="Takao2024!" autocomplete="new-password"></div>
             </div>
-            <div class="form-field"><label>仮パスワード *（8文字以上）</label><input type="text" id="adm-pass" placeholder="Takao2024!" autocomplete="new-password"></div>
-            <button class="btn btn-add" style="align-self:flex-end;" onclick="createAccount()">＋ 作成</button>
+            <!-- MFA強制 -->
+            <div style="margin:10px 0 6px; display:flex; align-items:center; gap:8px;">
+              <input type="checkbox" id="adm-mfa-enforced" checked style="width:16px;height:16px;accent-color:#4d7a5e;cursor:pointer;">
+              <label for="adm-mfa-enforced" style="font-size:13px;color:#2d3b35;cursor:pointer;font-weight:600;">🔒 二段階認証を強制する（本人が解除不可）</label>
+            </div>
+            <!-- 操作担当者 アクセス権設定 -->
+            <div id="adm-perm-section" style="display:none; margin-top:14px; padding:14px; background:#f5f8f4; border-radius:10px; border:1px solid #d0e4d6;">
+              <div style="font-size:13px;font-weight:700;color:#4d7a5e;margin-bottom:10px;">📋 アクセス権設定（操作担当者）</div>
+              <div style="font-size:12px;color:#666;margin-bottom:10px;">チェックを外したセクションは操作担当者から非表示になります（未設定はすべて表示）</div>
+              <div style="display:flex;flex-wrap:wrap;gap:10px 20px;">
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" class="adm-perm-cb" data-sec="employees" checked style="accent-color:#4d7a5e;"> 👥 従業員</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" class="adm-perm-cb" data-sec="jobtypes" checked style="accent-color:#4d7a5e;"> 💼 業務マスタ</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" class="adm-perm-cb" data-sec="courses" checked style="accent-color:#4d7a5e;"> 🏫 コース名</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" class="adm-perm-cb" data-sec="vehicles" checked style="accent-color:#4d7a5e;"> 🚗 車両</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" class="adm-perm-cb" data-sec="offices" checked style="accent-color:#4d7a5e;"> 🏢 営業所</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" class="adm-perm-cb" data-sec="permits" checked style="accent-color:#4d7a5e;"> 📋 営業許可</label>
+              </div>
+            </div>
+            <div style="margin-top:14px;">
+              <button class="btn btn-add" onclick="createAccount()">＋ 作成</button>
+            </div>
           </div>
         </details>
         <div id="status-admins" class="status-bar"></div>
@@ -764,15 +787,24 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
         <h2>アカウント一覧</h2>
         <div style="overflow-x:auto;">
           <table class="data-table">
-            <thead><tr><th>氏名</th><th>メールアドレス</th><th>役割</th><th>作成日</th><th>操作</th></tr></thead>
-            <tbody id="tbody-admins"><tr><td colspan="5" style="text-align:center;color:#999;padding:20px;">読み込み中...</td></tr></tbody>
+            <thead>
+              <tr>
+                <th>氏名</th>
+                <th>メールアドレス</th>
+                <th>役割</th>
+                <th>MFA</th>
+                <th>作成日</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-admins"><tr><td colspan="6" style="text-align:center;color:#999;padding:20px;">読み込み中...</td></tr></tbody>
           </table>
         </div>
       </div>
 
       <!-- パスワードリセットモーダル -->
       <div id="reset-pw-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:5000;align-items:center;justify-content:center;">
-        <div style="background:white;border-radius:16px;padding:32px;max-width:380px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.18);font-family:inherit;">
+        <div style="background:white;border-radius:16px;padding:32px;max-width:400px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.18);font-family:inherit;">
           <h3 style="font-size:16px;color:#4d7a5e;margin-bottom:8px;">🔑 パスワードリセット</h3>
           <div id="reset-target-name" style="font-size:13px;color:#555;margin-bottom:16px;"></div>
           <div class="form-field" style="margin-bottom:14px;">
@@ -784,6 +816,48 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
           <div style="display:flex;gap:8px;">
             <button class="btn btn-primary" onclick="resetPassword()">リセット</button>
             <button class="btn btn-gray" onclick="closeResetModal()">キャンセル</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 権限編集モーダル -->
+      <div id="perm-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:5000;align-items:center;justify-content:center;">
+        <div style="background:white;border-radius:16px;padding:28px 32px;max-width:480px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.18);font-family:inherit;">
+          <h3 style="font-size:16px;color:#4d7a5e;margin-bottom:4px;">⚙️ 権限・役割の設定</h3>
+          <div id="perm-modal-name" style="font-size:13px;color:#666;margin-bottom:18px;"></div>
+
+          <div style="margin-bottom:14px;">
+            <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:6px;">役割</label>
+            <select id="perm-role" onchange="onPermRoleChange()"
+              style="width:100%;padding:8px 10px;border:1.5px solid #c8d8cc;border-radius:8px;font-size:13px;font-family:inherit;">
+              <option value="staff">事務員</option>
+              <option value="operator">操作担当者</option>
+              <option value="admin">管理者</option>
+              <option value="super_admin" id="perm-role-superadmin" style="display:none;">権限付与者</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom:14px; display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="perm-mfa-enforced" style="width:16px;height:16px;accent-color:#4d7a5e;cursor:pointer;">
+            <label for="perm-mfa-enforced" style="font-size:13px;color:#2d3b35;cursor:pointer;font-weight:600;">🔒 二段階認証を強制する</label>
+          </div>
+
+          <div id="perm-section" style="display:none; margin-top:6px; padding:14px; background:#f5f8f4; border-radius:10px; border:1px solid #d0e4d6;">
+            <div style="font-size:13px;font-weight:700;color:#4d7a5e;margin-bottom:10px;">📋 アクセス権設定（操作担当者）</div>
+            <div style="display:flex;flex-wrap:wrap;gap:10px 20px;">
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" class="perm-cb" data-sec="employees" style="accent-color:#4d7a5e;"> 👥 従業員</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" class="perm-cb" data-sec="jobtypes" style="accent-color:#4d7a5e;"> 💼 業務マスタ</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" class="perm-cb" data-sec="courses" style="accent-color:#4d7a5e;"> 🏫 コース名</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" class="perm-cb" data-sec="vehicles" style="accent-color:#4d7a5e;"> 🚗 車両</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" class="perm-cb" data-sec="offices" style="accent-color:#4d7a5e;"> 🏢 営業所</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" class="perm-cb" data-sec="permits" style="accent-color:#4d7a5e;"> 📋 営業許可</label>
+            </div>
+          </div>
+
+          <div id="perm-modal-err" style="display:none;background:#fdf2f2;color:#b5453a;border:1px solid #eeaaa4;border-radius:8px;padding:8px 12px;font-size:13px;margin-top:12px;"></div>
+          <div style="display:flex;gap:8px;margin-top:18px;">
+            <button class="btn btn-primary" onclick="savePermissions()">保存</button>
+            <button class="btn btn-gray" onclick="closePermissionsModal()">キャンセル</button>
           </div>
         </div>
       </div>
@@ -2458,52 +2532,98 @@ async function addVehicle() {
 // ================================================
 //  アカウント管理（Supabase Auth RPC）
 // ================================================
-function authH() {
-  var session = typeof _getSession === 'function' ? _getSession() : null;
-  var token = (session && session.access_token) ? session.access_token : SUPABASE_KEY;
-  return {
-    'apikey': SUPABASE_KEY,
-    'Authorization': 'Bearer ' + token,
-    'Content-Type': 'application/json'
-  };
+
+// ロール表示設定
+const ACCT_ROLE_LABEL = { super_admin:'権限付与者', admin:'管理者', operator:'操作担当者', staff:'事務員' };
+const ACCT_ROLE_COLOR = {
+  super_admin: 'background:#fde8e6;color:#c0392b;',
+  admin:       'background:#f0e8f8;color:#7a5a9e;',
+  operator:    'background:#e8f0fd;color:#2471a3;',
+  staff:       'background:#e4f0e8;color:#2e7d52;'
+};
+
+// 新規作成フォーム: 役割変更 → operator権限パネルの表示切替
+function onAdmRoleChange() {
+  var role = document.getElementById('adm-role').value;
+  document.getElementById('adm-perm-section').style.display = (role === 'operator') ? '' : 'none';
+}
+
+// 新規作成フォームのsuper_adminオプション: super_adminのみ表示
+function _initAdmRoleSelect() {
+  var myRole = sessionStorage.getItem('takao_role');
+  var opt = document.getElementById('adm-role-superadmin');
+  if (opt) opt.style.display = (myRole === 'super_admin') ? '' : 'none';
+  var permOpt = document.getElementById('perm-role-superadmin');
+  if (permOpt) permOpt.style.display = (myRole === 'super_admin') ? '' : 'none';
+}
+
+// 新規作成フォームからpermissions JSONBを構築
+function _buildPermissionsFromForm(cbClass) {
+  var perms = {};
+  document.querySelectorAll('.' + cbClass).forEach(function(cb) {
+    perms[cb.dataset.sec] = cb.checked;
+  });
+  return perms;
 }
 
 var _resetTargetId = null;
+var _permTargetId  = null;
 
 async function loadAccounts() {
+  _initAdmRoleSelect();
   var tbody = document.getElementById('tbody-admins');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;padding:20px;">読み込み中...</td></tr>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:20px;">読み込み中...</td></tr>';
   try {
     var res = await fetch(SUPABASE_URL + '/rest/v1/rpc/list_system_users', {
-      method: 'POST', headers: authH(), body: JSON.stringify({})
+      method: 'POST', headers: getH(), body: JSON.stringify({})
     });
     if (!res.ok) {
       var d = await res.json();
       showStatus('status-admins','error','アカウント一覧の取得に失敗しました: ' + (d.message||d.msg||res.status));
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#b5453a;padding:20px;">取得に失敗しました</td></tr>';
       return;
     }
     var accounts = await res.json();
     document.getElementById('cnt-admins').textContent = accounts.length;
-    var ROLE_JP = { admin: '管理者', staff: '事務員' };
     if (!tbody) return;
     if (accounts.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;padding:20px;">アカウントがありません</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:20px;">アカウントがありません</td></tr>';
       return;
     }
+    var myRole = sessionStorage.getItem('takao_role');
     tbody.innerHTML = accounts.map(function(a) {
       var date = a.created_at ? new Date(a.created_at).toLocaleDateString('ja-JP') : '';
-      var roleColor = a.role === 'admin'
-        ? 'background:#f0e8f8;color:#7a5a9e;'
-        : 'background:#e4f0e8;color:#2e7d52;';
+      var roleStyle = ACCT_ROLE_COLOR[a.role] || 'background:#eee;color:#555;';
+      var roleLabel = ACCT_ROLE_LABEL[a.role] || a.role;
+
+      // MFA列
+      var mfaBadge = a.mfa_active
+        ? '<span style="color:#2e7d52;font-weight:700;">✅ 有効</span>'
+        : '<span style="color:#b5453a;font-weight:700;">❌ 未設定</span>';
+      if (a.mfa_enforced) mfaBadge += ' <span style="font-size:10px;background:#fde8e6;color:#c0392b;border-radius:6px;padding:1px 5px;">強制</span>';
+
+      // 操作ボタン
+      var uid   = escAttr(a.user_id);
+      var dname = escAttr(a.display_name || a.email);
+      var permData = escAttr(JSON.stringify(a.permissions || {}));
+      var btns = '<button class="btn btn-edit btn-small" onclick="showResetPassword(\'' + uid + '\',\'' + dname + '\')">🔑 PW変更</button> ';
+      btns += '<button class="btn btn-edit btn-small" onclick="showPermissionsModal(\'' + uid + '\',\'' + dname + '\',\'' + escAttr(a.role) + '\',' + (a.mfa_enforced?'true':'false') + ',\'' + permData + '\')">⚙️ 権限</button> ';
+      if (a.mfa_active) {
+        btns += '<button class="btn btn-gray btn-small" onclick="resetUserMfa(\'' + uid + '\',\'' + dname + '\')">MFAリセット</button> ';
+      }
+      // 自分自身は削除不可
+      var mySession = JSON.parse(sessionStorage.getItem('takao_session') || '{}');
+      if (a.user_id !== mySession.user_id) {
+        btns += '<button class="btn btn-danger btn-small" onclick="deleteAccount(\'' + uid + '\',\'' + dname + '\')">削除</button>';
+      }
+
       return '<tr>' +
-        '<td>' + esc(a.display_name||'') + '</td>' +
-        '<td>' + esc(a.email) + '</td>' +
-        '<td><span class="badge" style="' + roleColor + '">' + (ROLE_JP[a.role]||a.role) + '</span></td>' +
+        '<td style="font-weight:600;">' + esc(a.display_name||'') + '</td>' +
+        '<td style="font-size:12px;color:#555;">' + esc(a.email) + '</td>' +
+        '<td><span class="badge" style="' + roleStyle + '">' + esc(roleLabel) + '</span></td>' +
+        '<td style="font-size:12px;">' + mfaBadge + '</td>' +
         '<td style="font-size:12px;color:#666;">' + date + '</td>' +
-        '<td style="white-space:nowrap;">' +
-          '<button class="btn btn-edit btn-small" onclick="showResetPassword(\'' + a.user_id + '\',\'' + escAttr(a.display_name||a.email) + '\')">PW変更</button> ' +
-          '<button class="btn btn-danger btn-small" onclick="deleteAccount(\'' + a.user_id + '\',\'' + escAttr(a.display_name||a.email) + '\')">削除</button>' +
-        '</td>' +
+        '<td style="white-space:nowrap;">' + btns + '</td>' +
       '</tr>';
     }).join('');
   } catch(e) {
@@ -2516,17 +2636,27 @@ async function createAccount() {
   var email = document.getElementById('adm-email').value.trim();
   var role  = document.getElementById('adm-role').value;
   var pass  = document.getElementById('adm-pass').value.trim();
+  var mfaEnforced = document.getElementById('adm-mfa-enforced').checked;
   if (!name||!email||!pass) { showStatus('status-admins','error','全ての必須項目を入力してください'); return; }
   if (pass.length < 8) { showStatus('status-admins','error','パスワードは8文字以上で入力してください'); return; }
+  var permissions = null;
+  if (role === 'operator') {
+    permissions = _buildPermissionsFromForm('adm-perm-cb');
+  }
   try {
+    var body = { p_email: email, p_password: pass, p_display_name: name, p_role: role, p_mfa_enforced: mfaEnforced };
+    if (permissions !== null) body.p_permissions = permissions;
     var res = await fetch(SUPABASE_URL + '/rest/v1/rpc/create_system_user', {
-      method: 'POST', headers: authH(),
-      body: JSON.stringify({ p_email: email, p_password: pass, p_display_name: name, p_role: role })
+      method: 'POST', headers: getH(), body: JSON.stringify(body)
     });
     if (res.ok) {
       document.getElementById('adm-name').value = '';
       document.getElementById('adm-email').value = '';
       document.getElementById('adm-pass').value = '';
+      document.getElementById('adm-mfa-enforced').checked = true;
+      document.querySelectorAll('.adm-perm-cb').forEach(function(cb){ cb.checked = true; });
+      document.getElementById('adm-perm-section').style.display = 'none';
+      document.getElementById('adm-role').value = 'staff';
       const det = document.getElementById('details-admins-form');
       if (det) det.removeAttribute('open');
       await loadAccounts();
@@ -2540,6 +2670,7 @@ async function createAccount() {
   }
 }
 
+// ---- PW変更モーダル ----
 function showResetPassword(userId, name) {
   _resetTargetId = userId;
   document.getElementById('reset-target-name').textContent = '対象: ' + name;
@@ -2554,7 +2685,7 @@ function closeResetModal() {
 }
 
 async function resetPassword() {
-  var pass = document.getElementById('reset-pw-input').value.trim();
+  var pass  = document.getElementById('reset-pw-input').value.trim();
   var errEl = document.getElementById('reset-pw-err');
   if (pass.length < 8) {
     errEl.textContent = 'パスワードは8文字以上で入力してください';
@@ -2563,7 +2694,7 @@ async function resetPassword() {
   }
   try {
     var res = await fetch(SUPABASE_URL + '/rest/v1/rpc/reset_user_password', {
-      method: 'POST', headers: authH(),
+      method: 'POST', headers: getH(),
       body: JSON.stringify({ p_user_id: _resetTargetId, p_new_password: pass })
     });
     if (res.ok) {
@@ -2580,11 +2711,88 @@ async function resetPassword() {
   }
 }
 
+// ---- 権限編集モーダル ----
+function onPermRoleChange() {
+  var role = document.getElementById('perm-role').value;
+  document.getElementById('perm-section').style.display = (role === 'operator') ? '' : 'none';
+}
+
+function showPermissionsModal(userId, name, role, mfaEnforced, permJson) {
+  _permTargetId = userId;
+  document.getElementById('perm-modal-name').textContent = '対象: ' + name;
+  document.getElementById('perm-role').value = role;
+  document.getElementById('perm-mfa-enforced').checked = mfaEnforced;
+  var perms = {};
+  try { perms = JSON.parse(permJson); } catch(e) {}
+  document.querySelectorAll('.perm-cb').forEach(function(cb) {
+    cb.checked = perms[cb.dataset.sec] !== false;
+  });
+  onPermRoleChange();
+  document.getElementById('perm-modal-err').style.display = 'none';
+  document.getElementById('perm-modal').style.display = 'flex';
+}
+
+function closePermissionsModal() {
+  document.getElementById('perm-modal').style.display = 'none';
+  _permTargetId = null;
+}
+
+async function savePermissions() {
+  var role        = document.getElementById('perm-role').value;
+  var mfaEnforced = document.getElementById('perm-mfa-enforced').checked;
+  var permissions = null;
+  if (role === 'operator') {
+    permissions = _buildPermissionsFromForm('perm-cb');
+  }
+  var errEl = document.getElementById('perm-modal-err');
+  errEl.style.display = 'none';
+  try {
+    var body = { p_user_id: _permTargetId, p_role: role, p_mfa_enforced: mfaEnforced };
+    if (permissions !== null) body.p_permissions = permissions;
+    var res = await fetch(SUPABASE_URL + '/rest/v1/rpc/update_user_permissions', {
+      method: 'POST', headers: getH(), body: JSON.stringify(body)
+    });
+    if (res.ok) {
+      closePermissionsModal();
+      await loadAccounts();
+      showStatus('status-admins','success','✅ 権限を更新しました');
+    } else {
+      var d = await res.json();
+      errEl.textContent = '更新に失敗しました: ' + (d.message||d.msg||res.status);
+      errEl.style.display = 'block';
+    }
+  } catch(e) {
+    errEl.textContent = 'ネットワークエラー: ' + e.message;
+    errEl.style.display = 'block';
+  }
+}
+
+// ---- MFAリセット ----
+async function resetUserMfa(userId, name) {
+  if (!confirm('「' + name + '」の二段階認証を強制リセットします。\n次回ログイン時に再設定が必要になります。\nよろしいですか？')) return;
+  try {
+    var res = await fetch(SUPABASE_URL + '/rest/v1/rpc/reset_user_mfa', {
+      method: 'POST', headers: getH(),
+      body: JSON.stringify({ p_user_id: userId })
+    });
+    if (res.ok) {
+      await loadAccounts();
+      showStatus('status-admins','success','✅「' + name + '」の二段階認証をリセットしました');
+    } else {
+      var d = await res.json();
+      showStatus('status-admins','error','MFAリセットに失敗しました: ' + (d.message||d.msg||res.status));
+    }
+  } catch(e) {
+    showStatus('status-admins','error','ネットワークエラー: ' + e.message);
+  }
+}
+
+// ---- アカウント削除 ----
 async function deleteAccount(userId, name) {
   if (!confirm('「' + name + '」のアカウントを削除しますか？\nこの操作は取り消せません。')) return;
   try {
     var res = await fetch(SUPABASE_URL + '/rest/v1/rpc/delete_system_user', {
-      method: 'POST', headers: authH(),
+      method: 'POST', headers: getH(),
       body: JSON.stringify({ p_user_id: userId })
     });
     if (res.ok) {
