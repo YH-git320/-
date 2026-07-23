@@ -2111,7 +2111,7 @@ function renderVehiclesTable() {
         <td class="vcol-cap" style="text-align:center;">${v.capacity != null ? v.capacity : ''}</td>
         <td class="vcol-firstreg" style="font-size:11px;">${esc(v.first_registration_date || '')}</td>
         <td class="vcol-status" style="text-align:center;">${statusBadge}${inspBadge}</td>
-        <td style="white-space:nowrap;">${actionBtns}</td>
+        <td><div style="display:flex;gap:4px;align-items:center;">${actionBtns}</div></td>
       </tr>
       <tr id="detail-${v.id}" style="display:none;">
         <td colspan="10" style="padding:12px;background:#f0f8f0;border-bottom:1px solid #dde;">
