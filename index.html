@@ -21,14 +21,20 @@ body {
 }
 
 header {
-  background: #4d7a5e;
-  color: white;
-  padding: 20px 28px;
-  box-shadow: 0 3px 8px rgba(77,122,94,0.25);
+  background: #ffffff;
+  color: #2d4a38;
+  padding: 14px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+  border-bottom: 3px solid #4d7a5e;
 }
-header .company { font-size: 12px; opacity: 0.75; letter-spacing: 0.05em; margin-bottom: 4px; }
-header h1 { font-size: 22px; font-weight: bold; letter-spacing: 0.03em; }
-.header-logo { height: 34px; width: auto; display: block; filter: brightness(0) invert(1); }
+header > div:first-child { display: flex; align-items: center; gap: 14px; }
+header .company { font-size: 12px; color: #5c7a6e; letter-spacing: 0.05em; }
+header h1 { font-size: 20px; font-weight: bold; letter-spacing: 0.02em; color: #2d4a38; white-space: nowrap; }
+.header-logo { height: 36px; width: auto; display: block; }
+a.logo-link { display: block; line-height: 0; flex-shrink: 0; }
 
 .container {
   max-width: 960px;
@@ -138,7 +144,7 @@ footer {
   .card-accent-teal   { border-top-color: #6b9e7e !important; }
   .card-accent-navy   { border-top-color: #4d7a5e !important; }
   .card-title { color: #4d7a5e !important; }
-  header { background: linear-gradient(135deg, #4d7a5e 0%, #6b9e7e 100%) !important; }
+  header { background: #ffffff !important; border-bottom: 3px solid #4d7a5e !important; }
   .section-title { color: #4d7a5e !important; border-left-color: #6b9e7e !important; }
 
   /* ===== iOS / モバイル対応 ===== */
@@ -177,8 +183,8 @@ footer {
 
 <header>
   <div>
-    <img src="logo.png" alt="TAKAO" class="header-logo">
-    <h1>🚌 管理システム ポータル</h1>
+    <a href="index.html" class="logo-link"><img src="logo.png" alt="TAKAO" class="header-logo"></a>
+    <h1>🚌 業務管理システム</h1>
   </div>
 </header>
 

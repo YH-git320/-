@@ -16,17 +16,25 @@
   body { font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic Pro', 'Meiryo', sans-serif; background: #f5f8f4; color: #333; }
 
   header {
-    background: #4d7a5e;
-    color: white;
-    padding: 14px 20px;
+    background: #ffffff;
+    color: #2d4a38;
+    padding: 12px 20px;
     display: flex;
     align-items: center;
-    gap: 12px;
-    box-shadow: 0 2px 6px rgba(77,122,94,0.25);
+    justify-content: space-between;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+    border-bottom: 3px solid #4d7a5e;
   }
-  header h1 { font-size: 18px; font-weight: bold; }
-.header-logo { height: 34px; width: auto; display: block; filter: brightness(0) invert(1); }
-  header .subtitle { font-size: 12px; opacity: 0.8; }
+  header > div:first-child { display: flex; align-items: center; gap: 14px; }
+  header h1 { font-size: 18px; font-weight: bold; color: #2d4a38; white-space: nowrap; }
+  .header-logo { height: 34px; width: auto; display: block; }
+  a.logo-link { display: block; line-height: 0; flex-shrink: 0; }
+  header .subtitle { font-size: 12px; color: #5c7a6e; }
+  header a.hlink {
+    color: #4d7a5e; font-size: 13px; text-decoration: none;
+    border: 1px solid rgba(77,122,94,0.45); padding: 5px 12px; border-radius: 8px; margin-left: 6px;
+  }
+  header a.hlink:hover { background: rgba(77,122,94,0.08); }
 
   .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
 
@@ -354,12 +362,12 @@
 
 <header>
   <div>
-    <img src="logo.png" alt="TAKAO" class="header-logo">
-    <h1>🚌 添乗員配置管理システム</h1>
+    <a href="index.html" class="logo-link"><img src="logo.png" alt="TAKAO" class="header-logo"></a>
+    <h1>🚌 添乗員配置管理</h1>
   </div>
   <div style="display:flex; gap:8px;">
-    <a href="master.html" style="color:rgba(255,255,255,0.85); font-size:13px; text-decoration:none; border:1px solid rgba(255,255,255,0.4); padding:5px 12px; border-radius: 8px;">📂 マスター管理</a>
-    <a href="index.html" style="color:rgba(255,255,255,0.85); font-size:13px; text-decoration:none; border:1px solid rgba(255,255,255,0.4); padding:5px 12px; border-radius: 8px;">🏠 トップ</a>
+    <a href="master.html" class="hlink">📂 マスター管理</a>
+    <a href="index.html" class="hlink">🏠 トップ</a>
   </div>
 </header>
 
