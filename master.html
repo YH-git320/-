@@ -2609,7 +2609,10 @@ async function loadAccounts() {
       var btns = '<button class="btn btn-edit btn-small" onclick="showResetPassword(\'' + uid + '\',\'' + dname + '\')">🔑 PW変更</button> ';
       btns += '<button class="btn btn-edit btn-small" onclick="showPermissionsModal(\'' + uid + '\',\'' + dname + '\',\'' + escAttr(a.role) + '\',' + (a.mfa_enforced?'true':'false') + ',\'' + permData + '\')">⚙️ 権限</button> ';
       if (a.mfa_active) {
-        btns += '<button class="btn btn-gray btn-small" onclick="resetUserMfa(\'' + uid + '\',\'' + dname + '\')">MFAリセット</button> ';
+        btns += '<span style="display:inline-flex;align-items:center;gap:5px;vertical-align:middle;">' +
+          '<button class="btn btn-gray btn-small" onclick="resetUserMfa(\'' + uid + '\',\'' + dname + '\')">MFAリセット</button>' +
+          '<span style="font-size:10px;color:#999;white-space:normal;line-height:1.3;">二段階認証を解除し<br>次回ログイン時に<br>再設定を求めます</span>' +
+        '</span> ';
       }
       // 自分自身は削除不可
       var mySession = JSON.parse(sessionStorage.getItem('takao_session') || '{}');
