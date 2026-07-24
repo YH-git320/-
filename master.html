@@ -350,6 +350,7 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
             <div class="form-field"><label>電話番号</label><input type="tel" id="emp-phone" placeholder="090-0000-0000"></div>
             <div class="form-field"><label>免許番号</label><input type="text" id="emp-license" placeholder="第123456号"></div>
             <div class="form-field"><label>免許有効期限</label><input type="date" id="emp-expiry"></div>
+            <div class="form-field" style="align-self:flex-end;"><label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;"><input type="checkbox" id="emp-license-exempt"> 🚫 免許情報 徴求対象外</label></div>
             <div class="form-field"><label>備考</label><input type="text" id="emp-note"></div>
             <button class="btn btn-add" style="align-self:flex-end;" onclick="addEmployee()">＋ 追加</button>
           </div>
@@ -1123,7 +1124,7 @@ async function loadEmployees() {
     // 従業員一覧（operatorは住所・連絡先マスク済みビューから取得）
     const _staffTable = sessionStorage.getItem('takao_role') === 'operator' ? 'staff_safe' : 'staff';
     const empRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/${_staffTable}?${filter}&select=id,name,name_kana,department,email,phone,employee_code,postal_code,address,hire_date,retirement_date,license_number,license_expiry,note,active`,
+      `${SUPABASE_URL}/rest/v1/${_staffTable}?${filter}&select=id,name,name_kana,department,email,phone,employee_code,postal_code,address,hire_date,retirement_date,license_number,license_expiry,license_required,note,active`,
       { headers: getH() }
     );
     const empData = await empRes.json();
@@ -1220,6 +1221,7 @@ function renderEmployeeGrid(employees, col) {
       : '';
 
     // 未入力・期限警告バッジ（退職者は対象外）
+    const licenseExempt = emp.license_required === false;
     const warnHtml = (() => {
       if (!emp.active) return '';
       const items = [];
@@ -1227,7 +1229,12 @@ function renderEmployeeGrid(employees, col) {
       if (!emp.employee_code) items.push({ text: '社員番号', lv: 'w' });
       if (!emp.phone)         items.push({ text: '電話番号', lv: 'w' });
       if (!emp.hire_date)     items.push({ text: '入社日',   lv: 'w' });
-      if (emp.license_number) {
+      // 免許対象外なのに運転系の業務が付与されている場合はエラー
+      if (licenseExempt && emp.jobTypes.some(jt => jt.name.includes('運転'))) {
+        items.push({ text: '免許対象外に運転業務', lv: 'e' });
+      }
+      // 免許対象外フラグがある場合は免許関連の警告を一切出さない
+      if (!licenseExempt && emp.license_number) {
         if (!emp.license_expiry) {
           items.push({ text: '免許有効期限', lv: 'w' });
         } else {
@@ -1248,6 +1255,10 @@ function renderEmployeeGrid(employees, col) {
         return `<span style="font-size:10px;font-weight:700;background:${bg};color:${col2};border:1px solid ${bd};border-radius:5px;padding:1px 7px;white-space:nowrap;">⚠ ${it.text}</span>`;
       }).join('');
     })();
+    // 免許対象外バッジ（免許欄の代わりに表示）
+    const licenseExemptBadge = licenseExempt
+      ? `<span style="font-size:10px;font-weight:700;background:#eef7f1;color:#4d7a5e;border:1px solid #b4d4c0;border-radius:5px;padding:1px 7px;">免許対象外</span>`
+      : '';
 
     return `
       <div class="emp-card" id="emp-card-${emp.id}" style="${isRetired ? 'opacity:0.65;border-color:#d0c0b0;' : ''}">
@@ -1265,7 +1276,7 @@ function renderEmployeeGrid(employees, col) {
               ${emp.retirement_date ? '<span style="color:#c17f3e;">🔔 退職：'+esc(emp.retirement_date)+'</span>' : ''}
             </div>` : (emp.retirement_date ? `<div class="emp-sub" style="color:#c17f3e;">🔔 退職：${esc(emp.retirement_date)}</div>` : '')}
             ${addrHtml}
-            ${col.license && emp.license_number ? `<div class="emp-sub">🪪 免許：${esc(emp.license_number)}${emp.license_expiry ? '　有効期限：'+emp.license_expiry : ''}</div>` : ''}
+            ${col.license ? (licenseExempt ? `<div class="emp-sub">${licenseExemptBadge}</div>` : (emp.license_number ? `<div class="emp-sub">🪪 免許：${esc(emp.license_number)}${emp.license_expiry ? '　有効期限：'+emp.license_expiry : ''}</div>` : '')) : ''}
             ${col.note && emp.note ? `<div class="emp-sub" style="color:#888;">📝 ${esc(emp.note)}</div>` : ''}
           </div>
           <div class="emp-actions">
@@ -1320,6 +1331,7 @@ async function addEmployee() {
   const phone   = document.getElementById('emp-phone').value.trim();
   const license = document.getElementById('emp-license').value.trim();
   const expiry  = document.getElementById('emp-expiry').value;
+  const licenseExempt = document.getElementById('emp-license-exempt')?.checked || false;
   const note    = document.getElementById('emp-note').value.trim();
   if (!name) { showStatus('status-employees','error','氏名を入力してください'); return; }
   const res = await fetch(`${SUPABASE_URL}/rest/v1/staff`, {
@@ -1329,7 +1341,9 @@ async function addEmployee() {
       employee_code:empCode||null, hire_date:hire||null,
       postal_code:postal||null, address:addr||null,
       retirement_date:retire||null, email:email||null, phone:phone||null,
-      license_number:license||null, license_expiry:expiry||null, note:note||null
+      license_number:license||null, license_expiry:expiry||null,
+      license_required: licenseExempt ? false : null,
+      note:note||null
     })
   });
   if (res.ok) {
@@ -1337,6 +1351,8 @@ async function addEmployee() {
      'emp-postal','emp-address','emp-email','emp-phone','emp-license','emp-expiry','emp-note'].forEach(id => {
       document.getElementById(id).value = '';
     });
+    const exemptCb = document.getElementById('emp-license-exempt');
+    if (exemptCb) exemptCb.checked = false;
     const det = document.getElementById('details-employees-form');
     if (det) det.removeAttribute('open');
     await loadEmployees();
@@ -1363,6 +1379,7 @@ function startEditEmp(id) {
       <div class="form-field"><label>電話番号</label><input type="tel" id="ee-phone-${id}" value="${esc(emp.phone||'')}" style="min-width:140px;"></div>
       <div class="form-field"><label>免許番号</label><input type="text" id="ee-lic-${id}" value="${esc(emp.license_number||'')}" style="min-width:140px;"></div>
       <div class="form-field"><label>免許有効期限</label><input type="date" id="ee-exp-${id}" value="${emp.license_expiry||''}"></div>
+      <div class="form-field" style="align-self:flex-end;"><label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;"><input type="checkbox" id="ee-exempt-${id}" ${emp.license_required === false ? 'checked' : ''}> 🚫 免許情報 徴求対象外</label></div>
       <div class="form-field"><label>備考</label><input type="text" id="ee-note-${id}" value="${esc(emp.note||'')}" style="min-width:160px;"></div>
     </div>
     <div style="display:flex; gap:6px;">
@@ -1384,6 +1401,7 @@ async function saveEditEmp(id) {
   const phone   = document.getElementById(`ee-phone-${id}`).value.trim();
   const license = document.getElementById(`ee-lic-${id}`).value.trim();
   const expiry  = document.getElementById(`ee-exp-${id}`).value;
+  const licenseExempt = document.getElementById(`ee-exempt-${id}`)?.checked || false;
   const note    = document.getElementById(`ee-note-${id}`).value.trim();
   if (!name) { showStatus('status-employees','error','氏名を入力してください'); return; }
   const res = await fetch(`${SUPABASE_URL}/rest/v1/staff?id=eq.${id}`, {
@@ -1392,7 +1410,9 @@ async function saveEditEmp(id) {
       name, name_kana:kana||null, department:dept||null,
       employee_code:empCode||null, hire_date:hire||null, postal_code:postal||null, address:addr||null,
       retirement_date:retire||null, email:email||null, phone:phone||null,
-      license_number:license||null, license_expiry:expiry||null, note:note||null
+      license_number:license||null, license_expiry:expiry||null,
+      license_required: licenseExempt ? false : null,
+      note:note||null
     })
   });
   if (res.ok) { await loadEmployees(); showStatus('status-employees','success','✅ 更新しました'); }
