@@ -375,6 +375,8 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
       <!-- 表示項目トグル -->
       <div class="col-toggle-bar" style="margin-bottom:10px;">
         <span style="font-size:11px;color:#888;font-weight:bold;margin-right:4px;">表示項目：</span>
+        <label><input type="checkbox" id="etog-contact" checked onchange="applyEmpColVisible()">📞 電話・メール</label>
+        <span class="col-toggle-sep"></span>
         <label><input type="checkbox" id="etog-dates" checked onchange="applyEmpColVisible()">📅 入社・退職日</label>
         <span class="col-toggle-sep"></span>
         <label><input type="checkbox" id="etog-address" onchange="applyEmpColVisible()">📮 住所</label>
@@ -1105,6 +1107,7 @@ async function deleteJT(id, name) {
 // 従業員カード表示トグル状態
 function getEmpColVisible() {
   return {
+    contact: document.getElementById('etog-contact')?.checked ?? true,
     dates:   document.getElementById('etog-dates')?.checked ?? true,
     address: document.getElementById('etog-address')?.checked ?? false,
     license: document.getElementById('etog-license')?.checked ?? true,
@@ -1173,7 +1176,7 @@ function chipColor(index) {
 }
 
 function renderEmployeeGrid(employees, col) {
-  col = col || { dates: true, address: false, license: true, note: true };
+  col = col || { contact: true, dates: true, address: false, license: true, note: true };
   const _empRole = sessionStorage.getItem('takao_role');
   const _isAdminEmp = ['super_admin','admin'].includes(_empRole);
   const grid = document.getElementById('emp-grid');
@@ -1184,11 +1187,12 @@ function renderEmployeeGrid(employees, col) {
   grid.innerHTML = employees.map(emp => {
     const isRetired = !emp.active;
     // operatorは電話・メールを表示するが「マスク済み」ラベルを付与
-    const phoneTxt = emp.phone ? (_isAdminEmp ? emp.phone : emp.phone) : null;
-    const emailTxt = emp.email ? (_isAdminEmp ? emp.email : emp.email) : null;
+    const phoneTxt = (col.contact && emp.phone) ? emp.phone : null;
+    const emailTxt = (col.contact && emp.email) ? emp.email : null;
     const sub = [emp.employee_code ? '社員番号：'+emp.employee_code : null,
                  emp.department || null,
-                 phoneTxt || null, emailTxt || null].filter(Boolean).join('　|　');
+                 phoneTxt ? '📞 '+phoneTxt : null,
+                 emailTxt ? '✉ '+emailTxt : null].filter(Boolean).join('　|　');
     // 業務チップ: operator は削除×ボタンなし
     const chips = emp.jobTypes.map((jt, i) => {
       const ci = allJobTypes.findIndex(j => j.id === jt.id);
