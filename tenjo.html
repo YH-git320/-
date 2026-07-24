@@ -489,12 +489,19 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 // 日報フォームのURL（GitHub Pages）
 const NIPPO_FORM_URL = 'https://yh-git320.github.io/-/nippo.html';
 
-const headers = {
-  'apikey': SUPABASE_KEY,
-  'Authorization': 'Bearer ' + SUPABASE_KEY,
-  'Content-Type': 'application/json',
-  'Prefer': 'return=representation'
-};
+function getH() {
+  let token = SUPABASE_KEY;
+  try {
+    const s = JSON.parse(sessionStorage.getItem('takao_session'));
+    if (s && s.access_token) token = s.access_token;
+  } catch(e) {}
+  return {
+    'apikey': SUPABASE_KEY,
+    'Authorization': 'Bearer ' + token,
+    'Content-Type': 'application/json',
+    'Prefer': 'return=representation'
+  };
+}
 
 // ========== グローバルデータ ==========
 let staffList = [];    // [{id, name, email}, ...]
@@ -511,7 +518,7 @@ function localDateStr(d) {
 
 // ========== 初期化 ==========
 document.addEventListener('DOMContentLoaded', async () => {
-  const authorized = await initAuth(['admin', 'staff']);
+  const authorized = await initAuth(['super_admin', 'admin', 'operator', 'staff']);
   if (!authorized) return;
 
   const now = new Date();
@@ -540,17 +547,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ========== データ読み込み ==========
 async function loadStaff() {
   // 「添乗員」業務種別のIDを取得
-  const jtRes = await fetch(`${SUPABASE_URL}/rest/v1/job_types?name=eq.添乗員&select=id&active=eq.true`, { headers });
+  const jtRes = await fetch(`${SUPABASE_URL}/rest/v1/job_types?name=eq.添乗員&select=id&active=eq.true`, { headers: getH() });
   const jtData = await jtRes.json();
   const tenjoTypeId = jtData[0]?.id;
 
   // 全従業員を取得
-  const allRes = await fetch(`${SUPABASE_URL}/rest/v1/staff?active=eq.true&order=name`, { headers });
+  const allRes = await fetch(`${SUPABASE_URL}/rest/v1/staff?active=eq.true&order=name`, { headers: getH() });
   const allStaff = await allRes.json();
 
   if (tenjoTypeId) {
     // 添乗員役割を持つ従業員IDを取得
-    const ejRes = await fetch(`${SUPABASE_URL}/rest/v1/employee_job_types?job_type_id=eq.${tenjoTypeId}&select=employee_id`, { headers });
+    const ejRes = await fetch(`${SUPABASE_URL}/rest/v1/employee_job_types?job_type_id=eq.${tenjoTypeId}&select=employee_id`, { headers: getH() });
     const ejData = await ejRes.json();
     const tenjoIds = new Set(ejData.map(e => e.employee_id));
     staffList = allStaff.filter(s => tenjoIds.has(s.id));
@@ -562,7 +569,7 @@ async function loadStaff() {
 }
 
 async function loadCourses() {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/courses?active=eq.true&order=prefecture,school_name,course_name`, { headers });
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/courses?active=eq.true&order=prefecture,school_name,course_name`, { headers: getH() });
   courseList = await res.json();
 }
 
@@ -704,7 +711,7 @@ async function loadAssignments() {
 async function loadAssignmentsFromDate(date, asTemplate) {
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/assignments?work_date=eq.${date}&order=id`,
-    { headers }
+    { headers: getH() }
   );
   const data = await res.json();
 
@@ -778,12 +785,12 @@ async function saveAssignments() {
 
   const delRes = await fetch(
     `${SUPABASE_URL}/rest/v1/assignments?work_date=eq.${date}`,
-    { method: 'DELETE', headers }
+    { method: 'DELETE', headers: getH() }
   );
 
   const insRes = await fetch(
     `${SUPABASE_URL}/rest/v1/assignments`,
-    { method: 'POST', headers, body: JSON.stringify(toSave) }
+    { method: 'POST', headers: getH(), body: JSON.stringify(toSave) }
   );
 
   if (insRes.ok) {
@@ -842,7 +849,7 @@ async function saveEditStaff(id) {
 
   const res = await fetch(`${SUPABASE_URL}/rest/v1/staff?id=eq.${id}`, {
     method: 'PATCH',
-    headers,
+    headers: getH(),
     body: JSON.stringify({ name, email: email || null })
   });
 
@@ -865,7 +872,7 @@ async function addStaff() {
 
   const res = await fetch(`${SUPABASE_URL}/rest/v1/staff`, {
     method: 'POST',
-    headers,
+    headers: getH(),
     body: JSON.stringify({ name, email: email || null })
   });
 
@@ -884,7 +891,7 @@ async function deleteStaff(id, name) {
   if (!confirm(`${name} さんを削除してもよいですか？`)) return;
   const res = await fetch(`${SUPABASE_URL}/rest/v1/staff?id=eq.${id}`, {
     method: 'PATCH',
-    headers,
+    headers: getH(),
     body: JSON.stringify({ active: false })
   });
   if (res.ok) {
@@ -900,7 +907,7 @@ async function previewNotify() {
 
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/assignments?work_date=eq.${date}&order=id`,
-    { headers }
+    { headers: getH() }
   );
   const assignments = await res.json();
 
@@ -1095,7 +1102,7 @@ const AUTH_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/auth/v1';
 const REST_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/rest/v1';
 const ANON_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4ZHlxa3lxdGl6aHRrd3RwdnJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NzYxODEsImV4cCI6MjA5OTQ1MjE4MX0.yVbClXBk2JVeglevsBLY5sH2_m2ybCf71u4i_YYWyHE';
 
-const ROLE_LABEL = { admin: '管理者', staff: '事務員' };
+const ROLE_LABEL = { super_admin: '権限付与者', admin: '管理者', operator: '担当者', staff: '事務員' };
 
 /* ===================== セッション管理 ===================== */
 
@@ -1120,6 +1127,17 @@ function _clearSession() {
   sessionStorage.removeItem('takao_session');
   sessionStorage.removeItem('takao_role');
   sessionStorage.removeItem('takao_name');
+  sessionStorage.removeItem('takao_permissions');
+  sessionStorage.removeItem('takao_mfa_enforced');
+}
+
+function getPermissions() {
+  try { return JSON.parse(sessionStorage.getItem('takao_permissions')) || {}; }
+  catch { return {}; }
+}
+
+function isMfaEnforced() {
+  return sessionStorage.getItem('takao_mfa_enforced') === 'true';
 }
 
 function _isExpired(session) {
@@ -1153,7 +1171,7 @@ async function _getRole(accessToken) {
   const cached = sessionStorage.getItem('takao_role');
   if (cached) return cached;
   try {
-    const res = await fetch(`${REST_URL}/user_roles?select=role,display_name`, {
+    const res = await fetch(`${REST_URL}/user_roles?select=role,display_name,permissions,mfa_enforced`, {
       headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${accessToken}` },
     });
     if (!res.ok) return null;
@@ -1162,6 +1180,8 @@ async function _getRole(accessToken) {
     if (!row) return null;
     sessionStorage.setItem('takao_role', row.role);
     if (row.display_name) sessionStorage.setItem('takao_name', row.display_name);
+    if (row.permissions) sessionStorage.setItem('takao_permissions', JSON.stringify(row.permissions));
+    if (row.mfa_enforced != null) sessionStorage.setItem('takao_mfa_enforced', String(row.mfa_enforced));
     return row.role;
   } catch { return null; }
 }
@@ -1471,7 +1491,10 @@ function _injectUserInfo(email, role) {
 
   const name = sessionStorage.getItem('takao_name') || email;
   const label = ROLE_LABEL[role] || role;
-  const badgeColor = role === 'admin' ? '#9b7eb8' : '#4d7a5e';
+  const badgeColor = role === 'super_admin' ? '#c0392b'
+    : role === 'admin'    ? '#9b7eb8'
+    : role === 'operator' ? '#2980b9'
+    : '#6b9e7e';
   const badgeBg    = 'transparent';
   const badgeBorder = 'transparent';
 
@@ -1623,6 +1646,7 @@ function _injectModals() {
         <div class="_tm-sub" id="_tm_totp_status">状態を確認中...</div>
         <button id="_tm_totp_start_btn" class="_tm-btn" onclick="_startTotpSetup()" style="display:none;">QRコードを表示して設定開始</button>
         <button id="_tm_totp_disable_btn" class="_tm-btn-sub" onclick="_disableTotp()" style="display:none;background:#fdf2f2;color:#b5453a;border-color:#eeaaa4;">二段階認証を解除する</button>
+        <div id="_tm_totp_lock_note" style="display:none;font-size:12px;color:#888;background:#f5f8f4;border-radius:8px;padding:8px 12px;margin-top:8px;">🔒 組織のポリシーにより二段階認証の解除は制限されています。</div>
         <button class="_tm-btn-sub" onclick="closeTotpSetupModal()" style="margin-top:8px;">閉じる</button>
       </div>
 
@@ -1707,10 +1731,19 @@ async function showTotpSetupModal() {
   disableBtn.style.display = 'none';
 
   const factors = await getEnrolledFactors();
+  const role = sessionStorage.getItem('takao_role');
+  const canDisable = !isMfaEnforced() || role === 'super_admin';
   if (factors.length > 0) {
     _totpFactorId = factors[0].id;
-    status.textContent = '✅ 二段階認証は有効です。認証アプリが設定されています。';
-    disableBtn.style.display = 'block';
+    if (canDisable) {
+      status.textContent = '✅ 二段階認証は有効です。認証アプリが設定されています。';
+      disableBtn.style.display = 'block';
+    } else {
+      status.textContent = '✅ 二段階認証は有効です（組織の設定により解除できません）。';
+      disableBtn.style.display = 'none';
+      const lockNote = document.getElementById('_tm_totp_lock_note');
+      if (lockNote) lockNote.style.display = 'block';
+    }
   } else {
     status.textContent = '二段階認証は現在無効です。設定するとログイン時にアプリのコード入力が必要になります。';
     startBtn.style.display = 'block';
@@ -1786,6 +1819,11 @@ async function _verifyTotpSetup() {
 }
 
 async function _disableTotp() {
+  const role = sessionStorage.getItem('takao_role');
+  if (isMfaEnforced() && role !== 'super_admin') {
+    alert('組織のポリシーにより二段階認証は解除できません。');
+    return;
+  }
   if (!confirm('二段階認証を解除しますか？\nログイン時のコード入力が不要になります。')) return;
   const result = await unenrollTotp(_totpFactorId);
   const err = document.getElementById('_tm_totp_err');
