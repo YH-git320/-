@@ -1219,13 +1219,44 @@ function renderEmployeeGrid(employees, col) {
       ? `<div class="emp-sub">📮 ${emp.postal_code ? esc(emp.postal_code)+'　' : ''}${esc(emp.address||'')}${!_isAdminEmp ? '<span style="font-size:10px;color:#aaa;margin-left:4px;">(表示制限中)</span>' : ''}</div>`
       : '';
 
+    // 未入力・期限警告バッジ（退職者は対象外）
+    const warnHtml = (() => {
+      if (!emp.active) return '';
+      const items = [];
+      if (!emp.name_kana)     items.push({ text: '読み仮名', lv: 'w' });
+      if (!emp.employee_code) items.push({ text: '社員番号', lv: 'w' });
+      if (!emp.phone)         items.push({ text: '電話番号', lv: 'w' });
+      if (!emp.hire_date)     items.push({ text: '入社日',   lv: 'w' });
+      if (emp.license_number) {
+        if (!emp.license_expiry) {
+          items.push({ text: '免許有効期限', lv: 'w' });
+        } else {
+          const today = new Date(); today.setHours(0,0,0,0);
+          const exp   = new Date(emp.license_expiry);
+          if (exp < today) {
+            items.push({ text: '免許期限切れ', lv: 'e' });
+          } else {
+            const days = Math.round((exp - today) / 86400000);
+            if (days <= 90) items.push({ text: `免許期限 残${days}日`, lv: 'e' });
+          }
+        }
+      }
+      return items.map(it => {
+        const bg  = it.lv === 'e' ? '#fde8e6' : '#fef3e2';
+        const col2= it.lv === 'e' ? '#c0392b' : '#b7770a';
+        const bd  = it.lv === 'e' ? '#f5c6c1' : '#f0d48a';
+        return `<span style="font-size:10px;font-weight:700;background:${bg};color:${col2};border:1px solid ${bd};border-radius:5px;padding:1px 7px;white-space:nowrap;">⚠ ${it.text}</span>`;
+      }).join('');
+    })();
+
     return `
       <div class="emp-card" id="emp-card-${emp.id}" style="${isRetired ? 'opacity:0.65;border-color:#d0c0b0;' : ''}">
         <div class="emp-card-top">
           <div class="emp-info">
-            <div class="emp-name">
-              ${isRetired ? '<span style="font-size:11px;background:#c17f3e;color:white;padding:1px 6px;border-radius:4px;margin-right:6px;">退職</span>' : ''}
-              ${esc(emp.name)}${emp.name_kana ? `<span style="font-size:12px;font-weight:normal;color:#888;margin-left:8px;">${esc(emp.name_kana)}</span>` : ''}
+            <div class="emp-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
+              ${isRetired ? '<span style="font-size:11px;background:#c17f3e;color:white;padding:1px 6px;border-radius:4px;">退職</span>' : ''}
+              <span>${esc(emp.name)}${emp.name_kana ? `<span style="font-size:12px;font-weight:normal;color:#888;margin-left:8px;">${esc(emp.name_kana)}</span>` : ''}</span>
+              ${warnHtml}
             </div>
             ${sub ? `<div class="emp-sub">${esc(sub)}</div>` : ''}
             ${col.dates ? `<div class="emp-sub" style="color:#5a7a65;">
