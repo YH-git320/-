@@ -284,6 +284,40 @@ let idx = 0;
 let mode = 'q'; // 'q' | 'confirm' | 'done'
 let prefilledKeys = []; // URLから事前入力されたキー
 
+/* ---- アクセストークン（メールリンクの #t=... から取得） ---- */
+/* フラグメント(#)はサーバーやRefererに送信されないため、クエリ(?)より漏えいしにくい */
+let accessToken = null;
+(function readToken(){
+  const h = location.hash;
+  if (h && h.startsWith('#t=')) {
+    accessToken = h.slice(3);
+    // 読み取り後、アドレスバー・履歴からトークンを消す
+    history.replaceState(null, '', location.pathname + location.search);
+  } else {
+    // 互換: ?t=... も受け付ける
+    const p = new URLSearchParams(location.search);
+    if (p.get('t')) {
+      accessToken = p.get('t');
+      p.delete('t');
+      const qs = p.toString();
+      history.replaceState(null, '', location.pathname + (qs ? '?'+qs : ''));
+    }
+  }
+})();
+
+/* ---- トークンエラー画面 ---- */
+function showTokenError(title, msg){
+  document.getElementById('nav').style.display='none';
+  screen.innerHTML = `
+    <div style="text-align:center;padding:48px 18px;">
+      <div style="font-size:52px;margin-bottom:18px;">🔒</div>
+      <div style="font-size:18px;font-weight:800;color:#b5453a;margin-bottom:12px;">${title}</div>
+      <div style="font-size:14px;color:#5c7066;line-height:1.8;">${msg}</div>
+    </div>`;
+  document.getElementById('count').textContent = '';
+  document.getElementById('pfill').style.width = '0%';
+}
+
 /* ---- URLパラメータ事前入力 ---- */
 (function applyUrlParams(){
   const p = new URLSearchParams(location.search);
@@ -456,20 +490,23 @@ nextBtn.addEventListener('click',async()=>{
     rec['送信日時'] = new Date().toLocaleString('ja-JP');
 
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/nippo_submit`, {
         method: 'POST',
         headers: {
           'apikey': SUPABASE_KEY,
           'Authorization': 'Bearer ' + SUPABASE_KEY,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=minimal'
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify(rec)
+        body: JSON.stringify({ p_token: accessToken, p_data: rec })
       });
 
       if(!res.ok){
         const errText = await res.text();
         console.error('Supabase error:', res.status, errText);
+        if (errText.includes('token expired')) {
+          showTokenError('リンクの有効期限が切れています','お手数ですが管理者に連絡し、新しいリンクを発行してもらってください。');
+          return;
+        }
         throw new Error('送信エラー: ' + res.status);
       }
 
@@ -488,7 +525,61 @@ backBtn.addEventListener('click',()=>{
   if(idx>0){ idx--; recompute(); renderQ(); }
 });
 
-recompute(); renderQ();
+/* ---- 起動: トークン検証 → 事前記入データ取得 → フォーム表示 ---- */
+(async function init(){
+  if (!accessToken) {
+    showTokenError('このページは直接開けません',
+      '日報の入力は、会社からメールで届いた本人専用リンクからのみ行えます。<br>リンクが見当たらない場合は管理者にお問い合わせください。');
+    return;
+  }
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/nippo_open`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ p_token: accessToken })
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      if (errText.includes('token expired')) {
+        showTokenError('リンクの有効期限が切れています',
+          'このリンクは使用できなくなりました。<br>お手数ですが管理者に連絡し、新しいリンクを発行してもらってください。');
+      } else if (errText.includes('too many attempts')) {
+        showTokenError('アクセスが一時制限されています','しばらく時間をおいてから、もう一度リンクを開いてください。');
+      } else {
+        showTokenError('リンクが無効です','このリンクは正しくありません。<br>メールに記載されたリンクをそのまま開いてください。');
+      }
+      return;
+    }
+    const info = await res.json();
+
+    // 事前記入（シフト作成ページで設定された業務内容・時間など）
+    if (info.work_date)  { answers['勤務日'] = info.work_date;  prefilledKeys.push('勤務日'); }
+    if (info.staff_name) { answers['氏名']   = info.staff_name; prefilledKeys.push('氏名'); }
+    if (info.prefill && typeof info.prefill === 'object') {
+      Object.entries(info.prefill).forEach(([k,v]) => {
+        if (v !== null && v !== undefined && String(v) !== '') {
+          answers[k] = String(v);
+          if (!prefilledKeys.includes(k)) prefilledKeys.push(k);
+        }
+      });
+    }
+    // 提出済みの場合は前回の内容を上書き編集できるよう読み込む
+    if (info.previous && typeof info.previous === 'object') {
+      Object.entries(info.previous).forEach(([k,v]) => {
+        if (v !== null && v !== undefined && String(v) !== '') answers[k] = String(v);
+      });
+    }
+
+    recompute(); renderQ();
+  } catch(e) {
+    console.error(e);
+    showTokenError('通信エラー','ネットワークの状態を確認して、もう一度リンクを開いてください。');
+  }
+})();
 </script>
 </body>
 </html>
