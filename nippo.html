@@ -284,6 +284,11 @@ let idx = 0;
 let mode = 'q'; // 'q' | 'confirm' | 'done'
 let prefilledKeys = []; // URLから事前入力されたキー
 
+/* ---- プレビューモード（管理者が画面を確認するため・送信しません） ---- */
+/* 使い方: nippo.html#preview または nippo.html?preview=1 */
+const previewMode = (location.hash === '#preview') ||
+                    (new URLSearchParams(location.search).get('preview') === '1');
+
 /* ---- アクセストークン（メールリンクの #t=... から取得） ---- */
 /* フラグメント(#)はサーバーやRefererに送信されないため、クエリ(?)より漏えいしにくい */
 let accessToken = null;
@@ -304,6 +309,16 @@ let accessToken = null;
     }
   }
 })();
+
+/* ---- プレビュー中の帯 ---- */
+function showPreviewBanner(){
+  const b = document.createElement('div');
+  b.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:60;background:#8ec31f;color:#1e2b22;'
+    + 'font-size:13px;font-weight:700;text-align:center;padding:8px 12px;box-shadow:0 -2px 8px rgba(0,0,0,.12);';
+  b.textContent = '👀 プレビュー表示中です。入力しても送信されません。';
+  document.body.appendChild(b);
+  document.querySelector('.nav').style.bottom = '34px';
+}
 
 /* ---- トークンエラー画面 ---- */
 function showTokenError(title, msg){
@@ -479,6 +494,11 @@ nextBtn.addEventListener('click',async()=>{
     if(idx < steps.length-1){ idx++; renderQ(); }
     else { mode='confirm'; renderConfirm(); }
   } else if(mode==='confirm'){
+    // プレビュー中は送信しない
+    if (previewMode) {
+      alert('プレビュー表示のため送信しません。\n実際の入力は、会社から届く本人専用リンクから行います。');
+      return;
+    }
     // Supabase に送信
     nextBtn.disabled=true; nextBtn.textContent='送信中…';
     document.getElementById('sendErr').classList.remove('show');
@@ -527,9 +547,29 @@ backBtn.addEventListener('click',()=>{
 
 /* ---- 起動: トークン検証 → 事前記入データ取得 → フォーム表示 ---- */
 (async function init(){
+  // プレビューモード: トークン無しで画面だけ確認する（送信はしません）
+  if (previewMode) {
+    answers['勤務日']   = new Date().toISOString().slice(0,10); prefilledKeys.push('勤務日');
+    answers['氏名']     = '（見本）山田 太郎';                  prefilledKeys.push('氏名');
+    answers['勤務種別'] = '登校・下校 両方';                    prefilledKeys.push('勤務種別');
+    answers['登校_学校']       = '〇〇特別支援学校'; prefilledKeys.push('登校_学校');
+    answers['登校_コース']     = '寺田コース';       prefilledKeys.push('登校_コース');
+    answers['登校_出勤場所']   = '車庫';             prefilledKeys.push('登校_出勤場所');
+    answers['登校_出勤指示時刻'] = '07:15';          prefilledKeys.push('登校_出勤指示時刻');
+    answers['下校_学校']       = '〇〇特別支援学校'; prefilledKeys.push('下校_学校');
+    answers['下校_コース']     = '寺田コース';       prefilledKeys.push('下校_コース');
+    answers['下校_出勤場所']   = '車庫';             prefilledKeys.push('下校_出勤場所');
+    answers['下校_出勤指示時刻'] = '13:15';          prefilledKeys.push('下校_出勤指示時刻');
+    showPreviewBanner();
+    recompute(); renderQ();
+    return;
+  }
+
   if (!accessToken) {
     showTokenError('このページは直接開けません',
-      '日報の入力は、会社からメールで届いた本人専用リンクからのみ行えます。<br>リンクが見当たらない場合は管理者にお問い合わせください。');
+      '日報の入力は、会社からメールで届いた本人専用リンクからのみ行えます。<br>リンクが見当たらない場合は管理者にお問い合わせください。' +
+      '<br><br><span style="font-size:13px;color:#8a9a92;">管理者の方へ：画面の確認は ' +
+      '<a href="nippo.html#preview" style="color:#4d7a5e;font-weight:700;">プレビュー</a> をご利用ください。</span>');
     return;
   }
   try {
