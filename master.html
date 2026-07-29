@@ -434,7 +434,7 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
           <label><input type="checkbox" id="col-contract_name" onchange="toggleCourseCol('contract_name')">契約名</label>
           <label><input type="checkbox" id="col-office" checked onchange="toggleCourseCol('office')">車庫</label>
           <label><input type="checkbox" id="col-vehicle" checked onchange="toggleCourseCol('vehicle')">車番</label>
-          <label><input type="checkbox" id="col-permit" onchange="toggleCourseCol('permit')">許可</label>
+          <label><input type="checkbox" id="col-permit" checked onchange="toggleCourseCol('permit')">営業許可</label>
           <label><input type="checkbox" id="col-vehicle_type" checked onchange="toggleCourseCol('vehicle_type')">車両タイプ</label>
           <label><input type="checkbox" id="col-contract_start" onchange="toggleCourseCol('contract_start')">契約始期</label>
           <label><input type="checkbox" id="col-contract_end" onchange="toggleCourseCol('contract_end')">契約終了</label>
@@ -499,7 +499,7 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
                 <th>コース名</th>
                 <th class="col-office">車庫</th>
                 <th class="col-vehicle">車番</th>
-                <th class="col-permit" style="display:none;">許可</th>
+                <th class="col-permit">営業許可</th>
                 <th class="col-vehicle_type">車両タイプ</th>
                 <th class="col-contract_start" style="display:none;">契約始期</th>
                 <th class="col-contract_end" style="display:none;">契約終了</th>
@@ -1572,7 +1572,7 @@ async function addSimple(key, reqField) {
 // ================================================
 const courseColVisible = {
   contract_name: false, office: true, vehicle: true,
-  permit: false, vehicle_type: true, contract_start: false, contract_end: false
+  permit: true, vehicle_type: true, contract_start: false, contract_end: false
 };
 
 function toggleCourseCol(col) {
@@ -1593,7 +1593,7 @@ async function loadCourses() {
     const [vRes, oRes, pRes, cRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/vehicles?active=eq.true&order=vehicle_number&select=id,vehicle_number,vehicle_type,office_name`, { headers: getH() }),
       fetch(`${SUPABASE_URL}/rest/v1/offices?active=eq.true&order=name&select=id,name`, { headers: getH() }),
-      fetch(`${SUPABASE_URL}/rest/v1/permits?active=eq.true&order=permit_number&select=id,permit_number,permit_type`, { headers: getH() }),
+      fetch(`${SUPABASE_URL}/rest/v1/permits?active=eq.true&order=permit_number&select=id,permit_number,permit_type,short_label,target_name`, { headers: getH() }),
       fetch(`${SUPABASE_URL}/rest/v1/courses?active=eq.true&order=id&select=id,prefecture,school_name,contract_name,course_name,vehicle_id,office_id,permit_id,vehicle_type,contract_start,contract_end`, { headers: getH() })
     ]);
     allVehiclesMaster = vRes.ok ? (await vRes.json()) : [];
@@ -1605,6 +1605,20 @@ async function loadCourses() {
     renderCoursesTable();
     applyCourseColVisibility();
   } catch(e) { console.error('loadCourses error:', e); }
+}
+
+// 許可の選択肢ラベル：【特定】都立府中けやきの森学園 など
+function permitOptLabel(p) {
+  const lab = p.short_label ? `【${p.short_label}】` : '';
+  return lab + (p.target_name || p.permit_number || '');
+}
+// 一覧セル用の短縮ラベルバッジ
+function permitBadge(p) {
+  if (!p) return '';
+  const green = (p.short_label === '特定');
+  const bg = green ? '#eef4ef' : '#fff4e6';
+  const fg = green ? '#2d4a38' : '#8a5a1a';
+  return `<span title="${escAttr(p.permit_number||'')}" style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;background:${bg};color:${fg};">${esc(p.short_label || p.permit_type || '')}</span>`;
 }
 
 function populateCourseDropdowns(prefix) {
@@ -1624,7 +1638,7 @@ function populateCourseDropdowns(prefix) {
   if (pSel) {
     const cur = pSel.value;
     pSel.innerHTML = '<option value="">未設定</option>' +
-      allPermitsMaster.map(p => `<option value="${p.id}" ${p.id==cur?'selected':''}>${esc(p.permit_number)}</option>`).join('');
+      allPermitsMaster.map(p => `<option value="${p.id}" ${p.id==cur?'selected':''}>${esc(permitOptLabel(p))}</option>`).join('');
   }
 }
 
@@ -1665,7 +1679,7 @@ function renderCoursesTable() {
       <td>${esc(c.course_name||'')}</td>
       <td class="col-office">${esc(office?.name||'')}</td>
       <td class="col-vehicle">${esc(vehicle?.vehicle_number||'')}</td>
-      <td class="col-permit">${esc(permit?.permit_number||'')}</td>
+      <td class="col-permit">${permitBadge(permit)}</td>
       <td class="col-vehicle_type">${esc(c.vehicle_type||'')}</td>
       <td class="col-contract_start">${esc(c.contract_start||'')}</td>
       <td class="col-contract_end">${esc(c.contract_end||'')}</td>
@@ -1685,7 +1699,7 @@ function startEditCourse(id) {
   const prefOpts = ['東京都','神奈川県'].map(p => `<option value="${p}" ${c.prefecture===p?'selected':''}>${p}</option>`).join('');
   const vOpts = '<option value="">未設定</option>' + allVehiclesMaster.map(v => `<option value="${v.id}" ${v.id===c.vehicle_id?'selected':''}>${esc(v.vehicle_number)}</option>`).join('');
   const oOpts = '<option value="">未設定</option>' + allOfficesMaster.map(o => `<option value="${o.id}" ${o.id===c.office_id?'selected':''}>${esc(o.name)}</option>`).join('');
-  const pOpts = '<option value="">未設定</option>' + allPermitsMaster.map(p => `<option value="${p.id}" ${p.id===c.permit_id?'selected':''}>${esc(p.permit_number)}</option>`).join('');
+  const pOpts = '<option value="">未設定</option>' + allPermitsMaster.map(p => `<option value="${p.id}" ${p.id===c.permit_id?'selected':''}>${esc(permitOptLabel(p))}</option>`).join('');
   tr.innerHTML = `
     <td>${c.id}</td>
     <td><select id="ec-pref-${id}">${prefOpts}</select></td>
