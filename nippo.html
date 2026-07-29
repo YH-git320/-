@@ -303,9 +303,9 @@ function fieldHtml(key){
     return `<div class="fld"><div class="flabel">${esc(label)}</div><div class="roval">${esc(answers[key]||'')}</div></div>`;
   }
   // 交通費は経路ブロックに統合（自動合算）するため単独では出さない
-  if(key.endsWith('_交通費')) return '';
+  if(key.endsWith('交通費')) return '';
   // 経路は「区間表示＋修正」ブロック（テキスト欄は使わない）
-  if(key.endsWith('_経路')){
+  if(key.endsWith('経路')){
     return `<div class="fld"><div class="flabel">${esc(label)}</div>${routeBlockHtml(key)}</div>`;
   }
   const hint = def.hint?`<div class="fhint">${esc(def.hint)}</div>`:'';
