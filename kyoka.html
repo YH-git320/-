@@ -1,313 +1,116 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
-<link rel="apple-touch-icon" href="takao-icon-v6.png">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="高尾輸送">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>高尾輸送サービス 管理システム</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>営業許可マスタ — 高尾輸送サービス</title>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-  font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic Pro', 'Meiryo', sans-serif;
-  background: #f5f8f4;
-  color: #333;
-  min-height: 100vh;
-}
-
-header {
-  background: #ffffff;
-  color: #2d4a38;
-  padding: 14px 28px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.10);
-  border-bottom: 3px solid #4d7a5e;
-}
-header > div:first-child { display: flex; align-items: center; gap: 14px; }
-header .company { font-size: 12px; color: #5c7a6e; letter-spacing: 0.05em; }
-header h1 { font-size: 20px; font-weight: bold; letter-spacing: 0.02em; color: #2d4a38; white-space: nowrap; }
-.header-logo { height: 36px; width: auto; display: block; }
-a.logo-link { display: block; line-height: 0; flex-shrink: 0; }
-
-.container {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 36px 20px;
-}
-
-.section-title {
-  font-size: 13px;
-  font-weight: bold;
-  color: #7fa88a;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  margin-bottom: 14px;
-  padding-left: 4px;
-  border-left: 3px solid #7fa88a;
-  padding-left: 10px;
-}
-
-.card-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
-  margin-bottom: 36px;
-}
-
-.card {
-  background: white;
-  border-radius: 12px;
-  padding: 22px 22px 18px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-  text-decoration: none;
-  color: #333;
-  display: block;
-  transition: transform 0.15s, box-shadow 0.15s;
-  border-top: 4px solid #4d7a5e;
-  position: relative;
-}
-.card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 6px 18px rgba(0,0,0,0.13);
-}
-.card.coming-soon {
-  opacity: 0.55;
-  pointer-events: none;
-  border-top-color: #aaa;
-}
-
-.card-icon { font-size: 32px; margin-bottom: 10px; }
-.card-title { font-size: 16px; font-weight: bold; margin-bottom: 6px; color: #4d7a5e; }
-.card.coming-soon .card-title { color: #888; }
-.card-desc { font-size: 12px; color: #666; line-height: 1.6; }
-
-.badge-soon {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  background: #eee;
-  color: #999;
-  font-size: 10px;
-  font-weight: bold;
-  padding: 2px 8px;
-  border-radius: 14px;
-  letter-spacing: 0.05em;
-}
-
-.card-accent-green  { border-top-color: #2e7d52; }
-.card-accent-orange { border-top-color: #d35400; }
-.card-accent-purple { border-top-color: #7a5a9e; }
-.card-accent-teal   { border-top-color: #148f77; }
-.card-accent-navy   { border-top-color: #4d7a5e; }
-
-footer {
-  text-align: center;
-  padding: 28px;
-  font-size: 12px;
-  color: #aaa;
-}
-
-  /* === Sage Green Theme Refinements === */
-  :root {
-    --sage: #6b9e7e;
-    --sage-dark: #4d7a5e;
-    --sage-tint: #e4f0e8;
-    --sage-light: #f0f7f3;
-    --bg: #f5f8f4;
-    --text: #2d3b35;
-    --text-soft: #5c7066;
-    --border: #c8d8cc;
-  }
-  .btn { border-radius: 9px !important; }
-  .btn-primary  { background: #4d7a5e !important; }
-  .btn-add      { background: #6b9e7e !important; }
-  .btn-success  { background: #2e7d52 !important; }
-  .btn-edit     { background: #9b7eb8 !important; }
-  .btn-danger   { background: #b5453a !important; }
-  .btn-notify   { background: #c17f3e !important; }
-  .btn-dl       { background: #5a9e7a !important; }
-  .btn-gray     { background: #8aaa94 !important; }
-  .btn:hover    { opacity: 0.88 !important; }
-
-  /* index extra */
-  .card { border-radius: 16px !important; border-top-width: 4px; }
-  .card-accent-green  { border-top-color: #4d7a5e !important; }
-  .card-accent-orange { border-top-color: #c17f3e !important; }
-  .card-accent-purple { border-top-color: #9b7eb8 !important; }
-  .card-accent-teal   { border-top-color: #6b9e7e !important; }
-  .card-accent-navy   { border-top-color: #4d7a5e !important; }
-  .card-title { color: #4d7a5e !important; }
-  header { background: #ffffff !important; border-bottom: 3px solid #4d7a5e !important; }
-  .section-title { color: #4d7a5e !important; border-left-color: #6b9e7e !important; }
-
-  /* ===== iOS / モバイル対応 ===== */
-  @media (max-width: 768px) {
-    body { overflow-x: hidden; }
-    header { padding: 14px 16px; }
-    header h1 { font-size: 18px; }
-    .header-logo { height: 26px; }
-    .container { padding: 20px 14px; }
-    .card-grid {
-      grid-template-columns: 1fr;
-      gap: 12px;
-    }
-    .card { padding: 18px 18px 14px; }
-    .card-icon { font-size: 28px; margin-bottom: 8px; }
-    .card-title { font-size: 15px; }
-    .card-desc { font-size: 12px; }
-  }
-
+:root{--g:#4d7a5e;--g2:#2d4a38;--bg:#f5f8f4;--line:#e0e6e0;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:'Noto Sans JP','Hiragino Kaku Gothic Pro','Meiryo',sans-serif;background:var(--bg);color:#2d3b35;}
+header{background:#fff;border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+header .brand{font-size:16px;font-weight:700;color:var(--g2);}
+header nav a{color:var(--g);text-decoration:none;font-size:13px;margin-right:12px;}
+main{max-width:960px;margin:0 auto;padding:16px;}
+h1{font-size:19px;color:var(--g2);margin:0 0 4px;}
+.sub{font-size:13px;color:#6b7d72;margin:0 0 16px;line-height:1.6;}
+.panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px;}
+label.fld{display:block;font-size:13px;color:#6b7d72;margin-bottom:5px;}
+select,input,textarea{font-family:inherit;font-size:15px;padding:9px 10px;border:1px solid #c9d3cc;border-radius:8px;background:#fff;color:#2d3b35;}
+select,input[type=text],input[type=date],textarea{width:100%;}
+textarea{min-height:60px;resize:vertical;}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+@media(max-width:640px){.grid{grid-template-columns:1fr;}}
+button{font-family:inherit;font-size:14px;padding:9px 14px;border:1px solid var(--g);background:#fff;color:var(--g);border-radius:8px;cursor:pointer;}
+button.primary{background:var(--g);color:#fff;}
+button.mini{font-size:12px;padding:6px 10px;}
+button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
+.toolbar .sp{flex:1;}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+.chip{font-size:13px;padding:7px 12px;border:1px solid #c9d3cc;border-radius:999px;background:#fff;color:#6b7d72;cursor:pointer;}
+.chip.active{border:2px solid var(--g);color:var(--g2);background:#eef4ef;font-weight:700;}
+.chip .n{color:#9bb0a3;font-size:12px;margin-left:4px;}
+.pcard{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:#fff;}
+.pcard .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+.pcard .title{font-size:16px;font-weight:700;color:var(--g2);}
+.pcard .no{font-size:13px;color:var(--g);font-weight:700;margin-bottom:2px;}
+.pcard .meta{font-size:13px;color:#5c7066;line-height:1.8;margin-top:6px;}
+.pcard .meta b{color:#2d3b35;font-weight:600;}
+.badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;margin-left:6px;vertical-align:middle;}
+.badge.tokutei{background:#eef4ef;color:#2d4a38;border:1px solid #cfe0d4;}
+.badge.other{background:#fff4e6;color:#8a5a1a;border:1px solid #f0d9b5;}
+.badge.off{background:#f1f1f1;color:#999;border:1px solid #ddd;}
+.note2{font-size:12px;color:#8a7a4a;background:#fdfaef;border:1px solid #efe6c8;border-radius:8px;padding:6px 9px;margin-top:8px;}
+#status{font-size:13px;padding:9px 12px;border-radius:8px;margin-bottom:12px;display:none;}
+#status.ok{display:block;background:#eef7ef;color:#2f7d32;border:1px solid #bfe3c0;}
+#status.err{display:block;background:#fdeceb;color:#b5453a;border:1px solid #f3c3bf;}
+.modal-bg{position:fixed;inset:0;background:rgba(20,30,24,.45);display:none;align-items:flex-start;justify-content:center;padding:20px;overflow:auto;z-index:50;}
+.modal-bg.show{display:flex;}
+.modal{background:#fff;border-radius:14px;max-width:640px;width:100%;padding:18px;}
+.modal h2{font-size:17px;color:var(--g2);margin:0 0 12px;}
+.mrow{margin-bottom:10px;}
+.count{font-size:12px;color:#9bb0a3;margin-left:auto;}
 </style>
 </head>
 <body>
-
-<script>
-  // 未ログイン・セッション期限切れの場合はログイン画面へリダイレクト
-  (function() {
-    try {
-      const s = JSON.parse(sessionStorage.getItem('takao_session'));
-      const now = Math.floor(Date.now() / 1000);
-      if (!s || !s.access_token || !s.expires_at || s.expires_at < now) {
-        location.replace('login.html');
-      }
-    } catch(e) { location.replace('login.html'); }
-  })();
-</script>
-
 <header>
-  <div>
-    <a href="index.html" class="logo-link"><img src="logo.png" alt="TAKAO" class="header-logo"></a>
-    <h1>🚌 業務管理システム</h1>
-  </div>
+  <div class="brand">📜 営業許可マスタ</div>
+  <nav>
+    <a href="index.html">ホーム</a>
+    <a href="keiro.html">通勤経路</a>
+    <a href="tenjo.html">配置</a>
+  </nav>
 </header>
+<main>
+  <h1>営業許可マスタ</h1>
+  <p class="sub">関東運輸局の事業許可を一覧管理します。特定旅客（学校ごと）・一般乗用・一般貸切・一般貨物。許可証原本をもとに登録します。ここは記録用のマスタで、配置や日報とは自動連携していません。</p>
 
-<div class="container">
+  <div id="status"></div>
 
-  <!-- 配置管理 -->
-  <div class="section-title">配置管理</div>
-  <div class="card-grid">
+  <div class="chips" id="chips"></div>
 
-    <a href="tenjo.html" class="card card-accent-navy">
-      <div class="card-icon">📋</div>
-      <div class="card-title">添乗員 配置管理</div>
-      <div class="card-desc">
-        学校・コース別の添乗員配置を入力・保存します。<br>
-        メール通知の送信もこちらから。
-      </div>
-    </a>
-
-    <a href="#" class="card card-accent-orange coming-soon">
-      <div class="badge-soon">準備中</div>
-      <div class="card-icon">🚌</div>
-      <div class="card-title">運転手 配置管理</div>
-      <div class="card-desc">
-        コース別の運転手・車両の配置を管理します。
-      </div>
-    </a>
-
-    <a href="#" class="card card-accent-teal coming-soon">
-      <div class="badge-soon">準備中</div>
-      <div class="card-icon">📅</div>
-      <div class="card-title">スケジュール管理</div>
-      <div class="card-desc">
-        月次・週次の配置スケジュールを一覧表示します。
-      </div>
-    </a>
-
+  <div class="toolbar">
+    <input type="text" id="q" placeholder="学校名・許可番号・区域で検索" style="max-width:320px;" oninput="render()">
+    <label class="row" style="font-size:13px;color:#6b7d72;gap:5px;"><input type="checkbox" id="showInactive" style="width:auto;" onchange="render()">失効も表示</label>
+    <span class="sp"></span>
+    <button class="primary" onclick="openEditor(null)">＋ 許可を追加</button>
   </div>
 
-  <!-- 日報・記録 -->
-  <div class="section-title">日報・記録</div>
-  <div class="card-grid">
+  <div id="list"></div>
+</main>
 
-    <a href="nippo.html#preview" class="card card-accent-green">
-      <div class="card-icon">📝</div>
-      <div class="card-title">日報入力フォーム（見本）</div>
-      <div class="card-desc">
-        添乗員が入力する日報フォームを確認できます。<br>
-        実際の入力は、各自に届く本人専用リンクから行います。
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h2 id="modalTitle">許可を追加</h2>
+    <div class="grid">
+      <div class="mrow"><label class="fld">種別</label>
+        <select id="f_category">
+          <option>特定旅客</option><option>一般乗用旅客</option><option>一般貸切旅客</option><option>一般貨物</option>
+        </select></div>
+      <div class="mrow"><label class="fld">許可番号</label><input type="text" id="f_permit_no" placeholder="例：関自旅一第1352号"></div>
+      <div class="mrow"><label class="fld">事業者番号</label><input type="text" id="f_operator_no" placeholder="例：4700000091"></div>
+      <div class="mrow"><label class="fld">代表取締役（許可時）</label><input type="text" id="f_representative" placeholder="例：八重樫弘道"></div>
+      <div class="mrow"><label class="fld">車体明記名称・対象</label><input type="text" id="f_target_name" placeholder="例：都立府中けやきの森学園"></div>
+      <div class="mrow"><label class="fld">学校名（コース突合用）</label><input type="text" id="f_school_name" placeholder="例：府中けやきの森学園"></div>
+      <div class="mrow"><label class="fld">運送の需要者</label><input type="text" id="f_demander" placeholder="例：東京都学校経営支援センター"></div>
+      <div class="mrow"><label class="fld">営業区域</label><input type="text" id="f_area" placeholder="例：東京都府中市"></div>
+      <div class="mrow"><label class="fld">申請日</label><input type="date" id="f_applied_on"></div>
+      <div class="mrow"><label class="fld">許可日</label><input type="date" id="f_granted_on"></div>
+      <div class="mrow"><label class="fld">限定条件</label><input type="text" id="f_restriction" placeholder="例：霊きゅう限定"></div>
+      <div class="mrow"><label class="fld">状態</label><select id="f_active"><option value="true">有効</option><option value="false">失効</option></select></div>
+    </div>
+    <div class="mrow"><label class="fld">メモ</label><textarea id="f_note" placeholder="補足・条件など"></textarea></div>
+    <div class="row" style="justify-content:space-between;margin-top:6px;">
+      <button class="link" id="delBtn" onclick="delPermit()" style="color:#b5453a;">この許可を削除</button>
+      <div class="row">
+        <button onclick="closeEditor()">キャンセル</button>
+        <button class="primary" onclick="savePermit()">保存</button>
       </div>
-    </a>
-
-    <a href="nippo_link.html" class="card card-accent-green">
-      <div class="card-icon">🔗</div>
-      <div class="card-title">日報リンク 発行・再発行</div>
-      <div class="card-desc">
-        添乗員へのその日の日報リンクを発行します。<br>
-        期限切れ・紛失時の再発行、事務員による代理修正もこちら。
-      </div>
-    </a>
-
-    <a href="#" class="card card-accent-green coming-soon">
-      <div class="badge-soon">準備中</div>
-      <div class="card-icon">📊</div>
-      <div class="card-title">日報 一覧・集計</div>
-      <div class="card-desc">
-        提出された日報の一覧確認・集計を行います。
-      </div>
-    </a>
-
+    </div>
   </div>
-
-  <!-- マスター管理 -->
-  <div class="section-title">マスターデータ管理</div>
-  <div class="card-grid">
-
-    <a href="master.html" class="card card-accent-purple">
-      <div class="card-icon">📂</div>
-      <div class="card-title">マスター管理</div>
-      <div class="card-desc">
-        添乗員・コース名・運転手・車両・営業所・<br>
-        営業許可・管理者のマスターデータを管理します。<br>
-        CSVによる一括取込に対応。
-      </div>
-    </a>
-
-    <a href="keiro.html" class="card card-accent-purple">
-      <div class="card-icon">🚉</div>
-      <div class="card-title">通勤経路マスタ</div>
-      <div class="card-desc">
-        添乗員ごとの通勤経路（登校・下校／出勤・帰宅）と<br>
-        運賃を登録します。日報の交通費の事前記入に使われます。
-      </div>
-    </a>
-
-    <a href="kyoka.html" class="card card-accent-teal">
-      <div class="card-icon">📜</div>
-      <div class="card-title">営業許可マスタ</div>
-      <div class="card-desc">
-        関東運輸局の事業許可（特定旅客・乗用・貸切・貨物）を<br>
-        学校ごとに一覧管理します。許可番号・区域・許可日の記録。
-      </div>
-    </a>
-
-  </div>
-
-  <!-- データ出力 -->
-  <div class="section-title">データ出力</div>
-  <div class="card-grid">
-
-    <a href="export.html" class="card card-accent-teal">
-      <div class="card-icon">📥</div>
-      <div class="card-title">データ出力（CSV）</div>
-      <div class="card-desc">
-        日報・配置表・マスターデータをCSVで出力します。<br>
-        日報は期間・勤務種別・氏名で絞り込み可能。
-      </div>
-    </a>
-
-  </div>
-
 </div>
-
-<footer>高尾輸送サービス 管理システム</footer>
 
 <script>
 // ===== 高尾輸送サービス 管理システム 共通認証モジュール =====
@@ -318,7 +121,7 @@ const AUTH_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/auth/v1';
 const REST_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/rest/v1';
 const ANON_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4ZHlxa3lxdGl6aHRrd3RwdnJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NzYxODEsImV4cCI6MjA5OTQ1MjE4MX0.yVbClXBk2JVeglevsBLY5sH2_m2ybCf71u4i_YYWyHE';
 
-const ROLE_LABEL = { admin: '管理者', staff: '事務員' };
+const ROLE_LABEL = { super_admin: '権限付与者', admin: '管理者', operator: '担当者', staff: '事務員' };
 
 /* ===================== セッション管理 ===================== */
 
@@ -343,6 +146,17 @@ function _clearSession() {
   sessionStorage.removeItem('takao_session');
   sessionStorage.removeItem('takao_role');
   sessionStorage.removeItem('takao_name');
+  sessionStorage.removeItem('takao_permissions');
+  sessionStorage.removeItem('takao_mfa_enforced');
+}
+
+function getPermissions() {
+  try { return JSON.parse(sessionStorage.getItem('takao_permissions')) || {}; }
+  catch { return {}; }
+}
+
+function isMfaEnforced() {
+  return sessionStorage.getItem('takao_mfa_enforced') === 'true';
 }
 
 function _isExpired(session) {
@@ -376,7 +190,7 @@ async function _getRole(accessToken) {
   const cached = sessionStorage.getItem('takao_role');
   if (cached) return cached;
   try {
-    const res = await fetch(`${REST_URL}/user_roles?select=role,display_name`, {
+    const res = await fetch(`${REST_URL}/user_roles?select=role,display_name,permissions,mfa_enforced`, {
       headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${accessToken}` },
     });
     if (!res.ok) return null;
@@ -385,6 +199,8 @@ async function _getRole(accessToken) {
     if (!row) return null;
     sessionStorage.setItem('takao_role', row.role);
     if (row.display_name) sessionStorage.setItem('takao_name', row.display_name);
+    if (row.permissions) sessionStorage.setItem('takao_permissions', JSON.stringify(row.permissions));
+    if (row.mfa_enforced != null) sessionStorage.setItem('takao_mfa_enforced', String(row.mfa_enforced));
     return row.role;
   } catch { return null; }
 }
@@ -410,20 +226,37 @@ async function signIn(email, password) {
 
     const session = _saveSession(data);
 
-    // MFA登録チェック（/auth/v1/user でfactorsを取得）
+    // MFA登録チェック（/auth/v1/user と /auth/v1/factors の両方を試す）
     try {
+      let totpFactor = null;
+
+      // 方法1: /auth/v1/user のfactorsフィールドで確認
       const uRes = await fetch(`${AUTH_URL}/user`, {
         headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
       });
       if (uRes.ok) {
         const userData = await uRes.json();
-        const factors = Array.isArray(userData.factors) ? userData.factors : [];
-        const totp = factors.find(f => f.factor_type === 'totp' && f.status === 'verified');
-        if (totp) {
-          // MFA必要 → セッションを一旦クリアし、仮トークンだけ返す
-          _clearSession();
-          return { ok: true, mfaRequired: true, factorId: totp.id, tempToken: session.access_token };
+        const uf = Array.isArray(userData.factors) ? userData.factors : [];
+        totpFactor = uf.find(f => f.factor_type === 'totp' && f.status === 'verified') || null;
+      }
+
+      // 方法2: /auth/v1/factors でも確認（方法1で見つからない場合のフォールバック）
+      if (!totpFactor) {
+        const fRes = await fetch(`${AUTH_URL}/factors`, {
+          headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
+        });
+        if (fRes.ok) {
+          const fData = await fRes.json();
+          const ff = Array.isArray(fData) ? fData
+                   : Array.isArray(fData?.factors) ? fData.factors : [];
+          totpFactor = ff.find(f => f.factor_type === 'totp' && f.status === 'verified') || null;
         }
+      }
+
+      if (totpFactor) {
+        // MFA必要 → セッションを一旦クリアし、仮トークンだけ返す
+        _clearSession();
+        return { ok: true, mfaRequired: true, factorId: totpFactor.id, tempToken: session.access_token };
       }
     } catch (_) {}
 
@@ -677,7 +510,10 @@ function _injectUserInfo(email, role) {
 
   const name = sessionStorage.getItem('takao_name') || email;
   const label = ROLE_LABEL[role] || role;
-  const badgeColor = role === 'admin' ? '#9b7eb8' : '#4d7a5e';
+  const badgeColor = role === 'super_admin' ? '#c0392b'
+    : role === 'admin'    ? '#9b7eb8'
+    : role === 'operator' ? '#2980b9'
+    : '#6b9e7e';
   const badgeBg    = 'transparent';
   const badgeBorder = 'transparent';
 
@@ -829,6 +665,7 @@ function _injectModals() {
         <div class="_tm-sub" id="_tm_totp_status">状態を確認中...</div>
         <button id="_tm_totp_start_btn" class="_tm-btn" onclick="_startTotpSetup()" style="display:none;">QRコードを表示して設定開始</button>
         <button id="_tm_totp_disable_btn" class="_tm-btn-sub" onclick="_disableTotp()" style="display:none;background:#fdf2f2;color:#b5453a;border-color:#eeaaa4;">二段階認証を解除する</button>
+        <div id="_tm_totp_lock_note" style="display:none;font-size:12px;color:#888;background:#f5f8f4;border-radius:8px;padding:8px 12px;margin-top:8px;">🔒 組織のポリシーにより二段階認証の解除は制限されています。</div>
         <button class="_tm-btn-sub" onclick="closeTotpSetupModal()" style="margin-top:8px;">閉じる</button>
       </div>
 
@@ -913,10 +750,19 @@ async function showTotpSetupModal() {
   disableBtn.style.display = 'none';
 
   const factors = await getEnrolledFactors();
+  const role = sessionStorage.getItem('takao_role');
+  const canDisable = !isMfaEnforced() || role === 'super_admin';
   if (factors.length > 0) {
     _totpFactorId = factors[0].id;
-    status.textContent = '✅ 二段階認証は有効です。認証アプリが設定されています。';
-    disableBtn.style.display = 'block';
+    if (canDisable) {
+      status.textContent = '✅ 二段階認証は有効です。認証アプリが設定されています。';
+      disableBtn.style.display = 'block';
+    } else {
+      status.textContent = '✅ 二段階認証は有効です（組織の設定により解除できません）。';
+      disableBtn.style.display = 'none';
+      const lockNote = document.getElementById('_tm_totp_lock_note');
+      if (lockNote) lockNote.style.display = 'block';
+    }
   } else {
     status.textContent = '二段階認証は現在無効です。設定するとログイン時にアプリのコード入力が必要になります。';
     startBtn.style.display = 'block';
@@ -992,6 +838,11 @@ async function _verifyTotpSetup() {
 }
 
 async function _disableTotp() {
+  const role = sessionStorage.getItem('takao_role');
+  if (isMfaEnforced() && role !== 'super_admin') {
+    alert('組織のポリシーにより二段階認証は解除できません。');
+    return;
+  }
   if (!confirm('二段階認証を解除しますか？\nログイン時のコード入力が不要になります。')) return;
   const result = await unenrollTotp(_totpFactorId);
   const err = document.getElementById('_tm_totp_err');
@@ -1018,6 +869,180 @@ function _loadQRLib(cb) {
 
 
 
+
+</script>
+<script>
+/* ===== 営業許可マスタ ページロジック ===== */
+const CATS = ['特定旅客','一般乗用旅客','一般貸切旅客','一般貨物'];
+let PERMITS = [];
+let filterCat = 'すべて';
+let editingId = null;
+
+function getH(){
+  const s = _getSession();
+  const tok = (s && s.access_token) || ANON_KEY;
+  return { 'apikey': ANON_KEY, 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
+}
+function status(msg, ok){
+  const el = document.getElementById('status');
+  el.textContent = msg; el.className = ok ? 'ok' : 'err';
+  if (ok) setTimeout(() => { if (el.textContent === msg) el.className = ''; }, 4000);
+}
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escA(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+// 西暦ISO(YYYY-MM-DD) → 和暦表記
+const ERAS = [['令和',2018],['平成',1988],['昭和',1925]];
+function wareki(iso){
+  if(!iso) return '—';
+  const [y,m,d] = iso.split('-').map(Number);
+  for(const [name,base] of ERAS){
+    if(y - base >= 1){ const yy = y - base; return `${name}${yy===1?'元':yy}年${m}月${d}日`; }
+  }
+  return `${y}年${m}月${d}日`;
+}
+
+async function loadPermits(){
+  const res = await fetch(`${REST_URL}/business_permits?select=*&order=category.asc,granted_on.desc,permit_no.asc`, { headers: getH() });
+  if(!res.ok){ status('許可の読み込みに失敗しました（'+res.status+'）', false); return; }
+  PERMITS = await res.json();
+}
+
+function catCounts(){
+  const c = { 'すべて': PERMITS.length };
+  CATS.forEach(k => c[k] = PERMITS.filter(p => p.category === k).length);
+  return c;
+}
+function renderChips(){
+  const counts = catCounts();
+  const keys = ['すべて', ...CATS];
+  document.getElementById('chips').innerHTML = keys.map(k =>
+    `<button class="chip${filterCat===k?' active':''}" onclick="setCat('${k}')">${esc(k)}<span class="n">${counts[k]||0}</span></button>`
+  ).join('');
+}
+function setCat(k){ filterCat = k; renderChips(); render(); }
+
+function render(){
+  renderChips();
+  const q = (document.getElementById('q').value || '').trim().toLowerCase();
+  const showInactive = document.getElementById('showInactive').checked;
+  let rows = PERMITS.slice();
+  if(filterCat !== 'すべて') rows = rows.filter(p => p.category === filterCat);
+  if(!showInactive) rows = rows.filter(p => p.active);
+  if(q){
+    rows = rows.filter(p => [p.permit_no,p.target_name,p.school_name,p.demander,p.area,p.restriction,p.note]
+      .some(v => (v||'').toLowerCase().includes(q)));
+  }
+  const list = document.getElementById('list');
+  if(!rows.length){ list.innerHTML = '<p class="muted" style="padding:8px;">該当する許可がありません。</p>'; return; }
+  list.innerHTML = rows.map(pcard).join('');
+}
+
+function pcard(p){
+  const badge = p.category==='特定旅客'
+    ? '<span class="badge tokutei">特定旅客</span>'
+    : `<span class="badge other">${esc(p.category)}</span>`;
+  const off = p.active ? '' : '<span class="badge off">失効</span>';
+  const title = p.target_name || p.category;
+  const meta = [];
+  if(p.area) meta.push(`<b>営業区域</b> ${esc(p.area)}`);
+  if(p.demander) meta.push(`<b>需要者</b> ${esc(p.demander)}`);
+  if(p.restriction) meta.push(`<b>限定</b> ${esc(p.restriction)}`);
+  meta.push(`<b>許可日</b> ${wareki(p.granted_on)}`);
+  if(p.applied_on) meta.push(`<b>申請日</b> ${wareki(p.applied_on)}`);
+  if(p.operator_no) meta.push(`<b>事業者番号</b> ${esc(p.operator_no)}`);
+  if(p.representative) meta.push(`<b>代表</b> ${esc(p.representative)}`);
+  const note = p.note ? `<div class="note2">📝 ${esc(p.note)}</div>` : '';
+  return `<div class="pcard">
+    <div class="top">
+      <div>
+        <div class="no">${esc(p.permit_no)}</div>
+        <div class="title">${esc(title)}${badge}${off}</div>
+      </div>
+      <button class="mini" onclick="openEditor(${p.id})">編集</button>
+    </div>
+    <div class="meta">${meta.join('　／　')}</div>
+    ${note}
+  </div>`;
+}
+
+/* ---- 追加・編集モーダル ---- */
+function setVal(id,v){ document.getElementById(id).value = (v==null?'':v); }
+function openEditor(id){
+  editingId = id;
+  const p = id ? PERMITS.find(x => x.id === id) : null;
+  document.getElementById('modalTitle').textContent = p ? '許可を編集' : '許可を追加';
+  document.getElementById('delBtn').style.display = p ? 'inline-block' : 'none';
+  setVal('f_category', p ? p.category : '特定旅客');
+  setVal('f_permit_no', p && p.permit_no);
+  setVal('f_operator_no', p ? p.operator_no : '4700000091');
+  setVal('f_representative', p ? p.representative : '八重樫弘道');
+  setVal('f_target_name', p && p.target_name);
+  setVal('f_school_name', p && p.school_name);
+  setVal('f_demander', p && p.demander);
+  setVal('f_area', p && p.area);
+  setVal('f_applied_on', p && p.applied_on);
+  setVal('f_granted_on', p && p.granted_on);
+  setVal('f_restriction', p && p.restriction);
+  setVal('f_note', p && p.note);
+  document.getElementById('f_active').value = (p && p.active===false) ? 'false' : 'true';
+  document.getElementById('modalBg').classList.add('show');
+}
+function closeEditor(){ document.getElementById('modalBg').classList.remove('show'); editingId = null; }
+
+function collect(){
+  const g = id => { const v = document.getElementById(id).value.trim(); return v===''?null:v; };
+  return {
+    category: document.getElementById('f_category').value,
+    permit_no: g('f_permit_no'),
+    operator_no: g('f_operator_no'),
+    representative: g('f_representative'),
+    target_name: g('f_target_name'),
+    school_name: g('f_school_name'),
+    demander: g('f_demander'),
+    area: g('f_area'),
+    applied_on: g('f_applied_on'),
+    granted_on: g('f_granted_on'),
+    restriction: g('f_restriction'),
+    note: g('f_note'),
+    active: document.getElementById('f_active').value === 'true',
+    updated_at: new Date().toISOString()
+  };
+}
+async function savePermit(){
+  const body = collect();
+  if(!body.permit_no){ status('許可番号は必須です', false); return; }
+  try{
+    let res;
+    if(editingId){
+      res = await fetch(`${REST_URL}/business_permits?id=eq.${editingId}`, { method:'PATCH', headers: getH(), body: JSON.stringify(body) });
+    }else{
+      res = await fetch(`${REST_URL}/business_permits`, { method:'POST', headers: getH(), body: JSON.stringify(body) });
+    }
+    if(!res.ok){ const t = await res.text(); status('保存に失敗しました：'+t.slice(0,140), false); return; }
+    closeEditor(); await loadPermits(); render(); status('保存しました', true);
+  }catch(e){ status('保存エラー：'+e.message, false); }
+}
+async function delPermit(){
+  if(!editingId) return;
+  const p = PERMITS.find(x => x.id === editingId);
+  if(!confirm(`この許可を削除します。よろしいですか？\n\n${p?p.permit_no:''}　${p?(p.target_name||p.category):''}`)) return;
+  try{
+    const res = await fetch(`${REST_URL}/business_permits?id=eq.${editingId}`, { method:'DELETE', headers: getH() });
+    if(!res.ok){ status('削除に失敗しました', false); return; }
+    closeEditor(); await loadPermits(); render(); status('削除しました', true);
+  }catch(e){ status('削除エラー：'+e.message, false); }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  const ok = await initAuth(['super_admin','admin','operator','staff']);
+  if(!ok) return;
+  try{
+    await loadPermits();
+    render();
+    status('準備ができました。', true);
+  }catch(e){ status('データ読み込みエラー：'+e.message, false); }
+});
 </script>
 </body>
 </html>
