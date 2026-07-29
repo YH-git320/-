@@ -1612,13 +1612,10 @@ function permitOptLabel(p) {
   const lab = p.short_label ? `【${p.short_label}】` : '';
   return lab + (p.target_name || p.permit_number || '');
 }
-// 一覧セル用の短縮ラベルバッジ
+// 一覧セル用の略字（車両マスタと同じプレーンテキスト表示）
 function permitBadge(p) {
   if (!p) return '';
-  const green = (p.short_label === '特定');
-  const bg = green ? '#eef4ef' : '#fff4e6';
-  const fg = green ? '#2d4a38' : '#8a5a1a';
-  return `<span title="${escAttr(p.permit_number||'')}" style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;background:${bg};color:${fg};">${esc(p.short_label || p.permit_type || '')}</span>`;
+  return `<span title="${escAttr(p.permit_number||'')}">${esc(p.short_label || p.permit_type || '')}</span>`;
 }
 
 function populateCourseDropdowns(prefix) {
