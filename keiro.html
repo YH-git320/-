@@ -1000,7 +1000,7 @@ async function delCourse(ci){
 function yahoo(ci, leg, dir, si){
   const seg = model.courses[ci].routes[leg][dir]['区間'][si];
   if (!seg['乗車'] || !seg['下車']){ status('乗車地と下車地を入れてから調べてください', false); return; }
-  const url = 'https://transit.yahoo.co.jp/search/result?from=' + encodeURIComponent(seg['乗車']) + '&to=' + encodeURIComponent(seg['下車']);
+  const url = 'https://transit.yahoo.co.jp/search/result?from=' + encodeURIComponent(seg['乗車']) + '&to=' + encodeURIComponent(seg['下車']) + '&ticket=normal';
   window.open(url, '_blank');
 }
 async function saveAll(){

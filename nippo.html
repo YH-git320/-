@@ -354,7 +354,7 @@ function bindPage(){
   screen.querySelectorAll('[data-yahoo]').forEach(b=>b.addEventListener('click',()=>{
     const seg=slotOf(b.dataset.key)['区間'][Number(b.dataset.si)]||{};
     if(!seg['乗車']||!seg['下車']){ alert('乗車地と下車地を入れてから調べてください'); return; }
-    window.open('https://transit.yahoo.co.jp/search/result?from='+encodeURIComponent(seg['乗車'])+'&to='+encodeURIComponent(seg['下車']),'_blank');
+    window.open('https://transit.yahoo.co.jp/search/result?from='+encodeURIComponent(seg['乗車'])+'&to='+encodeURIComponent(seg['下車'])+'&ticket=normal','_blank');
   }));
   screen.querySelectorAll('.rs').forEach(el=>el.addEventListener('input',()=>{
     const seg=slotOf(el.dataset.key)['区間'][Number(el.dataset.si)]; if(!seg) return;
