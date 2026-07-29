@@ -872,7 +872,7 @@ function _loadQRLib(cb) {
 
 </script>
 <script>
-/* ===== 営業許可マスタ ページロジック ===== */
+/* ===== 営業許可マスタ ページロジック（元データ = permits テーブル） ===== */
 const CATS = ['特定旅客','一般乗用旅客','一般貸切旅客','一般貨物'];
 let PERMITS = [];
 let filterCat = 'すべて';
@@ -903,14 +903,14 @@ function wareki(iso){
 }
 
 async function loadPermits(){
-  const res = await fetch(`${REST_URL}/business_permits?select=*&order=category.asc,granted_on.desc,permit_no.asc`, { headers: getH() });
+  const res = await fetch(`${REST_URL}/permits?select=*&order=permit_type.asc,issue_date.desc,permit_number.asc`, { headers: getH() });
   if(!res.ok){ status('許可の読み込みに失敗しました（'+res.status+'）', false); return; }
   PERMITS = await res.json();
 }
 
 function catCounts(){
   const c = { 'すべて': PERMITS.length };
-  CATS.forEach(k => c[k] = PERMITS.filter(p => p.category === k).length);
+  CATS.forEach(k => c[k] = PERMITS.filter(p => p.permit_type === k).length);
   return c;
 }
 function renderChips(){
@@ -927,10 +927,10 @@ function render(){
   const q = (document.getElementById('q').value || '').trim().toLowerCase();
   const showInactive = document.getElementById('showInactive').checked;
   let rows = PERMITS.slice();
-  if(filterCat !== 'すべて') rows = rows.filter(p => p.category === filterCat);
+  if(filterCat !== 'すべて') rows = rows.filter(p => p.permit_type === filterCat);
   if(!showInactive) rows = rows.filter(p => p.active);
   if(q){
-    rows = rows.filter(p => [p.permit_no,p.target_name,p.school_name,p.demander,p.area,p.restriction,p.note]
+    rows = rows.filter(p => [p.permit_number,p.target_name,p.school_name,p.demander,p.area,p.restriction,p.note]
       .some(v => (v||'').toLowerCase().includes(q)));
   }
   const list = document.getElementById('list');
@@ -939,24 +939,25 @@ function render(){
 }
 
 function pcard(p){
-  const badge = p.category==='特定旅客'
+  const badge = p.permit_type==='特定旅客'
     ? '<span class="badge tokutei">特定旅客</span>'
-    : `<span class="badge other">${esc(p.category)}</span>`;
+    : `<span class="badge other">${esc(p.permit_type||'')}</span>`;
   const off = p.active ? '' : '<span class="badge off">失効</span>';
-  const title = p.target_name || p.category;
+  const title = p.target_name || p.permit_type || '（無題）';
   const meta = [];
   if(p.area) meta.push(`<b>営業区域</b> ${esc(p.area)}`);
   if(p.demander) meta.push(`<b>需要者</b> ${esc(p.demander)}`);
   if(p.restriction) meta.push(`<b>限定</b> ${esc(p.restriction)}`);
-  meta.push(`<b>許可日</b> ${wareki(p.granted_on)}`);
+  meta.push(`<b>許可日</b> ${wareki(p.issue_date)}`);
   if(p.applied_on) meta.push(`<b>申請日</b> ${wareki(p.applied_on)}`);
+  if(p.expiry_date) meta.push(`<b>有効期限</b> ${wareki(p.expiry_date)}`);
   if(p.operator_no) meta.push(`<b>事業者番号</b> ${esc(p.operator_no)}`);
   if(p.representative) meta.push(`<b>代表</b> ${esc(p.representative)}`);
   const note = p.note ? `<div class="note2">📝 ${esc(p.note)}</div>` : '';
   return `<div class="pcard">
     <div class="top">
       <div>
-        <div class="no">${esc(p.permit_no)}</div>
+        <div class="no">${esc(p.permit_number)}</div>
         <div class="title">${esc(title)}${badge}${off}</div>
       </div>
       <button class="mini" onclick="openEditor(${p.id})">編集</button>
@@ -973,8 +974,8 @@ function openEditor(id){
   const p = id ? PERMITS.find(x => x.id === id) : null;
   document.getElementById('modalTitle').textContent = p ? '許可を編集' : '許可を追加';
   document.getElementById('delBtn').style.display = p ? 'inline-block' : 'none';
-  setVal('f_category', p ? p.category : '特定旅客');
-  setVal('f_permit_no', p && p.permit_no);
+  setVal('f_category', p ? p.permit_type : '特定旅客');
+  setVal('f_permit_no', p && p.permit_number);
   setVal('f_operator_no', p ? p.operator_no : '4700000091');
   setVal('f_representative', p ? p.representative : '八重樫弘道');
   setVal('f_target_name', p && p.target_name);
@@ -982,7 +983,7 @@ function openEditor(id){
   setVal('f_demander', p && p.demander);
   setVal('f_area', p && p.area);
   setVal('f_applied_on', p && p.applied_on);
-  setVal('f_granted_on', p && p.granted_on);
+  setVal('f_granted_on', p && p.issue_date);
   setVal('f_restriction', p && p.restriction);
   setVal('f_note', p && p.note);
   document.getElementById('f_active').value = (p && p.active===false) ? 'false' : 'true';
@@ -993,8 +994,8 @@ function closeEditor(){ document.getElementById('modalBg').classList.remove('sho
 function collect(){
   const g = id => { const v = document.getElementById(id).value.trim(); return v===''?null:v; };
   return {
-    category: document.getElementById('f_category').value,
-    permit_no: g('f_permit_no'),
+    permit_type: document.getElementById('f_category').value,
+    permit_number: g('f_permit_no'),
     operator_no: g('f_operator_no'),
     representative: g('f_representative'),
     target_name: g('f_target_name'),
@@ -1002,22 +1003,21 @@ function collect(){
     demander: g('f_demander'),
     area: g('f_area'),
     applied_on: g('f_applied_on'),
-    granted_on: g('f_granted_on'),
+    issue_date: g('f_granted_on'),
     restriction: g('f_restriction'),
     note: g('f_note'),
-    active: document.getElementById('f_active').value === 'true',
-    updated_at: new Date().toISOString()
+    active: document.getElementById('f_active').value === 'true'
   };
 }
 async function savePermit(){
   const body = collect();
-  if(!body.permit_no){ status('許可番号は必須です', false); return; }
+  if(!body.permit_number){ status('許可番号は必須です', false); return; }
   try{
     let res;
     if(editingId){
-      res = await fetch(`${REST_URL}/business_permits?id=eq.${editingId}`, { method:'PATCH', headers: getH(), body: JSON.stringify(body) });
+      res = await fetch(`${REST_URL}/permits?id=eq.${editingId}`, { method:'PATCH', headers: getH(), body: JSON.stringify(body) });
     }else{
-      res = await fetch(`${REST_URL}/business_permits`, { method:'POST', headers: getH(), body: JSON.stringify(body) });
+      res = await fetch(`${REST_URL}/permits`, { method:'POST', headers: getH(), body: JSON.stringify(body) });
     }
     if(!res.ok){ const t = await res.text(); status('保存に失敗しました：'+t.slice(0,140), false); return; }
     closeEditor(); await loadPermits(); render(); status('保存しました', true);
@@ -1026,9 +1026,9 @@ async function savePermit(){
 async function delPermit(){
   if(!editingId) return;
   const p = PERMITS.find(x => x.id === editingId);
-  if(!confirm(`この許可を削除します。よろしいですか？\n\n${p?p.permit_no:''}　${p?(p.target_name||p.category):''}`)) return;
+  if(!confirm(`この許可を削除します。よろしいですか？\n\n${p?p.permit_number:''}　${p?(p.target_name||p.permit_type):''}`)) return;
   try{
-    const res = await fetch(`${REST_URL}/business_permits?id=eq.${editingId}`, { method:'DELETE', headers: getH() });
+    const res = await fetch(`${REST_URL}/permits?id=eq.${editingId}`, { method:'DELETE', headers: getH() });
     if(!res.ok){ status('削除に失敗しました', false); return; }
     closeEditor(); await loadPermits(); render(); status('削除しました', true);
   }catch(e){ status('削除エラー：'+e.message, false); }
