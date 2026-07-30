@@ -760,7 +760,7 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
                   <option value="super_admin" id="adm-role-superadmin" style="display:none;">権限付与者</option>
                 </select>
               </div>
-              <div class="form-field"><label>仮パスワード *（8文字以上）</label><input type="text" id="adm-pass" placeholder="Takao2024!" autocomplete="new-password"></div>
+              <div class="form-field"><label>仮パスワード *（12文字以上・英数字記号）</label><input type="text" id="adm-pass" placeholder="Takao2024!" autocomplete="new-password"></div>
             </div>
             <!-- MFA強制 -->
             <div style="margin:10px 0 6px; display:flex; align-items:center; gap:8px;">
@@ -827,7 +827,7 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
           <h3 style="font-size:16px;color:#4d7a5e;margin-bottom:8px;">🔑 パスワードリセット</h3>
           <div id="reset-target-name" style="font-size:13px;color:#555;margin-bottom:16px;"></div>
           <div class="form-field" style="margin-bottom:14px;">
-            <label style="font-size:12px;font-weight:bold;color:#555;margin-bottom:4px;display:block;">新しいパスワード（8文字以上）</label>
+            <label style="font-size:12px;font-weight:bold;color:#555;margin-bottom:4px;display:block;">新しいパスワード（12文字以上・英数字記号）</label>
             <input type="text" id="reset-pw-input" autocomplete="new-password"
               style="width:100%;padding:8px 10px;border:1.5px solid #c8d8cc;border-radius:8px;font-size:13px;font-family:inherit;">
           </div>
@@ -2761,7 +2761,7 @@ async function createAccount() {
   var pass  = document.getElementById('adm-pass').value.trim();
   var mfaEnforced = document.getElementById('adm-mfa-enforced').checked;
   if (!name||!email||!pass) { showStatus('status-admins','error','全ての必須項目を入力してください'); return; }
-  if (pass.length < 8) { showStatus('status-admins','error','パスワードは8文字以上で入力してください'); return; }
+  if (pass.length < 12) { showStatus('status-admins','error','パスワードは12文字以上（英字・数字・記号を含む）で入力してください'); return; }
   var permissions = null;
   if (role === 'operator' || role === 'admin') {
     permissions = _buildPermissionsFromForm('adm-perm-cb', 'admf', 'admse');
@@ -2813,8 +2813,8 @@ function closeResetModal() {
 async function resetPassword() {
   var pass  = document.getElementById('reset-pw-input').value.trim();
   var errEl = document.getElementById('reset-pw-err');
-  if (pass.length < 8) {
-    errEl.textContent = 'パスワードは8文字以上で入力してください';
+  if (pass.length < 12) {
+    errEl.textContent = 'パスワードは12文字以上（英字・数字・記号を含む）で入力してください';
     errEl.style.display = 'block';
     return;
   }
@@ -3490,11 +3490,11 @@ function _injectModals() {
     <div class="_tm-box">
       <button class="_tm-close" onclick="closePasswordChangeModal()">×</button>
       <div class="_tm-title">🔑 パスワード変更</div>
-      <div class="_tm-sub">新しいパスワードを設定します（8文字以上）</div>
+      <div class="_tm-sub">新しいパスワードを設定します（12文字以上・英数字記号）</div>
       <div id="_tm_pw_err" class="_tm-err"></div>
       <div id="_tm_pw_ok" class="_tm-ok">✅ パスワードを変更しました</div>
       <label class="_tm-label">新しいパスワード</label>
-      <input id="_tm_pw_new" class="_tm-input" type="password" placeholder="新しいパスワード（8文字以上）">
+      <input id="_tm_pw_new" class="_tm-input" type="password" placeholder="新しいパスワード（12文字以上・英数字記号）">
       <label class="_tm-label">確認（再入力）</label>
       <input id="_tm_pw_conf" class="_tm-input" type="password" placeholder="もう一度入力">
       <button id="_tm_pw_btn" class="_tm-btn" onclick="_doChangePassword()">変更する</button>
@@ -3565,7 +3565,7 @@ async function _doChangePassword() {
   const btn  = document.getElementById('_tm_pw_btn');
   err.style.display = 'none';
   ok.style.display = 'none';
-  if (np.length < 8) { err.textContent = 'パスワードは8文字以上で設定してください'; err.style.display = 'block'; return; }
+  if (np.length < 12) { err.textContent = 'パスワードは12文字以上（英字・数字・記号を含む）で設定してください'; err.style.display = 'block'; return; }
   if (np !== conf)   { err.textContent = 'パスワードが一致しません'; err.style.display = 'block'; return; }
   btn.disabled = true; btn.textContent = '変更中…';
   const result = await changePassword(np);
