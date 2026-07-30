@@ -780,6 +780,17 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
                 <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" class="adm-perm-cb" data-sec="permits" checked style="accent-color:#4d7a5e;"> 📋 営業許可</label>
               </div>
             </div>
+            <!-- 個人情報の見せ方（admin/operator を個別に指定・サーバー側で強制） -->
+            <div id="adm-field-section" style="display:none; margin-top:12px; padding:14px; background:#fff7f0; border-radius:10px; border:1px solid #f0d9b5;">
+              <div style="font-size:13px;font-weight:700;color:#8a5a1a;margin-bottom:6px;">🔐 個人情報の見せ方（従業員マスタ）</div>
+              <div style="font-size:12px;color:#666;margin-bottom:10px;">住所などの表示範囲をこのアカウント個別に指定します（サーバー側で強制）。未設定は「フル」。</div>
+              <div style="display:flex;flex-wrap:wrap;gap:12px 20px;">
+                <label style="font-size:13px;">住所 <select class="admf" data-field="address"><option value="full">フル</option><option value="city">市まで</option><option value="hidden">非表示</option></select></label>
+                <label style="font-size:13px;">電話 <select class="admf" data-field="phone"><option value="full">フル</option><option value="masked">一部マスク</option><option value="hidden">非表示</option></select></label>
+                <label style="font-size:13px;">メール <select class="admf" data-field="email"><option value="full">フル</option><option value="masked">一部マスク</option><option value="hidden">非表示</option></select></label>
+                <label style="font-size:13px;">免許番号 <select class="admf" data-field="license_number"><option value="full">フル</option><option value="hidden">非表示</option></select></label>
+              </div>
+            </div>
             <div style="margin-top:14px;">
               <button class="btn btn-add" onclick="createAccount()">＋ 作成</button>
             </div>
@@ -858,6 +869,17 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" class="perm-cb" data-sec="vehicles" style="accent-color:#4d7a5e;"> 🚗 車両</label>
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" class="perm-cb" data-sec="offices" style="accent-color:#4d7a5e;"> 🏢 営業所</label>
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" class="perm-cb" data-sec="permits" style="accent-color:#4d7a5e;"> 📋 営業許可</label>
+            </div>
+          </div>
+
+          <div id="perm-field-section" style="display:none; margin-top:12px; padding:14px; background:#fff7f0; border-radius:10px; border:1px solid #f0d9b5;">
+            <div style="font-size:13px;font-weight:700;color:#8a5a1a;margin-bottom:6px;">🔐 個人情報の見せ方（従業員マスタ）</div>
+            <div style="font-size:12px;color:#666;margin-bottom:10px;">住所などの表示範囲をこのアカウント個別に指定します（サーバー側で強制）。未設定は「フル」。</div>
+            <div style="display:flex;flex-wrap:wrap;gap:12px 20px;">
+              <label style="font-size:13px;">住所 <select class="permf" data-field="address"><option value="full">フル</option><option value="city">市まで</option><option value="hidden">非表示</option></select></label>
+              <label style="font-size:13px;">電話 <select class="permf" data-field="phone"><option value="full">フル</option><option value="masked">一部マスク</option><option value="hidden">非表示</option></select></label>
+              <label style="font-size:13px;">メール <select class="permf" data-field="email"><option value="full">フル</option><option value="masked">一部マスク</option><option value="hidden">非表示</option></select></label>
+              <label style="font-size:13px;">免許番号 <select class="permf" data-field="license_number"><option value="full">フル</option><option value="hidden">非表示</option></select></label>
             </div>
           </div>
 
@@ -1122,15 +1144,15 @@ async function loadEmployees() {
   const empFilter = document.querySelector('input[name="emp-filter"]:checked')?.value || 'active';
   const filter = empFilter === 'all' ? 'order=name' : empFilter === 'retired' ? 'active=eq.false&order=name' : 'active=eq.true&order=name';
   try {
-    // 従業員一覧（operatorは住所・連絡先マスク済みビューから取得）
-    const _staffTable = sessionStorage.getItem('takao_role') === 'operator' ? 'staff_safe' : 'staff';
-    const empRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/${_staffTable}?${filter}&select=id,name,name_kana,department,email,phone,employee_code,postal_code,address,hire_date,retirement_date,license_number,license_expiry,license_required,note,active`,
-      { headers: getH() }
-    );
+    // 従業員一覧：呼び出したユーザーの権限に応じて住所などをサーバー側でマスクして返すRPC
+    const _pf = empFilter === 'all' ? 'all' : (empFilter === 'retired' ? 'inactive' : 'active');
+    const empRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_staff_directory`, {
+      method: 'POST', headers: getH(), body: JSON.stringify({ p_filter: _pf })
+    });
     const empData = await empRes.json();
     if (!empRes.ok) { console.error('staff error:', empData); allEmployees = []; renderEmployeeGrid([]); return; }
-    const employees = Array.isArray(empData) ? empData : [];
+    let employees = Array.isArray(empData) ? empData : [];
+    employees.sort(function(a,b){ return (a.name||'').localeCompare(b.name||'','ja'); });
 
     // 従業員×業務 紐付け
     const ejRes = await fetch(
@@ -1181,6 +1203,10 @@ function renderEmployeeGrid(employees, col) {
   col = col || { contact: true, dates: true, address: false, license: true, note: true };
   const _empRole = sessionStorage.getItem('takao_role');
   const _isAdminEmp = ['super_admin','admin'].includes(_empRole);
+  // 閲覧者自身の項目スコープ（住所などの表示制限）。super_adminは常にフル
+  const _myFields = (_empRole === 'super_admin') ? {} : (getPermissions().fields || {});
+  const _scopeLabel = { city: '市まで', hidden: '非表示', masked: '一部マスク' };
+  const _addrScope = _myFields.address || 'full';
   const grid = document.getElementById('emp-grid');
   if (employees.length === 0) {
     grid.innerHTML = '<div style="color:#999; font-size:13px; padding:20px;">該当する従業員がいません</div>';
@@ -1218,7 +1244,7 @@ function renderEmployeeGrid(employees, col) {
 
     // 住所表示: operatorはマスク済みデータがDBから来るが、マスク中注記を付ける
     const addrHtml = col.address && (emp.postal_code || emp.address)
-      ? `<div class="emp-sub">📮 ${emp.postal_code ? esc(emp.postal_code)+'　' : ''}${esc(emp.address||'')}${!_isAdminEmp ? '<span style="font-size:10px;color:#aaa;margin-left:4px;">(表示制限中)</span>' : ''}</div>`
+      ? `<div class="emp-sub">📮 ${emp.postal_code ? esc(emp.postal_code)+'　' : ''}${esc(emp.address||'')}${(_addrScope !== 'full') ? '<span style="font-size:10px;color:#aaa;margin-left:4px;">('+ (_scopeLabel[_addrScope]||'制限') +')</span>' : ''}</div>`
       : '';
 
     // 未入力・期限警告バッジ（退職者は対象外）
@@ -2616,6 +2642,7 @@ const ACCT_ROLE_COLOR = {
 function onAdmRoleChange() {
   var role = document.getElementById('adm-role').value;
   document.getElementById('adm-perm-section').style.display = (role === 'operator') ? '' : 'none';
+  document.getElementById('adm-field-section').style.display = (role === 'operator' || role === 'admin') ? '' : 'none';
 }
 
 // 新規作成フォームのsuper_adminオプション: super_adminのみ表示
@@ -2627,12 +2654,19 @@ function _initAdmRoleSelect() {
   if (permOpt) permOpt.style.display = (myRole === 'super_admin') ? '' : 'none';
 }
 
-// 新規作成フォームからpermissions JSONBを構築
-function _buildPermissionsFromForm(cbClass) {
+// フォームからpermissions JSONBを構築（セクション + 項目スコープ fields）
+function _buildPermissionsFromForm(cbClass, selClass) {
   var perms = {};
   document.querySelectorAll('.' + cbClass).forEach(function(cb) {
     perms[cb.dataset.sec] = cb.checked;
   });
+  if (selClass) {
+    var fields = {};
+    document.querySelectorAll('.' + selClass).forEach(function(s) {
+      if (s.value && s.value !== 'full') fields[s.dataset.field] = s.value; // full(既定)は省略
+    });
+    if (Object.keys(fields).length) perms.fields = fields;
+  }
   return perms;
 }
 
@@ -2710,8 +2744,8 @@ async function createAccount() {
   if (!name||!email||!pass) { showStatus('status-admins','error','全ての必須項目を入力してください'); return; }
   if (pass.length < 8) { showStatus('status-admins','error','パスワードは8文字以上で入力してください'); return; }
   var permissions = null;
-  if (role === 'operator') {
-    permissions = _buildPermissionsFromForm('adm-perm-cb');
+  if (role === 'operator' || role === 'admin') {
+    permissions = _buildPermissionsFromForm('adm-perm-cb', 'admf');
   }
   try {
     var body = { p_email: email, p_password: pass, p_display_name: name, p_role: role, p_mfa_enforced: mfaEnforced };
@@ -2725,7 +2759,9 @@ async function createAccount() {
       document.getElementById('adm-pass').value = '';
       document.getElementById('adm-mfa-enforced').checked = true;
       document.querySelectorAll('.adm-perm-cb').forEach(function(cb){ cb.checked = true; });
+      document.querySelectorAll('.admf').forEach(function(s){ s.value = 'full'; });
       document.getElementById('adm-perm-section').style.display = 'none';
+      document.getElementById('adm-field-section').style.display = 'none';
       document.getElementById('adm-role').value = 'staff';
       const det = document.getElementById('details-admins-form');
       if (det) det.removeAttribute('open');
@@ -2785,6 +2821,7 @@ async function resetPassword() {
 function onPermRoleChange() {
   var role = document.getElementById('perm-role').value;
   document.getElementById('perm-section').style.display = (role === 'operator') ? '' : 'none';
+  document.getElementById('perm-field-section').style.display = (role === 'operator' || role === 'admin') ? '' : 'none';
 }
 
 function showPermissionsModal(userId, name, role, mfaEnforced, permJson) {
@@ -2796,6 +2833,10 @@ function showPermissionsModal(userId, name, role, mfaEnforced, permJson) {
   try { perms = JSON.parse(permJson); } catch(e) {}
   document.querySelectorAll('.perm-cb').forEach(function(cb) {
     cb.checked = perms[cb.dataset.sec] !== false;
+  });
+  var _f = (perms && perms.fields) || {};
+  document.querySelectorAll('.permf').forEach(function(s) {
+    s.value = _f[s.dataset.field] || 'full';
   });
   onPermRoleChange();
   document.getElementById('perm-modal-err').style.display = 'none';
@@ -2811,8 +2852,8 @@ async function savePermissions() {
   var role        = document.getElementById('perm-role').value;
   var mfaEnforced = document.getElementById('perm-mfa-enforced').checked;
   var permissions = null;
-  if (role === 'operator') {
-    permissions = _buildPermissionsFromForm('perm-cb');
+  if (role === 'operator' || role === 'admin') {
+    permissions = _buildPermissionsFromForm('perm-cb', 'permf');
   }
   var errEl = document.getElementById('perm-modal-err');
   errEl.style.display = 'none';
