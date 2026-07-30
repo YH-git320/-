@@ -790,6 +790,7 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
                 <label style="font-size:13px;">メール <select class="admf" data-field="email"><option value="full">フル</option><option value="masked">一部マスク</option><option value="hidden">非表示</option></select></label>
                 <label style="font-size:13px;">免許番号 <select class="admf" data-field="license_number"><option value="full">フル</option><option value="hidden">非表示</option></select></label>
               </div>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:12px;padding-top:10px;border-top:1px dashed #e0d3b8;cursor:pointer;"><input type="checkbox" class="admse" style="accent-color:#8a5a1a;"> 👤 <b>従業員情報の編集を許可</b>（追加・修正・無効化。配車権限とは独立。許可すると住所などはフル表示になります／外部出力はできません）</label>
             </div>
             <div style="margin-top:14px;">
               <button class="btn btn-add" onclick="createAccount()">＋ 作成</button>
@@ -881,6 +882,7 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
               <label style="font-size:13px;">メール <select class="permf" data-field="email"><option value="full">フル</option><option value="masked">一部マスク</option><option value="hidden">非表示</option></select></label>
               <label style="font-size:13px;">免許番号 <select class="permf" data-field="license_number"><option value="full">フル</option><option value="hidden">非表示</option></select></label>
             </div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:12px;padding-top:10px;border-top:1px dashed #e0d3b8;cursor:pointer;"><input type="checkbox" class="permse" style="accent-color:#8a5a1a;"> 👤 <b>従業員情報の編集を許可</b>（追加・修正・無効化。配車権限とは独立。許可すると住所などはフル表示になります／外部出力はできません）</label>
           </div>
 
           <div id="perm-modal-err" style="display:none;background:#fdf2f2;color:#b5453a;border:1px solid #eeaaa4;border-radius:8px;padding:8px 12px;font-size:13px;margin-top:12px;"></div>
@@ -986,6 +988,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   applySectionPermissions();   // ロール/権限に応じてサイドバーを制御
+
+  // 従業員の追加フォームは編集権限者(super_admin/staff_edit)のみ表示
+  if (!_canEditStaff()) {
+    const _ef = document.getElementById('details-employees-form');
+    if (_ef) _ef.style.display = 'none';
+  }
 
   // operator は新規追加フォーム・CSVインポートを非表示
   if (sessionStorage.getItem('takao_role') === 'operator') {
@@ -1199,10 +1207,16 @@ function chipColor(index) {
   return `chip-color-${index % 8}`;
 }
 
+// 従業員情報の編集権限：super_admin または staff_edit capability を持つアカウント
+function _canEditStaff() {
+  var r = sessionStorage.getItem('takao_role');
+  return r === 'super_admin' || !!getPermissions().staff_edit;
+}
+
 function renderEmployeeGrid(employees, col) {
   col = col || { contact: true, dates: true, address: false, license: true, note: true };
   const _empRole = sessionStorage.getItem('takao_role');
-  const _isAdminEmp = ['super_admin','admin'].includes(_empRole);
+  const _canEdit = _canEditStaff();
   // 閲覧者自身の項目スコープ（住所などの表示制限）。super_adminは常にフル
   const _myFields = (_empRole === 'super_admin') ? {} : (getPermissions().fields || {});
   const _scopeLabel = { city: '市まで', hidden: '非表示', masked: '一部マスク' };
@@ -1226,14 +1240,14 @@ function renderEmployeeGrid(employees, col) {
       const ci = allJobTypes.findIndex(j => j.id === jt.id);
       return `<span class="job-chip ${chipColor(ci)}">
         ${esc(jt.name)}
-        ${_isAdminEmp ? `<span class="chip-del" onclick="removeJobType(${emp.id},${jt.id})" title="削除">×</span>` : ''}
+        ${_canEdit ? `<span class="chip-del" onclick="removeJobType(${emp.id},${jt.id})" title="削除">×</span>` : ''}
       </span>`;
     }).join('');
 
     // 業務追加: admin以上のみ
     const hasIds = new Set(emp.jobTypes.map(j => j.id));
     const unassigned = allJobTypes.filter(j => !hasIds.has(j.id));
-    const addChipHtml = (_isAdminEmp && !isRetired && unassigned.length > 0) ? `
+    const addChipHtml = (_canEdit && !isRetired && unassigned.length > 0) ? `
       <span class="add-job-wrap">
         <select id="add-jt-${emp.id}">
           <option value="">＋業務を追加…</option>
@@ -1307,9 +1321,9 @@ function renderEmployeeGrid(employees, col) {
             ${col.note && emp.note ? `<div class="emp-sub" style="color:#888;">📝 ${esc(emp.note)}</div>` : ''}
           </div>
           <div class="emp-actions">
-            ${_isAdminEmp ? `<button class="btn btn-edit btn-small" onclick="startEditEmp(${emp.id})">編集</button>` : ''}
+            ${_canEdit ? `<button class="btn btn-edit btn-small" onclick="startEditEmp(${emp.id})">編集</button>` : ''}
             <button class="btn btn-gray btn-small" onclick="openAuditModal('staff',${emp.id},'従業員：${escAttr(emp.name)}')">変更履歴</button>
-            ${_isAdminEmp ? `<button class="btn btn-danger btn-small" onclick="deleteEmployee(${emp.id},'${escAttr(emp.name)}')">削除</button>` : ''}
+            ${(_canEdit && !isRetired) ? `<button class="btn btn-danger btn-small" onclick="deleteEmployee(${emp.id},'${escAttr(emp.name)}')">無効化</button>` : ''}
           </div>
         </div>
         <div class="job-chips">
@@ -1361,9 +1375,9 @@ async function addEmployee() {
   const licenseExempt = document.getElementById('emp-license-exempt')?.checked || false;
   const note    = document.getElementById('emp-note').value.trim();
   if (!name) { showStatus('status-employees','error','氏名を入力してください'); return; }
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/staff`, {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/create_staff`, {
     method: 'POST', headers: getH(),
-    body: JSON.stringify({
+    body: JSON.stringify({ p_data: {
       name, name_kana:kana||null, department:dept||null,
       employee_code:empCode||null, hire_date:hire||null,
       postal_code:postal||null, address:addr||null,
@@ -1371,7 +1385,7 @@ async function addEmployee() {
       license_number:license||null, license_expiry:expiry||null,
       license_required: licenseExempt ? false : null,
       note:note||null
-    })
+    }})
   });
   if (res.ok) {
     ['emp-name','emp-kana','emp-dept','emp-code','emp-hire','emp-retire',
@@ -1431,27 +1445,28 @@ async function saveEditEmp(id) {
   const licenseExempt = document.getElementById(`ee-exempt-${id}`)?.checked || false;
   const note    = document.getElementById(`ee-note-${id}`).value.trim();
   if (!name) { showStatus('status-employees','error','氏名を入力してください'); return; }
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/staff?id=eq.${id}`, {
-    method: 'PATCH', headers: getH(),
-    body: JSON.stringify({
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/update_staff`, {
+    method: 'POST', headers: getH(),
+    body: JSON.stringify({ p_id: id, p_data: {
       name, name_kana:kana||null, department:dept||null,
       employee_code:empCode||null, hire_date:hire||null, postal_code:postal||null, address:addr||null,
       retirement_date:retire||null, email:email||null, phone:phone||null,
       license_number:license||null, license_expiry:expiry||null,
       license_required: licenseExempt ? false : null,
       note:note||null
-    })
+    }})
   });
   if (res.ok) { await loadEmployees(); showStatus('status-employees','success','✅ 更新しました'); }
   else showStatus('status-employees','error','更新に失敗しました');
 }
 
 async function deleteEmployee(id, name) {
-  if (!confirm(`「${name}」さんを削除しますか？`)) return;
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/staff?id=eq.${id}`, {
-    method: 'PATCH', headers: getH(), body: JSON.stringify({ active: false })
+  if (!confirm(`「${name}」さんを無効化します。よろしいですか？\n（データは削除されず、無効として保管されます。「退職者」表示で確認・復帰できます）`)) return;
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/deactivate_staff`, {
+    method: 'POST', headers: getH(), body: JSON.stringify({ p_id: id })
   });
-  if (res.ok) { await loadEmployees(); showStatus('status-employees','success',`「${name}」を削除しました`); }
+  if (res.ok) { await loadEmployees(); showStatus('status-employees','success',`「${name}」を無効化しました`); }
+  else showStatus('status-employees','error','無効化に失敗しました');
 }
 
 // CSV
@@ -2654,8 +2669,8 @@ function _initAdmRoleSelect() {
   if (permOpt) permOpt.style.display = (myRole === 'super_admin') ? '' : 'none';
 }
 
-// フォームからpermissions JSONBを構築（セクション + 項目スコープ fields）
-function _buildPermissionsFromForm(cbClass, selClass) {
+// フォームからpermissions JSONBを構築（セクション + 項目スコープ fields + 従業員編集 staff_edit）
+function _buildPermissionsFromForm(cbClass, selClass, seClass) {
   var perms = {};
   document.querySelectorAll('.' + cbClass).forEach(function(cb) {
     perms[cb.dataset.sec] = cb.checked;
@@ -2666,6 +2681,10 @@ function _buildPermissionsFromForm(cbClass, selClass) {
       if (s.value && s.value !== 'full') fields[s.dataset.field] = s.value; // full(既定)は省略
     });
     if (Object.keys(fields).length) perms.fields = fields;
+  }
+  if (seClass) {
+    var se = document.querySelector('.' + seClass);
+    if (se && se.checked) perms.staff_edit = true; // 未許可は省略
   }
   return perms;
 }
@@ -2745,7 +2764,7 @@ async function createAccount() {
   if (pass.length < 8) { showStatus('status-admins','error','パスワードは8文字以上で入力してください'); return; }
   var permissions = null;
   if (role === 'operator' || role === 'admin') {
-    permissions = _buildPermissionsFromForm('adm-perm-cb', 'admf');
+    permissions = _buildPermissionsFromForm('adm-perm-cb', 'admf', 'admse');
   }
   try {
     var body = { p_email: email, p_password: pass, p_display_name: name, p_role: role, p_mfa_enforced: mfaEnforced };
@@ -2760,6 +2779,7 @@ async function createAccount() {
       document.getElementById('adm-mfa-enforced').checked = true;
       document.querySelectorAll('.adm-perm-cb').forEach(function(cb){ cb.checked = true; });
       document.querySelectorAll('.admf').forEach(function(s){ s.value = 'full'; });
+      var _amse = document.querySelector('.admse'); if (_amse) _amse.checked = false;
       document.getElementById('adm-perm-section').style.display = 'none';
       document.getElementById('adm-field-section').style.display = 'none';
       document.getElementById('adm-role').value = 'staff';
@@ -2838,6 +2858,8 @@ function showPermissionsModal(userId, name, role, mfaEnforced, permJson) {
   document.querySelectorAll('.permf').forEach(function(s) {
     s.value = _f[s.dataset.field] || 'full';
   });
+  var _pse = document.querySelector('.permse');
+  if (_pse) _pse.checked = !!(perms && perms.staff_edit);
   onPermRoleChange();
   document.getElementById('perm-modal-err').style.display = 'none';
   document.getElementById('perm-modal').style.display = 'flex';
@@ -2853,7 +2875,7 @@ async function savePermissions() {
   var mfaEnforced = document.getElementById('perm-mfa-enforced').checked;
   var permissions = null;
   if (role === 'operator' || role === 'admin') {
-    permissions = _buildPermissionsFromForm('perm-cb', 'permf');
+    permissions = _buildPermissionsFromForm('perm-cb', 'permf', 'permse');
   }
   var errEl = document.getElementById('perm-modal-err');
   errEl.style.display = 'none';
