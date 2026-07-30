@@ -816,7 +816,7 @@ function renderStaffGrid() {
       </div>
       <div style="display:flex; gap:6px; flex-shrink:0;">
         <button class="btn btn-edit btn-small" onclick="startEditStaff(${s.id})">編集</button>
-        <button class="btn btn-danger btn-small" onclick="deleteStaff(${s.id}, '${s.name}')">削除</button>
+        <button class="btn btn-danger btn-small" onclick="deleteStaff(${s.id}, '${s.name}')">無効化</button>
       </div>
     </div>
   `).join('');
