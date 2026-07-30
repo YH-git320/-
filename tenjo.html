@@ -552,7 +552,7 @@ async function loadStaff() {
   const tenjoTypeId = jtData[0]?.id;
 
   // 全従業員を取得
-  const allRes = await fetch(`${SUPABASE_URL}/rest/v1/staff?active=eq.true&order=name`, { headers: getH() });
+  const allRes = await fetch(`${SUPABASE_URL}/rest/v1/staff?active=eq.true&order=name&select=id,name,name_kana,employee_code,department,email,active`, { headers: getH() });
   const allStaff = await allRes.json();
 
   if (tenjoTypeId) {
@@ -847,10 +847,10 @@ async function saveEditStaff(id) {
     return;
   }
 
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/staff?id=eq.${id}`, {
-    method: 'PATCH',
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/update_staff`, {
+    method: 'POST',
     headers: getH(),
-    body: JSON.stringify({ name, email: email || null })
+    body: JSON.stringify({ p_id: id, p_data: { name, email: email || null } })
   });
 
   if (res.ok) {
@@ -870,10 +870,10 @@ async function addStaff() {
     return;
   }
 
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/staff`, {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/create_staff`, {
     method: 'POST',
     headers: getH(),
-    body: JSON.stringify({ name, email: email || null })
+    body: JSON.stringify({ p_data: { name, email: email || null } })
   });
 
   if (res.ok) {
@@ -888,15 +888,17 @@ async function addStaff() {
 }
 
 async function deleteStaff(id, name) {
-  if (!confirm(`${name} さんを削除してもよいですか？`)) return;
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/staff?id=eq.${id}`, {
-    method: 'PATCH',
+  if (!confirm(`${name} さんを無効化してもよいですか？（データは削除されず無効として保管されます）`)) return;
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/deactivate_staff`, {
+    method: 'POST',
     headers: getH(),
-    body: JSON.stringify({ active: false })
+    body: JSON.stringify({ p_id: id })
   });
   if (res.ok) {
     await loadStaff();
-    showStatus('staffStatus', 'success', `${name} さんを削除しました`);
+    showStatus('staffStatus', 'success', `${name} さんを無効化しました`);
+  } else {
+    showStatus('staffStatus', 'error', '無効化に失敗しました');
   }
 }
 

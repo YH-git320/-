@@ -409,7 +409,7 @@ table.preview-table { width: 100%; border-collapse: collapse; font-size: 12px; }
         <div class="master-export-card">
           <h3>👥 従業員マスタ</h3>
           <p>氏名・社員番号・メールアドレス・電話番号・免許情報・備考</p>
-          <button class="btn btn-export btn-small" onclick="exportMaster('staff')">⬇️ CSV出力</button>
+          <button id="btn-export-staff" class="btn btn-export btn-small" onclick="exportMaster('staff')">⬇️ CSV出力</button>
         </div>
 
         <div class="master-export-card">
@@ -528,6 +528,16 @@ function setStatus(id, msg, type) {
 }
 
 // Supabase から全件取得（1000件超対応）
+// 従業員は素のstaffではなく、権限に応じてマスクして返すRPC経由で取得（super_adminはフル）
+async function fetchStaffDirectory(filter) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_staff_directory`, {
+    method: 'POST', headers: getH(), body: JSON.stringify({ p_filter: filter || 'active' })
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
 async function fetchAll(table, params='') {
   let rows = [], offset = 0, limit = 1000;
   while (true) {
@@ -745,10 +755,37 @@ const MASTER_LABEL = {
   admins:    '管理者マスタ',
 };
 
+function _isSuper() { return sessionStorage.getItem('takao_role') === 'super_admin'; }
+
+// 個人情報を含む一括出力（従業員マスタ／全データバックアップ）は super_admin のみ表示
+function applyExportPerms() {
+  if (_isSuper()) return;
+  var s = document.getElementById('btn-export-staff');
+  if (s) {
+    s.style.display = 'none';
+    var n = document.createElement('div');
+    n.style.cssText = 'font-size:12px;color:#b5453a;margin-top:4px;';
+    n.textContent = '従業員マスタの出力は権限付与者のみです';
+    s.parentNode.appendChild(n);
+  }
+  var b = document.getElementById('btn-full-backup');
+  if (b) {
+    b.style.display = 'none';
+    var n2 = document.createElement('div');
+    n2.style.cssText = 'font-size:12px;color:rgba(255,255,255,0.9);margin-top:8px;';
+    n2.textContent = '全データバックアップ（従業員情報を含む）は権限付与者のみ実行できます';
+    b.parentNode.appendChild(n2);
+  }
+}
+
 async function exportMaster(table) {
+  if (table === 'staff' && !_isSuper()) {
+    setStatus('master-status', '従業員マスタの出力は権限付与者（super_admin）のみです', 'error');
+    return;
+  }
   setStatus('master-status', MASTER_LABEL[table] + ' を取得中…', 'info');
   try {
-    const data = await fetchAll(table, 'active=eq.true&order=id');
+    const data = (table === 'staff') ? await fetchStaffDirectory('active') : await fetchAll(table, 'active=eq.true&order=id');
     downloadCSV(data, MASTER_LABEL[table] + '.csv');
     await logExportOperation('マスターCSV', { table, label: MASTER_LABEL[table], count: data.length });
     setStatus('master-status', MASTER_LABEL[table] + '：' + data.length + ' 件をダウンロードしました', 'success');
@@ -762,7 +799,7 @@ async function exportEmpJobTypes() {
   try {
     // staff と job_types を結合して取得
     const [staffRows, jtRows, ejRows] = await Promise.all([
-      fetchAll('staff', 'active=eq.true'),
+      fetchStaffDirectory('active'),
       fetchAll('job_types', 'active=eq.true'),
       fetchAll('employee_job_types', ''),
     ]);
@@ -794,6 +831,7 @@ async function exportEmpJobTypes() {
 
 /* ===== 全データ完全バックアップ ===== */
 async function runFullBackup() {
+  if (!_isSuper()) { alert('全データバックアップ（従業員情報を含む）は権限付与者のみ実行できます。'); return; }
   const btn = document.getElementById('btn-full-backup');
   const progress = document.getElementById('backup-progress');
   const bar = document.getElementById('bpbar-fill');
@@ -838,7 +876,7 @@ async function runFullBackup() {
     label.textContent = `${t.label} を取得中... (${done}/${targets.length})`;
     bar.style.width = (done / targets.length * 100) + '%';
     try {
-      const rows = await fetchAll(t.table, t.params);
+      const rows = (t.table === 'staff') ? await fetchStaffDirectory('all') : await fetchAll(t.table, t.params);
       const csvStr = toCSVString(rows);
       folder.file(t.label + '.csv', csvStr);
     } catch(e) {
@@ -924,7 +962,9 @@ async function logExportOperation(operation, details) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-  initAuth(['super_admin', 'admin']);
+  initAuth(['super_admin', 'admin']).then(function(ok) {
+    if (ok !== false) applyExportPerms();
+  });
 });
 </script>
 <script>

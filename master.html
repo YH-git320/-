@@ -1507,12 +1507,15 @@ async function importEmployees(parsedJson) {
     Object.keys(r).forEach(k => { if (r[k]==='') r[k]=null; });
     return r;
   });
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/staff`, { method:'POST', headers:H, body:JSON.stringify(rows) });
-  if (res.ok) {
-    document.getElementById('preview-emp').innerHTML = '';
-    await loadEmployees();
-    showStatus('status-employees','success',`✅ ${rows.length}件を取込みました。業務種別は各従業員カードから設定してください。`);
-  } else showStatus('status-employees','error','取込に失敗しました');
+  let ok = 0, ng = 0;
+  for (const r of rows) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/create_staff`, { method:'POST', headers:getH(), body:JSON.stringify({ p_data: r }) });
+    if (res.ok) ok++; else ng++;
+  }
+  document.getElementById('preview-emp').innerHTML = '';
+  await loadEmployees();
+  if (ng === 0) showStatus('status-employees','success',`✅ ${ok}件を取込みました。業務種別は各従業員カードから設定してください。`);
+  else showStatus('status-employees','error',`${ok}件取込・${ng}件失敗（権限または形式をご確認ください）`);
 }
 function downloadEmpTemplate() {
   const csv = '氏名,メールアドレス,電話番号,社員番号,免許番号,免許有効期限(YYYY-MM-DD),備考\n山田 太郎,yamada@example.com,090-0000-0000,T001,,\n田中 一郎,tanaka@example.com,090-1111-1111,D001,第123456号,2028-03-15,\n';
