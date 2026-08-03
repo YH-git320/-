@@ -69,6 +69,16 @@ button.mini{font-size:12px;padding:6px 10px;}
   </div>
 
   <div class="panel">
+    <div class="h">配置から一斉発行</div>
+    <p style="font-size:13px;color:#6b7d72;margin:0 0 10px;">上で選んだ勤務日の配置から、担当する添乗員<b>全員ぶんのリンクをまとめて発行</b>します（1人1リンクに集約。登校担当コース・下校担当コースを1枚に）。</p>
+    <div class="row">
+      <button class="primary" onclick="issueAll()">この日の配置から全員ぶんを発行</button>
+      <button class="mini" onclick="csvAll()">CSVで出す</button>
+    </div>
+    <div id="issueAllResult"></div>
+  </div>
+
+  <div class="panel">
     <div class="h">この日の発行済みリンク（再発行・代理修正）</div>
     <div id="tokenList"><p class="muted">勤務日を選ぶと、その日のリンク一覧が出ます。</p></div>
   </div>
@@ -83,7 +93,7 @@ const AUTH_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/auth/v1';
 const REST_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/rest/v1';
 const ANON_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4ZHlxa3lxdGl6aHRrd3RwdnJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NzYxODEsImV4cCI6MjA5OTQ1MjE4MX0.yVbClXBk2JVeglevsBLY5sH2_m2ybCf71u4i_YYWyHE';
 
-const ROLE_LABEL = { super_admin: '権限付与者', admin: '管理者', operator: '担当者', staff: '事務員' };
+const ROLE_LABEL = { super_admin: '権限付与者', admin: 'システム管理者', operator: '担当者', staff: '事務員' };
 
 /* ===================== セッション管理 ===================== */
 
@@ -948,6 +958,61 @@ function sendMail(email, name, url){
   const subject = encodeURIComponent(`【高尾輸送】日報のご入力のお願い`);
   const body = encodeURIComponent(`${name} さん\n\n下記のリンクから、本日の日報をご入力ください。\n${url}\n\n※このリンクはあなた専用です。`);
   window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+}
+
+/* ===== 配置から一斉発行 ===== */
+async function loadAssignmentStaff(date){
+  const res = await fetch(`${REST_URL}/assignments?work_date=eq.${date}&select=tokou_staff_id,gekou_staff_id,chukan_ari,chukan_staff_id`, { headers: getH() });
+  if (!res.ok) throw new Error('assignments ' + res.status);
+  const rows = await res.json();
+  const set = new Set();
+  rows.forEach(a => {
+    if (a.tokou_staff_id) set.add(a.tokou_staff_id);
+    if (a.gekou_staff_id) set.add(a.gekou_staff_id);
+    if (a.chukan_ari && a.chukan_staff_id) set.add(a.chukan_staff_id);
+  });
+  return [...set];
+}
+async function issueAll(){
+  const wd = document.getElementById('workDate').value;
+  if (!wd){ status('勤務日を選んでください', false); return; }
+  let ids;
+  try { ids = await loadAssignmentStaff(wd); }
+  catch(e){ status('配置の読み込みに失敗：' + e.message, false); return; }
+  if (!ids.length){
+    document.getElementById('issueAllResult').innerHTML = '<p class="muted" style="margin-top:8px;">この日の配置がありません。先に「添乗員 配置管理」で配置を保存してください。</p>';
+    status('この日の配置がありません', false); return;
+  }
+  document.getElementById('issueAllResult').innerHTML = '<p class="muted" style="margin-top:8px;">発行中…（' + ids.length + '名）</p>';
+  const results = [], errors = [];
+  for (const id of ids){
+    try { results.push(await rpc('issue_nippo_for_day', { p_staff_id: id, p_work_date: wd, p_valid_hours: 168 })); }
+    catch(e){ const nm = (STAFF.find(s => s.id === id) || {}).name || ('ID' + id); errors.push(nm + '：' + e.message); }
+  }
+  window._allResults = results;
+  renderAllResults(results, errors);
+  status(`${results.length}名ぶん発行しました${errors.length ? `（${errors.length}名は失敗）` : ''}`, errors.length === 0);
+  loadTokens();
+}
+function renderAllResults(results, errors){
+  const box = document.getElementById('issueAllResult');
+  const rows = results.map(o => `<div class="trow">
+      <div class="tinfo"><div class="nm">${escHtml(o.staff_name)} <span class="badge b-done">発行</span> <span style="font-size:12px;color:#8a9a90;">${escHtml(o['勤務種別']||'')}</span></div></div>
+      <div class="row"><button class="mini primary" onclick="copyText('${o.url}')">コピー</button><button class="mini" onclick="window.open('${o.url}','_blank')">開く</button></div>
+    </div>`).join('');
+  const errHtml = errors.length ? `<div style="margin-top:8px;color:#b5453a;font-size:13px;">発行できなかった人：<br>${errors.map(escHtml).join('<br>')}</div>` : '';
+  box.innerHTML = `<div style="margin-top:10px;border:0.5px solid #e0e6e0;border-radius:10px;padding:4px 12px;">${rows || '<p class="muted">発行できる配置がありませんでした。</p>'}</div>${errHtml}`;
+}
+function csvAll(){
+  const rows = window._allResults || [];
+  if (!rows.length){ status('先に「全員ぶんを発行」してからCSVを出してください', false); return; }
+  const wd = document.getElementById('workDate').value;
+  const esc = v => '"' + String(v==null?'':v).replace(/"/g,'""') + '"';
+  const csv = '氏名,勤務種別,リンク\n' + rows.map(o => [esc(o.staff_name), esc(o['勤務種別']), esc(o.url)].join(',')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = `日報リンク_${wd}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
