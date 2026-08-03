@@ -475,7 +475,7 @@ function _injectUserInfo(email, role) {
   if (!header) return;
 
   const name = sessionStorage.getItem('takao_name') || email;
-  const label = ROLE_LABEL[role] || role;
+  const label = (function(){var p={};try{p=JSON.parse(sessionStorage.getItem('takao_permissions')||'{}')}catch(e){}if(p.title)return p.title;if(role==='super_admin')return '権限付与者';if(role==='admin')return 'システム管理者';if(role==='staff')return '事務員';if(role==='operator'){if(p.staff_edit&&p.export)return '情報取扱責任者';if(p.staff_edit)return '情報取扱者';return '操作担当者';}return role;})();
   const badgeColor = role === 'super_admin' ? '#c0392b'
     : role === 'admin'    ? '#9b7eb8'
     : role === 'operator' ? '#2980b9'

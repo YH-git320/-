@@ -367,7 +367,7 @@ async function _getRole(accessToken) {
   const cached = sessionStorage.getItem('takao_role');
   if (cached) return cached;
   try {
-    const res = await fetch(`${REST_URL}/user_roles?select=role,display_name`, {
+    const res = await fetch(`${REST_URL}/user_roles?select=role,display_name,permissions`, {
       headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${accessToken}` },
     });
     if (!res.ok) return null;
@@ -375,6 +375,7 @@ async function _getRole(accessToken) {
     const row = data[0];
     if (!row) return null;
     sessionStorage.setItem('takao_role', row.role);
+    sessionStorage.setItem('takao_permissions', JSON.stringify(row.permissions || {}));
     if (row.display_name) sessionStorage.setItem('takao_name', row.display_name);
     return row.role;
   } catch { return null; }
@@ -667,7 +668,7 @@ function _injectUserInfo(email, role) {
   if (!header) return;
 
   const name = sessionStorage.getItem('takao_name') || email;
-  const label = ROLE_LABEL[role] || role;
+  const label = (function(){var p={};try{p=JSON.parse(sessionStorage.getItem('takao_permissions')||'{}')}catch(e){}if(p.title)return p.title;if(role==='super_admin')return '権限付与者';if(role==='admin')return 'システム管理者';if(role==='staff')return '事務員';if(role==='operator'){if(p.staff_edit&&p.export)return '情報取扱責任者';if(p.staff_edit)return '情報取扱者';return '操作担当者';}return role;})();
   const badgeColor = role === 'admin' ? '#9b7eb8' : '#4d7a5e';
   const badgeBg    = 'transparent';
   const badgeBorder = 'transparent';
