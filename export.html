@@ -756,16 +756,19 @@ const MASTER_LABEL = {
 };
 
 function _isSuper() { return sessionStorage.getItem('takao_role') === 'super_admin'; }
+function _perms()   { try { return JSON.parse(sessionStorage.getItem('takao_permissions') || '{}'); } catch(e) { return {}; } }
+// 外部出力（従業員CSV・全データバックアップ）を許可: 権限付与者、または permissions.export=true の担当者
+function _canExport() { return _isSuper() || _perms().export === true; }
 
-// 個人情報を含む一括出力（従業員マスタ／全データバックアップ）は super_admin のみ表示
+// 個人情報を含む一括出力（従業員マスタ／全データバックアップ）は 権限付与者 or 外部出力許可者のみ表示
 function applyExportPerms() {
-  if (_isSuper()) return;
+  if (_canExport()) return;
   var s = document.getElementById('btn-export-staff');
   if (s) {
     s.style.display = 'none';
     var n = document.createElement('div');
     n.style.cssText = 'font-size:12px;color:#b5453a;margin-top:4px;';
-    n.textContent = '従業員マスタの出力は権限付与者のみです';
+    n.textContent = '従業員マスタの出力は権限付与者、または外部出力を許可された担当者のみです';
     s.parentNode.appendChild(n);
   }
   var b = document.getElementById('btn-full-backup');
@@ -773,14 +776,14 @@ function applyExportPerms() {
     b.style.display = 'none';
     var n2 = document.createElement('div');
     n2.style.cssText = 'font-size:12px;color:rgba(255,255,255,0.9);margin-top:8px;';
-    n2.textContent = '全データバックアップ（従業員情報を含む）は権限付与者のみ実行できます';
+    n2.textContent = '全データバックアップ（従業員情報を含む）は権限付与者、または外部出力を許可された担当者のみ実行できます';
     b.parentNode.appendChild(n2);
   }
 }
 
 async function exportMaster(table) {
-  if (table === 'staff' && !_isSuper()) {
-    setStatus('master-status', '従業員マスタの出力は権限付与者（super_admin）のみです', 'error');
+  if (table === 'staff' && !_canExport()) {
+    setStatus('master-status', '従業員マスタの出力は権限付与者、または外部出力を許可された担当者のみです', 'error');
     return;
   }
   setStatus('master-status', MASTER_LABEL[table] + ' を取得中…', 'info');
@@ -831,7 +834,7 @@ async function exportEmpJobTypes() {
 
 /* ===== 全データ完全バックアップ ===== */
 async function runFullBackup() {
-  if (!_isSuper()) { alert('全データバックアップ（従業員情報を含む）は権限付与者のみ実行できます。'); return; }
+  if (!_canExport()) { alert('全データバックアップ（従業員情報を含む）は権限付与者、または外部出力を許可された担当者のみ実行できます。'); return; }
   const btn = document.getElementById('btn-full-backup');
   const progress = document.getElementById('backup-progress');
   const bar = document.getElementById('bpbar-fill');
@@ -1313,7 +1316,8 @@ async function initAuth(allowedRoles) {
       if (!session) { _clearSession(); _redirectLogin(); return false; }
     }
     const role = await _getRole(session.access_token);
-    if (!role || !allowedRoles.includes(role)) {
+    var _canExp = false; try { _canExp = (JSON.parse(sessionStorage.getItem('takao_permissions') || '{}').export === true); } catch(e) {}
+    if (!role || (!allowedRoles.includes(role) && !_canExp)) {
       _showDenied(role);
       document.documentElement.style.visibility = 'visible';
       return false;
@@ -1706,22 +1710,4 @@ async function _disableTotp() {
     document.getElementById('_tm_totp_status').textContent = '二段階認証は現在無効です。';
     document.getElementById('_tm_totp_start_btn').style.display = 'block';
     document.getElementById('_tm_totp_disable_btn').style.display = 'none';
-  } else {
-    err.textContent = '解除に失敗しました。'; err.style.display = 'block';
   }
-}
-
-function _loadQRLib(cb) {
-  if (window.QRCode) { cb(); return; }
-  const s = document.createElement('script');
-  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
-  s.onload = cb;
-  document.head.appendChild(s);
-}
-
-
-
-
-</script>
-</body>
-</html>
