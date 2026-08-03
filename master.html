@@ -757,7 +757,7 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
                 <select id="adm-role" onchange="onAdmRoleChange()">
                   <option value="staff">事務員</option>
                   <option value="operator">操作担当者</option>
-                  <option value="admin">管理者</option>
+                  <option value="admin">システム管理者</option>
                   <option value="super_admin" id="adm-role-superadmin" style="display:none;">権限付与者</option>
                 </select>
               </div>
@@ -767,6 +767,11 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
             <div style="margin:10px 0 6px; display:flex; align-items:center; gap:8px;">
               <input type="checkbox" id="adm-mfa-enforced" checked style="width:16px;height:16px;accent-color:#4d7a5e;cursor:pointer;">
               <label for="adm-mfa-enforced" style="font-size:13px;color:#2d3b35;cursor:pointer;font-weight:600;">🔒 二段階認証を強制する（本人が解除不可）</label>
+            </div>
+            <!-- 担当名（任意） -->
+            <div style="margin:6px 0 2px;">
+              <label style="font-size:12px;font-weight:700;color:#555;">担当名（任意・一覧に表示する呼び名）</label>
+              <input type="text" id="adm-title" placeholder="例：配置担当（未入力なら権限から自動表示）" style="width:100%;padding:8px 10px;border:1.5px solid #c8d8cc;border-radius:8px;font-size:13px;font-family:inherit;margin-top:4px;">
             </div>
             <!-- 操作担当者 アクセス権設定 -->
             <div id="adm-perm-section" style="display:none; margin-top:14px; padding:14px; background:#f5f8f4; border-radius:10px; border:1px solid #d0e4d6;">
@@ -791,7 +796,8 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
                 <label style="font-size:13px;">メール <select class="admf" data-field="email"><option value="full">フル</option><option value="masked">一部マスク</option><option value="hidden">非表示</option></select></label>
                 <label style="font-size:13px;">免許番号 <select class="admf" data-field="license_number"><option value="full">フル</option><option value="hidden">非表示</option></select></label>
               </div>
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:12px;padding-top:10px;border-top:1px dashed #e0d3b8;cursor:pointer;"><input type="checkbox" class="admse" style="accent-color:#8a5a1a;"> 👤 <b>従業員情報の編集を許可</b>（追加・修正・無効化。配車権限とは独立。許可すると住所などはフル表示になります／外部出力はできません）</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:12px;padding-top:10px;border-top:1px dashed #e0d3b8;cursor:pointer;"><input type="checkbox" class="admse" style="accent-color:#8a5a1a;"> 👤 <b>従業員情報の編集を許可</b>（追加・修正・無効化。配車権限とは独立。許可すると住所などはフル表示になります）</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:10px;cursor:pointer;"><input type="checkbox" class="admex" style="accent-color:#8a5a1a;"> 📤 <b>外部出力（持ち出し）を許可</b>（従業員CSV・全データバックアップ。情報取扱責任者向け）</label>
             </div>
             <div style="margin-top:14px;">
               <button class="btn btn-add" onclick="createAccount()">＋ 作成</button>
@@ -852,9 +858,15 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
               style="width:100%;padding:8px 10px;border:1.5px solid #c8d8cc;border-radius:8px;font-size:13px;font-family:inherit;">
               <option value="staff">事務員</option>
               <option value="operator">操作担当者</option>
-              <option value="admin">管理者</option>
+              <option value="admin">システム管理者</option>
               <option value="super_admin" id="perm-role-superadmin" style="display:none;">権限付与者</option>
             </select>
+          </div>
+
+          <div style="margin-bottom:14px;">
+            <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:6px;">担当名（任意・一覧に表示する呼び名）</label>
+            <input type="text" id="perm-title" placeholder="例：配置担当（未入力なら権限から自動表示）"
+              style="width:100%;padding:8px 10px;border:1.5px solid #c8d8cc;border-radius:8px;font-size:13px;font-family:inherit;">
           </div>
 
           <div style="margin-bottom:14px; display:flex; align-items:center; gap:8px;">
@@ -883,7 +895,8 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
               <label style="font-size:13px;">メール <select class="permf" data-field="email"><option value="full">フル</option><option value="masked">一部マスク</option><option value="hidden">非表示</option></select></label>
               <label style="font-size:13px;">免許番号 <select class="permf" data-field="license_number"><option value="full">フル</option><option value="hidden">非表示</option></select></label>
             </div>
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:12px;padding-top:10px;border-top:1px dashed #e0d3b8;cursor:pointer;"><input type="checkbox" class="permse" style="accent-color:#8a5a1a;"> 👤 <b>従業員情報の編集を許可</b>（追加・修正・無効化。配車権限とは独立。許可すると住所などはフル表示になります／外部出力はできません）</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:12px;padding-top:10px;border-top:1px dashed #e0d3b8;cursor:pointer;"><input type="checkbox" class="permse" style="accent-color:#8a5a1a;"> 👤 <b>従業員情報の編集を許可</b>（追加・修正・無効化。配車権限とは独立。許可すると住所などはフル表示になります）</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:10px;cursor:pointer;"><input type="checkbox" class="permex" style="accent-color:#8a5a1a;"> 📤 <b>外部出力（持ち出し）を許可</b>（従業員CSV・全データバックアップ。情報取扱責任者向け）</label>
           </div>
 
           <div id="perm-modal-err" style="display:none;background:#fdf2f2;color:#b5453a;border:1px solid #eeaaa4;border-radius:8px;padding:8px 12px;font-size:13px;margin-top:12px;"></div>
@@ -2649,7 +2662,35 @@ async function addVehicle() {
 // ================================================
 
 // ロール表示設定
-const ACCT_ROLE_LABEL = { super_admin:'権限付与者', admin:'管理者', operator:'操作担当者', staff:'事務員' };
+const ACCT_ROLE_LABEL = { super_admin:'権限付与者', admin:'システム管理者', operator:'操作担当者', staff:'事務員' };
+
+// 権限の中身から「呼び名」を自動で決める（担当名 title があれば最優先）
+function friendlyAcctName(role, permissions) {
+  var p = permissions || {};
+  if (p.title) return p.title;
+  if (role === 'super_admin') return '権限付与者';
+  if (role === 'admin')       return 'システム管理者';
+  if (role === 'staff')       return '事務員';
+  if (role === 'operator') {
+    if (p.staff_edit && p.export) return '情報取扱責任者（外部出力あり）';
+    if (p.staff_edit)             return '情報取扱者';
+    return '操作担当者';
+  }
+  return role;
+}
+// この人が「何をできるか」を日本語で要約
+function acctPermSummary(role, permissions) {
+  if (role === 'super_admin') return '全機能＋アカウント・権限の管理';
+  if (role === 'admin')       return 'システム全体の操作（アカウント権限の付与は不可）';
+  if (role === 'staff')       return '限られた閲覧のみ';
+  var p = permissions || {};
+  var f = p.fields || {};
+  var addr = { full:'住所フル', city:'住所は市まで', attendant:'添乗員のみ住所フル', hidden:'住所は非表示' }[f.address || 'full'] || '住所フル';
+  var parts = [addr, (p.staff_edit ? '編集可' : '閲覧のみ')];
+  if (p.export) parts.push('外部出力可');
+  if (f.license_number === 'hidden') parts.push('免許番号は非表示');
+  return parts.join('・');
+}
 const ACCT_ROLE_COLOR = {
   super_admin: 'background:#fde8e6;color:#c0392b;',
   admin:       'background:#f0e8f8;color:#7a5a9e;',
@@ -2674,7 +2715,7 @@ function _initAdmRoleSelect() {
 }
 
 // フォームからpermissions JSONBを構築（セクション + 項目スコープ fields + 従業員編集 staff_edit）
-function _buildPermissionsFromForm(cbClass, selClass, seClass) {
+function _buildPermissionsFromForm(cbClass, selClass, seClass, exClass, titleId) {
   var perms = {};
   document.querySelectorAll('.' + cbClass).forEach(function(cb) {
     perms[cb.dataset.sec] = cb.checked;
@@ -2689,6 +2730,14 @@ function _buildPermissionsFromForm(cbClass, selClass, seClass) {
   if (seClass) {
     var se = document.querySelector('.' + seClass);
     if (se && se.checked) perms.staff_edit = true; // 未許可は省略
+  }
+  if (exClass) {
+    var ex = document.querySelector('.' + exClass);
+    if (ex && ex.checked) perms.export = true; // 未許可は省略
+  }
+  if (titleId) {
+    var t = document.getElementById(titleId);
+    if (t && t.value.trim()) perms.title = t.value.trim(); // 空は省略
   }
   return perms;
 }
@@ -2721,7 +2770,9 @@ async function loadAccounts() {
     tbody.innerHTML = accounts.map(function(a) {
       var date = a.created_at ? new Date(a.created_at).toLocaleDateString('ja-JP') : '';
       var roleStyle = ACCT_ROLE_COLOR[a.role] || 'background:#eee;color:#555;';
-      var roleLabel = ACCT_ROLE_LABEL[a.role] || a.role;
+      var sysRole  = ACCT_ROLE_LABEL[a.role] || a.role;
+      var friendly = friendlyAcctName(a.role, a.permissions);
+      var summary  = acctPermSummary(a.role, a.permissions);
 
       // MFA列
       var mfaBadge = a.mfa_active
@@ -2747,7 +2798,9 @@ async function loadAccounts() {
       return '<tr>' +
         '<td style="font-weight:600;">' + esc(a.display_name||'') + '</td>' +
         '<td style="font-size:12px;color:#555;">' + esc(a.email) + '</td>' +
-        '<td><span class="badge" style="' + roleStyle + '">' + esc(roleLabel) + '</span></td>' +
+        '<td><span class="badge" style="' + roleStyle + '">' + esc(friendly) + '</span>' +
+          '<div style="font-size:10px;color:#9aa2a8;margin-top:3px;">' + esc(sysRole) + '</div>' +
+          '<div style="font-size:11px;color:#5c7066;margin-top:2px;line-height:1.4;">' + esc(summary) + '</div></td>' +
         '<td style="font-size:12px;">' + mfaBadge + '</td>' +
         '<td style="font-size:12px;color:#666;">' + date + '</td>' +
         '<td style="white-space:nowrap;">' + btns + '</td>' +
@@ -2768,7 +2821,7 @@ async function createAccount() {
   if (pass.length < 12) { showStatus('status-admins','error','パスワードは12文字以上（英字・数字・記号を含む）で入力してください'); return; }
   var permissions = null;
   if (role === 'operator' || role === 'admin') {
-    permissions = _buildPermissionsFromForm('adm-perm-cb', 'admf', 'admse');
+    permissions = _buildPermissionsFromForm('adm-perm-cb', 'admf', 'admse', 'admex', 'adm-title');
   }
   try {
     var body = { p_email: email, p_password: pass, p_display_name: name, p_role: role, p_mfa_enforced: mfaEnforced };
@@ -2784,6 +2837,8 @@ async function createAccount() {
       document.querySelectorAll('.adm-perm-cb').forEach(function(cb){ cb.checked = true; });
       document.querySelectorAll('.admf').forEach(function(s){ s.value = 'full'; });
       var _amse = document.querySelector('.admse'); if (_amse) _amse.checked = false;
+      var _amex = document.querySelector('.admex'); if (_amex) _amex.checked = false;
+      var _amtitle = document.getElementById('adm-title'); if (_amtitle) _amtitle.value = '';
       document.getElementById('adm-perm-section').style.display = 'none';
       document.getElementById('adm-field-section').style.display = 'none';
       document.getElementById('adm-role').value = 'staff';
@@ -2864,6 +2919,10 @@ function showPermissionsModal(userId, name, role, mfaEnforced, permJson) {
   });
   var _pse = document.querySelector('.permse');
   if (_pse) _pse.checked = !!(perms && perms.staff_edit);
+  var _pex = document.querySelector('.permex');
+  if (_pex) _pex.checked = !!(perms && perms.export);
+  var _ptitle = document.getElementById('perm-title');
+  if (_ptitle) _ptitle.value = (perms && perms.title) || '';
   onPermRoleChange();
   document.getElementById('perm-modal-err').style.display = 'none';
   document.getElementById('perm-modal').style.display = 'flex';
@@ -2879,7 +2938,7 @@ async function savePermissions() {
   var mfaEnforced = document.getElementById('perm-mfa-enforced').checked;
   var permissions = null;
   if (role === 'operator' || role === 'admin') {
-    permissions = _buildPermissionsFromForm('perm-cb', 'permf', 'permse');
+    permissions = _buildPermissionsFromForm('perm-cb', 'permf', 'permse', 'permex', 'perm-title');
   }
   var errEl = document.getElementById('perm-modal-err');
   errEl.style.display = 'none';
@@ -2975,7 +3034,7 @@ const AUTH_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/auth/v1';
 const REST_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/rest/v1';
 const ANON_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4ZHlxa3lxdGl6aHRrd3RwdnJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NzYxODEsImV4cCI6MjA5OTQ1MjE4MX0.yVbClXBk2JVeglevsBLY5sH2_m2ybCf71u4i_YYWyHE';
 
-const ROLE_LABEL = { super_admin: '権限付与者', admin: '管理者', operator: '担当者', staff: '事務員' };
+const ROLE_LABEL = { super_admin: '権限付与者', admin: 'システム管理者', operator: '担当者', staff: '事務員' };
 
 /* ===================== セッション管理 ===================== */
 
@@ -3650,91 +3709,4 @@ function _showTotpStep2() {
 }
 
 async function _startTotpSetup() {
-  const startBtn = document.getElementById('_tm_totp_start_btn');
-  const err = document.getElementById('_tm_totp_err');
-  err.style.display = 'none';
-  startBtn.disabled = true; startBtn.textContent = 'QRコード生成中…';
-
-  const result = await enrollTotp();
-  startBtn.disabled = false; startBtn.textContent = 'QRコードを表示して設定開始';
-  if (!result.ok) { err.textContent = result.error; err.style.display = 'block'; return; }
-
-  _totpFactorId = result.factorId;
-  document.getElementById('_tm_totp_secret').textContent = result.secret || '';
-
-  // QRコード描画
-  const canvas = document.getElementById('_tm_qr_canvas');
-  canvas.innerHTML = '';
-  _loadQRLib(() => {
-    new QRCode(canvas, { text: result.totpUri, width: 200, height: 200,
-      colorDark: '#2d4a36', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
-  });
-
-  _showTotpStep1();
-}
-
-async function _verifyTotpSetup() {
-  const code = document.getElementById('_tm_totp_code').value.replace(/\D/g, '');
-  const err  = document.getElementById('_tm_totp_err');
-  const ok   = document.getElementById('_tm_totp_ok');
-  const btn  = document.getElementById('_tm_totp_verify_btn');
-  err.style.display = 'none';
-  if (code.length !== 6) { err.textContent = '6桁のコードを入力してください'; err.style.display = 'block'; return; }
-  btn.disabled = true; btn.textContent = '確認中…';
-  const result = await verifyTotpEnrollment(_totpFactorId, code);
-  btn.disabled = false; btn.textContent = '設定を完了する';
-  if (result.ok) {
-    ok.textContent = '✅ 二段階認証の設定が完了しました！次回ログインからコード入力が必要になります。';
-    ok.style.display = 'block';
-    _showTotpStep0();
-    document.getElementById('_tm_totp_status').textContent = '✅ 二段階認証は有効です。認証アプリが設定されています。';
-    document.getElementById('_tm_totp_start_btn').style.display = 'none';
-    document.getElementById('_tm_totp_disable_btn').style.display = 'block';
-  } else {
-    err.textContent = result.error; err.style.display = 'block';
-  }
-}
-
-async function _disableTotp() {
-  if (!confirm('二段階認証を解除しますか？\nログイン時のコード入力が不要になります。')) return;
-  const result = await unenrollTotp(_totpFactorId);
-  const err = document.getElementById('_tm_totp_err');
-  const ok  = document.getElementById('_tm_totp_ok');
-  if (result.ok) {
-    ok.textContent = '二段階認証を解除しました。';
-    ok.style.display = 'block';
-    document.getElementById('_tm_totp_status').textContent = '二段階認証は現在無効です。';
-    document.getElementById('_tm_totp_start_btn').style.display = 'block';
-    document.getElementById('_tm_totp_disable_btn').style.display = 'none';
-  } else {
-    err.textContent = '解除に失敗しました。'; err.style.display = 'block';
-  }
-}
-
-function _loadQRLib(cb) {
-  if (window.QRCode) { cb(); return; }
-  const s = document.createElement('script');
-  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
-  s.onload = cb;
-  document.head.appendChild(s);
-}
-
-
-
-
-</script>
-
-  <!-- ===== 汎用 変更履歴モーダル（全セクション共通・body直下に配置） ===== -->
-  <div id="audit-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:2000; align-items:flex-start; justify-content:center; overflow-y:auto; padding:20px 0;">
-    <div style="background:white; border-radius:14px; padding:24px; width:min(700px,95vw); box-shadow:0 8px 32px rgba(0,0,0,0.25); margin:20px auto;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <h3 style="margin:0;">📋 変更履歴</h3>
-        <button class="btn btn-gray btn-small" onclick="closeAuditModal()">✕ 閉じる</button>
-      </div>
-      <p id="audit-modal-label" style="font-size:12px; color:#666; margin:0 0 14px;"></p>
-      <div id="audit-log-list" style="max-height:65vh; overflow-y:auto; padding-right:4px;"></div>
-    </div>
-  </div>
-
-</body>
-</html>
+  const startBtn = document.getElementById('_tm_totp_star

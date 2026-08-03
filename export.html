@@ -1710,4 +1710,22 @@ async function _disableTotp() {
     document.getElementById('_tm_totp_status').textContent = '二段階認証は現在無効です。';
     document.getElementById('_tm_totp_start_btn').style.display = 'block';
     document.getElementById('_tm_totp_disable_btn').style.display = 'none';
+  } else {
+    err.textContent = '解除に失敗しました。'; err.style.display = 'block';
   }
+}
+
+function _loadQRLib(cb) {
+  if (window.QRCode) { cb(); return; }
+  const s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+  s.onload = cb;
+  document.head.appendChild(s);
+}
+
+
+
+
+</script>
+</body>
+</html>
