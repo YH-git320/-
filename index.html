@@ -1007,6 +1007,11 @@ function _loadQRLib(cb) {
   document.head.appendChild(s);
 }
 
+// ========== 初期化（ログイン確認＋ヘッダーのバッジ表示） ==========
+document.addEventListener('DOMContentLoaded', () => {
+  initAuth(['super_admin', 'admin', 'operator', 'staff']);
+});
+
 
 
 
