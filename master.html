@@ -786,7 +786,7 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
               <div style="font-size:13px;font-weight:700;color:#8a5a1a;margin-bottom:6px;">🔐 個人情報の見せ方（従業員マスタ）</div>
               <div style="font-size:12px;color:#666;margin-bottom:10px;">住所などの表示範囲をこのアカウント個別に指定します（サーバー側で強制）。未設定は「フル」。</div>
               <div style="display:flex;flex-wrap:wrap;gap:12px 20px;">
-                <label style="font-size:13px;">住所 <select class="admf" data-field="address"><option value="full">フル</option><option value="city">市まで</option><option value="hidden">非表示</option></select></label>
+                <label style="font-size:13px;">住所 <select class="admf" data-field="address"><option value="full">フル</option><option value="city">市まで</option><option value="attendant">添乗員のみ</option><option value="hidden">非表示</option></select></label>
                 <label style="font-size:13px;">電話 <select class="admf" data-field="phone"><option value="full">フル</option><option value="masked">一部マスク</option><option value="hidden">非表示</option></select></label>
                 <label style="font-size:13px;">メール <select class="admf" data-field="email"><option value="full">フル</option><option value="masked">一部マスク</option><option value="hidden">非表示</option></select></label>
                 <label style="font-size:13px;">免許番号 <select class="admf" data-field="license_number"><option value="full">フル</option><option value="hidden">非表示</option></select></label>
@@ -878,7 +878,7 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
             <div style="font-size:13px;font-weight:700;color:#8a5a1a;margin-bottom:6px;">🔐 個人情報の見せ方（従業員マスタ）</div>
             <div style="font-size:12px;color:#666;margin-bottom:10px;">住所などの表示範囲をこのアカウント個別に指定します（サーバー側で強制）。未設定は「フル」。</div>
             <div style="display:flex;flex-wrap:wrap;gap:12px 20px;">
-              <label style="font-size:13px;">住所 <select class="permf" data-field="address"><option value="full">フル</option><option value="city">市まで</option><option value="hidden">非表示</option></select></label>
+              <label style="font-size:13px;">住所 <select class="permf" data-field="address"><option value="full">フル</option><option value="city">市まで</option><option value="attendant">添乗員のみ</option><option value="hidden">非表示</option></select></label>
               <label style="font-size:13px;">電話 <select class="permf" data-field="phone"><option value="full">フル</option><option value="masked">一部マスク</option><option value="hidden">非表示</option></select></label>
               <label style="font-size:13px;">メール <select class="permf" data-field="email"><option value="full">フル</option><option value="masked">一部マスク</option><option value="hidden">非表示</option></select></label>
               <label style="font-size:13px;">免許番号 <select class="permf" data-field="license_number"><option value="full">フル</option><option value="hidden">非表示</option></select></label>
@@ -1220,7 +1220,7 @@ function renderEmployeeGrid(employees, col) {
   const _canEdit = _canEditStaff();
   // 閲覧者自身の項目スコープ（住所などの表示制限）。super_adminは常にフル
   const _myFields = (_empRole === 'super_admin') ? {} : (getPermissions().fields || {});
-  const _scopeLabel = { city: '市まで', hidden: '非表示', masked: '一部マスク' };
+  const _scopeLabel = { city: '市まで', hidden: '非表示', masked: '一部マスク', attendant: '添乗員のみ' };
   const _addrScope = _myFields.address || 'full';
   const grid = document.getElementById('emp-grid');
   if (employees.length === 0) {
@@ -2732,7 +2732,7 @@ async function loadAccounts() {
       // 操作ボタン
       var uid   = escAttr(a.user_id);
       var dname = escAttr(a.display_name || a.email);
-      var permData = escAttr(JSON.stringify(a.permissions || {}));
+      var permData = escAttr(JSON.stringify(a.permissions || {})).replace(/"/g,'&quot;');
       var btns = '<button class="btn btn-edit btn-small" onclick="showResetPassword(\'' + uid + '\',\'' + dname + '\')">🔑 PW変更</button> ';
       btns += '<button class="btn btn-edit btn-small" onclick="showPermissionsModal(\'' + uid + '\',\'' + dname + '\',\'' + escAttr(a.role) + '\',' + (a.mfa_enforced?'true':'false') + ',\'' + permData + '\')">⚙️ 権限</button> ';
       if (a.mfa_active) {
