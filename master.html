@@ -1429,6 +1429,7 @@ function startEditEmp(id) {
       <div class="form-field"><label>郵便番号</label><input type="text" id="ee-postal-${id}" value="${esc(emp.postal_code||'')}" style="min-width:100px;"></div>
       <div class="form-field"><label>住所</label><input type="text" id="ee-addr-${id}" value="${esc(emp.address||'')}" style="min-width:240px;"></div>
       <div class="form-field"><label>入社年月日</label><input type="text" id="ee-hire-${id}" value="${esc(emp.hire_date||'')}" placeholder="令和5年4月1日" style="min-width:140px;"></div>
+      <div class="form-field"><label>生年月日</label><input type="date" id="ee-birth-${id}" value="${emp.birth_date||''}"></div>
       <div class="form-field"><label>退職年月日</label><input type="text" id="ee-retire-${id}" value="${esc(emp.retirement_date||'')}" placeholder="令和8年3月31日" style="min-width:140px;"></div>
       <div class="form-field"><label>メール</label><input type="email" id="ee-email-${id}" value="${esc(emp.email||'')}" style="min-width:180px;"></div>
       <div class="form-field"><label>電話番号</label><input type="tel" id="ee-phone-${id}" value="${esc(emp.phone||'')}" style="min-width:140px;"></div>
@@ -1458,17 +1459,20 @@ async function saveEditEmp(id) {
   const expiry  = document.getElementById(`ee-exp-${id}`).value;
   const licenseExempt = document.getElementById(`ee-exempt-${id}`)?.checked || false;
   const note    = document.getElementById(`ee-note-${id}`).value.trim();
+  const birth   = document.getElementById(`ee-birth-${id}`).value;
   if (!name) { showStatus('status-employees','error','氏名を入力してください'); return; }
+  const p_data = {
+    name, name_kana:kana||null, department:dept||null,
+    employee_code:empCode||null, hire_date:hire||null, postal_code:postal||null, address:addr||null,
+    retirement_date:retire||null, email:email||null, phone:phone||null,
+    license_number:license||null, license_expiry:expiry||null,
+    license_required: licenseExempt ? false : null,
+    note:note||null
+  };
+  if (birth) p_data.birth_date = birth;   // 空欄なら送らず、既存の生年月日を保持
   const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/update_staff`, {
     method: 'POST', headers: getH(),
-    body: JSON.stringify({ p_id: id, p_data: {
-      name, name_kana:kana||null, department:dept||null,
-      employee_code:empCode||null, hire_date:hire||null, postal_code:postal||null, address:addr||null,
-      retirement_date:retire||null, email:email||null, phone:phone||null,
-      license_number:license||null, license_expiry:expiry||null,
-      license_required: licenseExempt ? false : null,
-      note:note||null
-    }})
+    body: JSON.stringify({ p_id: id, p_data })
   });
   if (res.ok) { await loadEmployees(); showStatus('status-employees','success','✅ 更新しました'); }
   else showStatus('status-employees','error','更新に失敗しました');
