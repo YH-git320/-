@@ -439,12 +439,24 @@
   <div id="tab-staff" class="tab-content">
     <div class="panel">
       <h2>登録済み添乗員</h2>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+        <span style="font-size:12px;color:#555;font-weight:bold;">並び順：</span>
+        <select id="staff-sort-key" onchange="renderStaffGrid()" style="font-size:13px;padding:4px 6px;">
+          <option value="kana">五十音（フリガナ）</option>
+          <option value="code">社員番号</option>
+          <option value="hire">入社日</option>
+          <option value="age">年齢</option>
+        </select>
+        <button type="button" id="staff-sort-dir" onclick="toggleStaffSortDir()" class="btn btn-small" style="background:#e8efe9;color:#2d4a38;">昇順 ▲</button>
+        <input type="text" id="staff-search" oninput="renderStaffGrid()" placeholder="氏名・フリガナで検索…" style="font-size:13px;padding:4px 8px;min-width:170px;">
+        <span id="staff-count" style="font-size:12px;color:#666;"></span>
+      </div>
       <div class="staff-grid" id="staffGrid">
         <div style="color:#999; font-size:13px;">読み込み中...</div>
       </div>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="addStaffPanel">
       <h2>添乗員を追加</h2>
       <div class="add-staff-form">
         <div class="field">
@@ -551,9 +563,11 @@ async function loadStaff() {
   const jtData = await jtRes.json();
   const tenjoTypeId = jtData[0]?.id;
 
-  // 全従業員を取得
-  const allRes = await fetch(`${SUPABASE_URL}/rest/v1/staff?active=eq.true&order=name&select=id,name,name_kana,employee_code,department,email,active`, { headers: getH() });
-  const allStaff = await allRes.json();
+  // 全従業員を取得（権限に応じて住所などをマスクして返すRPC経由。住所・電話・生年月日を含む）
+  const allRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_staff_directory`, {
+    method: 'POST', headers: getH(), body: JSON.stringify({ p_filter: 'active' })
+  });
+  const allStaff = allRes.ok ? await allRes.json() : [];
 
   if (tenjoTypeId) {
     // 添乗員役割を持つ従業員IDを取得
@@ -802,24 +816,58 @@ async function saveAssignments() {
 }
 
 // ========== 添乗員マスター ==========
+let _staffSortDir = 1; // 1=昇順, -1=降順
+function _stPerms(){ try { return JSON.parse(sessionStorage.getItem('takao_permissions')||'{}'); } catch(e){ return {}; } }
+function _canFullEditStaff(){ const r=sessionStorage.getItem('takao_role'); const p=_stPerms(); return r==='super_admin'||!!p.staff_edit; }
+function _canEditContact(){ const r=sessionStorage.getItem('takao_role'); const p=_stPerms(); return r==='super_admin'||!!p.staff_edit||!!p.contact_edit; }
+function _stEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _stAge(d){ if(!d) return ''; const b=new Date(d); if(isNaN(b.getTime())) return ''; const t=new Date(); let a=t.getFullYear()-b.getFullYear(); const m=t.getMonth()-b.getMonth(); if(m<0||(m===0&&t.getDate()<b.getDate())) a--; return a; }
+function _stDateNum(s){ if(!s) return 0;
+  let m=s.match(/^(令和|平成|昭和|大正|明治)(元|\d+)年(\d+)月(\d+)日$/);
+  if(m){ const base={'令和':2018,'平成':1988,'昭和':1925,'大正':1911,'明治':1867}[m[1]]; const yn=m[2]==='元'?1:parseInt(m[2],10); return (base+yn)*10000+parseInt(m[3],10)*100+parseInt(m[4],10); }
+  m=s.match(/^(\d{4})-(\d{2})-(\d{2})$/); if(m) return parseInt(m[1])*10000+parseInt(m[2])*100+parseInt(m[3]);
+  m=s.match(/^(\d{4})年(\d+)月(\d+)日$/); if(m) return parseInt(m[1])*10000+parseInt(m[2])*100+parseInt(m[3]);
+  return 0; }
+function toggleStaffSortDir(){ _staffSortDir=-_staffSortDir; const b=document.getElementById('staff-sort-dir'); if(b) b.textContent=_staffSortDir===1?'昇順 ▲':'降順 ▼'; renderStaffGrid(); }
+function _stSortCmp(a,b,key){ switch(key){
+  case 'code': return (parseInt(a.employee_code)||0)-(parseInt(b.employee_code)||0);
+  case 'hire': return _stDateNum(a.hire_date)-_stDateNum(b.hire_date);   // 昇順=古い→新しい
+  case 'age':  return _stDateNum(b.birth_date)-_stDateNum(a.birth_date); // 昇順=若い→高齢
+  default:     return (a.name_kana||a.name||'').localeCompare(b.name_kana||b.name||'','ja'); } }
+
 function renderStaffGrid() {
+  const ap = document.getElementById('addStaffPanel');
+  if (ap) ap.style.display = _canFullEditStaff() ? '' : 'none';   // 追加は全編集権限者のみ
   const grid = document.getElementById('staffGrid');
-  if (staffList.length === 0) {
+  const countEl = document.getElementById('staff-count');
+  if (!staffList || staffList.length === 0) {
     grid.innerHTML = '<div style="color:#999; font-size:13px;">添乗員が登録されていません</div>';
+    if (countEl) countEl.textContent = '';
     return;
   }
-  grid.innerHTML = staffList.map(s => `
+  const q = (document.getElementById('staff-search')?.value || '').trim().toLowerCase();
+  const key = document.getElementById('staff-sort-key')?.value || 'kana';
+  let list = staffList.slice();
+  if (q) list = list.filter(s => (s.name||'').toLowerCase().includes(q) || (s.name_kana||'').toLowerCase().includes(q));
+  list.sort((a,b) => _stSortCmp(a,b,key) * _staffSortDir);
+  if (countEl) countEl.textContent = `${list.length}名`;
+  const canContact = _canEditContact(), canFull = _canFullEditStaff();
+  grid.innerHTML = list.map(s => {
+    const age = _stAge(s.birth_date);
+    return `
     <div class="staff-card" id="staff-card-${s.id}">
       <div style="flex:1; min-width:0;">
-        <div class="name">${s.name}</div>
-        <div class="email">${s.email || '（メール未登録）'}</div>
+        <div class="name">${_stEsc(s.name)}${s.name_kana ? ` <span style="font-size:11px;font-weight:normal;color:#888;">${_stEsc(s.name_kana)}</span>` : ''}${age!=='' ? ` <span style="font-size:11px;color:#5a7a65;">（${age}歳）</span>` : ''}</div>
+        <div class="email">✉ ${s.email ? _stEsc(s.email) : '<span style="color:#c0392b;">（メール未登録）</span>'}</div>
+        ${s.phone ? `<div style="font-size:11px;color:#666;margin-top:2px;">📱 ${_stEsc(s.phone)}</div>` : ''}
+        ${s.address ? `<div style="font-size:11px;color:#666;margin-top:2px;">📮 ${_stEsc(s.address)}</div>` : ''}
       </div>
       <div style="display:flex; gap:6px; flex-shrink:0;">
-        <button class="btn btn-edit btn-small" onclick="startEditStaff(${s.id})">編集</button>
-        <button class="btn btn-danger btn-small" onclick="deleteStaff(${s.id}, '${s.name}')">無効化</button>
+        ${canContact ? `<button class="btn btn-edit btn-small" onclick="startEditStaff(${s.id})">メール編集</button>` : ''}
+        ${canFull ? `<button class="btn btn-danger btn-small" onclick="deleteStaff(${s.id}, '${_stEsc(s.name).replace(/'/g,'&#39;')}')">無効化</button>` : ''}
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 function startEditStaff(id) {
@@ -827,37 +875,28 @@ function startEditStaff(id) {
   if (!s) return;
   const card = document.getElementById(`staff-card-${id}`);
   card.innerHTML = `
-    <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
-      <input type="text" id="edit-name-${id}" value="${s.name}" placeholder="氏名" style="font-size:13px; padding:5px 8px;" />
-      <input type="text" id="edit-email-${id}" value="${s.email || ''}" placeholder="メールアドレス" style="font-size:13px; padding:5px 8px;" />
+    <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
+      <div style="font-size:13px;font-weight:bold;">${_stEsc(s.name)}<span style="font-size:11px;font-weight:normal;color:#888;margin-left:6px;">${_stEsc(s.name_kana||'')}</span></div>
+      <input type="email" id="edit-email-${id}" value="${_stEsc(s.email||'')}" placeholder="メールアドレス" style="font-size:13px; padding:5px 8px;" />
     </div>
     <div style="display:flex; flex-direction:column; gap:6px; flex-shrink:0; margin-left:8px;">
       <button class="btn btn-success btn-small" onclick="saveEditStaff(${id})">保存</button>
       <button class="btn btn-small" style="background:#aaa; color:white;" onclick="renderStaffGrid()">取消</button>
-    </div>
-  `;
+    </div>`;
 }
 
 async function saveEditStaff(id) {
-  const name = document.getElementById(`edit-name-${id}`).value.trim();
   const email = document.getElementById(`edit-email-${id}`).value.trim();
-
-  if (!name) {
-    showStatus('staffStatus', 'error', '氏名を入力してください');
-    return;
-  }
-
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/update_staff`, {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/update_staff_contact`, {
     method: 'POST',
     headers: getH(),
-    body: JSON.stringify({ p_id: id, p_data: { name, email: email || null } })
+    body: JSON.stringify({ p_id: id, p_email: email || null })
   });
-
   if (res.ok) {
     await loadStaff();
-    showStatus('staffStatus', 'success', `✅ ${name} さんの情報を更新しました`);
+    showStatus('staffStatus', 'success', '✅ メールアドレスを更新しました');
   } else {
-    showStatus('staffStatus', 'error', '更新に失敗しました');
+    showStatus('staffStatus', 'error', '更新に失敗しました（権限をご確認ください）');
   }
 }
 
