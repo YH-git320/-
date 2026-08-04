@@ -117,6 +117,31 @@ function _clearSession() {
   sessionStorage.removeItem('takao_mfa_enforced');
 }
 
+// refresh_token でアクセストークンを更新する（成功=true）。長時間開いても保存が切れないように使う
+async function refreshSession() {
+  const s = _getSession();
+  if (!s || !s.refresh_token) return false;
+  try {
+    const res = await fetch(`${AUTH_URL}/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { 'apikey': ANON_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: s.refresh_token })
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (!data || !data.access_token) return false;
+    _saveSession(data);
+    return true;
+  } catch { return false; }
+}
+// 期限が近い/切れていれば先に更新
+async function ensureFreshToken() {
+  const s = _getSession();
+  if (s && s.expires_at && (s.expires_at - 60) < Math.floor(Date.now() / 1000)) {
+    await refreshSession();
+  }
+}
+
 function getPermissions() {
   try { return JSON.parse(sessionStorage.getItem('takao_permissions')) || {}; }
   catch { return {}; }
@@ -1120,8 +1145,8 @@ function courseCardHtml(c, ci){
     ${segs || '<p class="muted" style="margin:0 0 8px;">区間がありません。上の「住所を入れる」「乗車場所を選ぶ」で自動作成、または「区間を追加」で足してください。</p>'}
     <button class="mini" onclick="addSeg(${ci},'${slot.leg}','${slot.dir}')">＋ 区間を追加（乗りかえ）</button>
     <div class="total"><span class="muted">この行程の運賃 合計</span><span class="amt" id="total-${ci}">¥${total}</span></div>
-    <label class="fld" style="margin-top:10px;">⏱ 移動時間（乗換案内の所要時間を転記）— 勤怠の${slot.dir==='出勤'?'出勤前':'退勤後'}の移動時間に使います</label>
-    <input type="text" value="${escAttr(s['移動時間']||'')}" placeholder="例：1時間26分 ／ 90分" oninput="upd(${ci},'${slot.leg}','${slot.dir}','移動時間',null,this.value)">
+    <label class="fld" style="margin-top:10px;">⏱ 移動時間（<b>時:分</b>で入力）— 乗換案内の所要時間を転記（勤怠の${slot.dir==='出勤'?'出勤前':'退勤後'}の移動時間）</label>
+    <input type="text" inputmode="numeric" value="${escAttr(s['移動時間']||'')}" placeholder="例：1:30" oninput="updIdou(${ci},'${slot.leg}','${slot.dir}',this)">
   </div>`;
 }
 
@@ -1154,6 +1179,17 @@ function updFare(ci, leg, dir, si, val){
   s['区間'][si]['運賃'] = Number(val) || 0;
   const total = s['区間'].reduce((a, x) => a + (Number(x['運賃'])||0), 0);
   const el = document.getElementById('total-' + ci); if (el) el.textContent = '¥' + total;
+}
+// 移動時間を「時:分」に統一。「1時間26分」等を貼っても 1:26 に変換し、数字とコロンだけに限定
+function updIdou(ci, leg, dir, el){
+  let v = (el.value || '')
+    .replace(/時間|時/g, ':')   // 1時間26分 → 1:26分
+    .replace(/分/g, '')          // 分 を除去
+    .replace(/[^\d:]/g, '');     // 数字とコロン以外を除去
+  const p = v.split(':');
+  if (p.length > 2) v = p[0] + ':' + p.slice(1).join('');  // コロンは1つまで
+  el.value = v;
+  upd(ci, leg, dir, '移動時間', null, v);
 }
 function addSeg(ci, leg, dir){ model.courses[ci].routes[leg][dir]['区間'].push({ '手段':'電車', '乗車':'', '下車':'', '運賃':0 }); render(); }
 function delSeg(ci, leg, dir, si){ model.courses[ci].routes[leg][dir]['区間'].splice(si, 1); render(); }
@@ -1201,12 +1237,29 @@ async function saveAll(){
   });
   if (!rows.length){ status('保存する経路がありません', false); saveStatus('保存する経路がありません', false); return; }
   try {
-    const res = await fetch(`${REST_URL}/commute_routes?on_conflict=staff_id,course_id`, {
+    const url = `${REST_URL}/commute_routes?on_conflict=staff_id,course_id`;
+    const doPost = () => fetch(url, {
       method: 'POST',
       headers: { ...getH(), 'Prefer': 'resolution=merge-duplicates,return=representation' },
       body: JSON.stringify(rows)
     });
-    if (!res.ok){ const t = await res.text(); status('保存に失敗しました：' + t.slice(0,140), false); saveStatus('保存に失敗しました', false); return; }
+    await ensureFreshToken();          // 期限が近ければ先に更新
+    let res = await doPost();
+    if (res.status === 401){           // 期限切れ → 自動更新して1回だけ再試行（入力は保持）
+      saveStatus('ログインを更新して再保存します…', true);
+      if (await refreshSession()) res = await doPost();
+    }
+    if (!res.ok){
+      const t = await res.text();
+      if (res.status === 401 || t.includes('JWT')){
+        status('ログインの有効期限が切れました。再読み込み→ログイン後にもう一度保存してください（入力はこのまま残っています）', false);
+        saveStatus('ログイン切れ：再読み込み→ログインしてください', false);
+      } else {
+        status('保存に失敗しました：' + t.slice(0,140), false);
+        saveStatus('保存に失敗しました', false);
+      }
+      return;
+    }
     status('保存しました', true);
     saveStatus('✅ 保存しました', true);
     onStaffChange();
@@ -1216,6 +1269,7 @@ async function saveAll(){
 document.addEventListener('DOMContentLoaded', async () => {
   const ok = await initAuth(['super_admin','admin','operator','staff']);
   if (!ok) return;
+  setInterval(() => { refreshSession(); }, 45 * 60 * 1000);  // 開いている間、定期的にトークンを更新して期限切れを防ぐ
   document.getElementById('staffSelect').addEventListener('change', onStaffChange);
   try {
     await loadStaff();
