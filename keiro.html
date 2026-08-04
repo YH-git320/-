@@ -881,7 +881,7 @@ function status(msg, ok){
 function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function escAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
-function emptySlot(){ return { '場所':'', '手段':'', '区間':[], '交通費':0 }; }
+function emptySlot(){ return { '場所':'', '手段':'', '区間':[], '交通費':0, '移動時間':'' }; }
 function emptyRoutes(){ const r={}; LEGS.forEach(l=>{ r[l]={}; DIRS.forEach(d=>{ r[l][d]=emptySlot(); }); }); return r; }
 function normRoutes(routes){
   const r = emptyRoutes();
@@ -892,6 +892,7 @@ function normRoutes(routes){
         r[l][d]['場所'] = s['場所'] || '';
         r[l][d]['手段'] = s['手段'] || '';
         r[l][d]['交通費'] = Number(s['交通費']) || 0;
+        r[l][d]['移動時間'] = s['移動時間'] || '';
         r[l][d]['区間'] = Array.isArray(s['区間']) ? s['区間'].map(x => ({
           '手段': x['手段'] || '電車', '乗車': x['乗車'] || '', '下車': x['下車'] || '', '運賃': Number(x['運賃']) || 0
         })) : [];
@@ -1119,6 +1120,8 @@ function courseCardHtml(c, ci){
     ${segs || '<p class="muted" style="margin:0 0 8px;">区間がありません。上の「住所を入れる」「乗車場所を選ぶ」で自動作成、または「区間を追加」で足してください。</p>'}
     <button class="mini" onclick="addSeg(${ci},'${slot.leg}','${slot.dir}')">＋ 区間を追加（乗りかえ）</button>
     <div class="total"><span class="muted">この行程の運賃 合計</span><span class="amt" id="total-${ci}">¥${total}</span></div>
+    <label class="fld" style="margin-top:10px;">⏱ 移動時間（乗換案内の所要時間を転記）— 勤怠の${slot.dir==='出勤'?'出勤前':'退勤後'}の移動時間に使います</label>
+    <input type="text" value="${escAttr(s['移動時間']||'')}" placeholder="例：1時間26分 ／ 90分" oninput="upd(${ci},'${slot.leg}','${slot.dir}','移動時間',null,this.value)">
   </div>`;
 }
 
@@ -1143,6 +1146,7 @@ function setSlot(ci, leg, dir){ model.courses[ci]._slot = { leg, dir }; render()
 function upd(ci, leg, dir, field, si, val, subfield){
   const s = model.courses[ci].routes[leg][dir];
   if (field === '場所'){ s['場所'] = val; }
+  else if (field === '移動時間'){ s['移動時間'] = val; }
   else if (field === '区間'){ s['区間'][si][subfield] = val; }
 }
 function updFare(ci, leg, dir, si, val){
