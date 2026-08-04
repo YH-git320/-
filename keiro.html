@@ -967,23 +967,51 @@ function pickLoc(ci, locId){
   c.routes[leg][dir]['場所'] = loc.name;
   render();
 }
-async function addLoc(ci){
+function toggleLocMgr(ci){ const c = model.courses[ci]; c._editLocs = !c._editLocs; render(); }
+
+async function addLocInline(ci){
   const c = model.courses[ci];
-  const name = (prompt('乗車場所の名称（例：みなみ野デニーズ前）') || '').trim();
-  if (!name) return;
-  const address = (prompt('その場所の住所（乗換案内で使います。分かる範囲で）') || '').trim();
+  const name = (document.getElementById('newlocname-'+ci).value || '').trim();
+  const address = (document.getElementById('newlocaddr-'+ci).value || '').trim();
+  if (!name && !address){ status('名称か住所を入れてください', false); return; }
   try {
     const res = await fetch(`${REST_URL}/course_locations`, {
       method:'POST', headers: getH(),
-      body: JSON.stringify({ course_id: c.course_id, name, address })
+      body: JSON.stringify({ course_id: c.course_id, name: name || address, address })
     });
-    if (!res.ok){ const t = await res.text(); status('場所の追加に失敗：' + t.slice(0,120), false); return; }
-    const rows = await res.json();
-    const created = Array.isArray(rows) ? rows[0] : rows;
+    if (!res.ok){ const t = await res.text(); status('追加に失敗：' + t.slice(0,120), false); return; }
     await loadCourseLocations();
+    c._editLocs = true;
     status('乗車場所を追加しました', true);
-    if (created && created.id) pickLoc(ci, created.id); else render();
-  } catch(e){ status('場所の追加エラー：' + e.message, false); }
+    render();
+  } catch(e){ status('追加エラー：' + e.message, false); }
+}
+async function saveLoc(ci, locId){
+  const name = (document.getElementById('locname-'+locId).value || '').trim();
+  const address = (document.getElementById('locaddr-'+locId).value || '').trim();
+  if (!name){ status('名称を入れてください', false); return; }
+  try {
+    const res = await fetch(`${REST_URL}/course_locations?id=eq.${locId}`, {
+      method:'PATCH', headers: getH(),
+      body: JSON.stringify({ name, address })
+    });
+    if (!res.ok){ const t = await res.text(); status('保存に失敗：' + t.slice(0,120), false); return; }
+    await loadCourseLocations();
+    model.courses[ci]._editLocs = true;
+    status('保存しました', true);
+    render();
+  } catch(e){ status('保存エラー：' + e.message, false); }
+}
+async function delLoc(ci, locId){
+  if (!confirm('この乗車場所を削除します。よろしいですか？（すでに組んだ経路の文字はそのまま残ります）')) return;
+  try {
+    const res = await fetch(`${REST_URL}/course_locations?id=eq.${locId}`, { method:'DELETE', headers: getH() });
+    if (!res.ok){ const t = await res.text(); status('削除に失敗：' + t.slice(0,120), false); return; }
+    await loadCourseLocations();
+    model.courses[ci]._editLocs = true;
+    status('削除しました', true);
+    render();
+  } catch(e){ status('削除エラー：' + e.message, false); }
 }
 
 async function onStaffChange(){
@@ -1035,6 +1063,22 @@ function courseCardHtml(c, ci){
     .concat(locs.map(l => `<option value="${l.id}">${escHtml(l.name)}${l.address?`（${escHtml(l.address)}）`:''}</option>`)).join('');
   const homeLbl   = (slot.dir === '出勤') ? '出発地（自宅）'                : '到着地（自宅）';
   const courseLbl = (slot.dir === '出勤') ? '到着地（コースの乗車場所）'   : '出発地（コースの乗車場所）';
+  const locMgr = c._editLocs ? `
+    <div style="border:1px dashed #cbd8d0;border-radius:8px;padding:10px;margin:0 0 12px;background:#fff;">
+      <div style="font-size:13px;color:#4a5d52;margin-bottom:8px;">乗車場所の編集（このコース）— <b>名称</b>は人が分かる目印、<b>住所</b>は乗換案内の検索に使います</div>
+      ${locs.map(l => `
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;align-items:center;">
+          <input id="locname-${l.id}" value="${escAttr(l.name)}" placeholder="名称（例：みなみ野デニーズ前）" style="flex:1;min-width:150px;">
+          <input id="locaddr-${l.id}" value="${escAttr(l.address)}" placeholder="住所（検索用）" style="flex:2;min-width:190px;">
+          <button class="mini" onclick="saveLoc(${ci},${l.id})">保存</button>
+          <button class="link" onclick="delLoc(${ci},${l.id})">削除</button>
+        </div>`).join('') || '<p class="muted" style="margin:0 0 6px;">まだ登録がありません。下の欄から追加してください。</p>'}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;border-top:1px solid #eee;padding-top:8px;align-items:center;">
+        <input id="newlocname-${ci}" placeholder="＋ 名称" style="flex:1;min-width:150px;">
+        <input id="newlocaddr-${ci}" placeholder="＋ 住所（検索用）" style="flex:2;min-width:190px;">
+        <button class="mini" onclick="addLocInline(${ci})">追加</button>
+      </div>
+    </div>` : '';
   return `<div class="courseCard">
     <div class="courseHead">
       <div class="courseTitle">${escHtml(courseLabel(c.course_id))}</div>
@@ -1052,11 +1096,12 @@ function courseCardHtml(c, ci){
           <div class="fld" style="margin:0 0 4px;">📍 ${courseLbl}</div>
           <div style="display:flex;gap:6px;">
             <select onchange="pickLoc(${ci},this.value)" style="flex:1;">${locOpts}</select>
-            <button class="mini" onclick="addLoc(${ci})">＋新規追加</button>
+            <button class="mini" onclick="toggleLocMgr(${ci})">✏️ 編集・追加</button>
           </div>
         </div>
       </div>
     </div>
+    ${locMgr}
     <label class="fld">集合場所の名称（表示用・任意／上で選ぶと自動で入ります）</label>
     <input type="text" value="${escAttr(s['場所'])}" placeholder="例：みなみ野デニーズ前 ／ 車庫" oninput="upd(${ci},'${slot.leg}','${slot.dir}','場所',null,this.value)">
     <div style="margin:12px 0 6px;font-size:13px;color:#6b7d72;">行程（区間）— 自宅↔乗車場所。乗りかえや「自転車→駅」があれば区間を足してください</div>
