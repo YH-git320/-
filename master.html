@@ -813,6 +813,8 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
               </div>
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:12px;padding-top:10px;border-top:1px dashed #e0d3b8;cursor:pointer;"><input type="checkbox" class="admse" style="accent-color:#8a5a1a;"> 👤 <b>従業員情報の編集を許可</b>（追加・修正・無効化。配車権限とは独立。許可すると住所などはフル表示になります）</label>
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:10px;cursor:pointer;"><input type="checkbox" class="admex" style="accent-color:#8a5a1a;"> 📤 <b>外部出力（持ち出し）を許可</b>（従業員CSV・全データバックアップ。情報取扱責任者向け）</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:10px;cursor:pointer;"><input type="checkbox" class="admce" style="accent-color:#8a5a1a;"> ✉️ <b>連絡先だけ編集を許可</b>（添乗員のメール等の連絡先を更新。従業員の全編集は不可）</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:10px;cursor:pointer;"><input type="checkbox" class="admns" style="accent-color:#4d7a5e;"> 📮 <b>日報の発行・一括送信を許可</b>（配置から日報リンクを発行してメール送信）</label>
             </div>
             <div style="margin-top:14px;">
               <button class="btn btn-add" onclick="createAccount()">＋ 作成</button>
@@ -912,6 +914,8 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
             </div>
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:12px;padding-top:10px;border-top:1px dashed #e0d3b8;cursor:pointer;"><input type="checkbox" class="permse" style="accent-color:#8a5a1a;"> 👤 <b>従業員情報の編集を許可</b>（追加・修正・無効化。配車権限とは独立。許可すると住所などはフル表示になります）</label>
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:10px;cursor:pointer;"><input type="checkbox" class="permex" style="accent-color:#8a5a1a;"> 📤 <b>外部出力（持ち出し）を許可</b>（従業員CSV・全データバックアップ。情報取扱責任者向け）</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:10px;cursor:pointer;"><input type="checkbox" class="permce" style="accent-color:#8a5a1a;"> ✉️ <b>連絡先だけ編集を許可</b>（添乗員のメール等の連絡先を更新。従業員の全編集は不可）</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:10px;cursor:pointer;"><input type="checkbox" class="permns" style="accent-color:#4d7a5e;"> 📮 <b>日報の発行・一括送信を許可</b>（配置から日報リンクを発行してメール送信）</label>
           </div>
 
           <div id="perm-modal-err" style="display:none;background:#fdf2f2;color:#b5453a;border:1px solid #eeaaa4;border-radius:8px;padding:8px 12px;font-size:13px;margin-top:12px;"></div>
@@ -2784,7 +2788,7 @@ function _initAdmRoleSelect() {
 }
 
 // フォームからpermissions JSONBを構築（セクション + 項目スコープ fields + 従業員編集 staff_edit）
-function _buildPermissionsFromForm(cbClass, selClass, seClass, exClass, titleId) {
+function _buildPermissionsFromForm(cbClass, selClass, seClass, exClass, titleId, ceClass, nsClass) {
   var perms = {};
   document.querySelectorAll('.' + cbClass).forEach(function(cb) {
     perms[cb.dataset.sec] = cb.checked;
@@ -2807,6 +2811,14 @@ function _buildPermissionsFromForm(cbClass, selClass, seClass, exClass, titleId)
   if (titleId) {
     var t = document.getElementById(titleId);
     if (t && t.value.trim()) perms.title = t.value.trim(); // 空は省略
+  }
+  if (ceClass) {
+    var ce = document.querySelector('.' + ceClass);
+    if (ce && ce.checked) perms.contact_edit = true; // 未許可は省略
+  }
+  if (nsClass) {
+    var ns = document.querySelector('.' + nsClass);
+    if (ns && ns.checked) perms.nippo_send = true; // 未許可は省略
   }
   return perms;
 }
@@ -2890,7 +2902,7 @@ async function createAccount() {
   if (pass.length < 12) { showStatus('status-admins','error','パスワードは12文字以上（英字・数字・記号を含む）で入力してください'); return; }
   var permissions = null;
   if (role === 'operator' || role === 'admin') {
-    permissions = _buildPermissionsFromForm('adm-perm-cb', 'admf', 'admse', 'admex', 'adm-title');
+    permissions = _buildPermissionsFromForm('adm-perm-cb', 'admf', 'admse', 'admex', 'adm-title', 'admce', 'admns');
   }
   try {
     var body = { p_email: email, p_password: pass, p_display_name: name, p_role: role, p_mfa_enforced: mfaEnforced };
@@ -2907,6 +2919,8 @@ async function createAccount() {
       document.querySelectorAll('.admf').forEach(function(s){ s.value = 'full'; });
       var _amse = document.querySelector('.admse'); if (_amse) _amse.checked = false;
       var _amex = document.querySelector('.admex'); if (_amex) _amex.checked = false;
+      var _amce = document.querySelector('.admce'); if (_amce) _amce.checked = false;
+      var _amns = document.querySelector('.admns'); if (_amns) _amns.checked = false;
       var _amtitle = document.getElementById('adm-title'); if (_amtitle) _amtitle.value = '';
       document.getElementById('adm-perm-section').style.display = 'none';
       document.getElementById('adm-field-section').style.display = 'none';
@@ -2990,6 +3004,10 @@ function showPermissionsModal(userId, name, role, mfaEnforced, permJson) {
   if (_pse) _pse.checked = !!(perms && perms.staff_edit);
   var _pex = document.querySelector('.permex');
   if (_pex) _pex.checked = !!(perms && perms.export);
+  var _pce = document.querySelector('.permce');
+  if (_pce) _pce.checked = !!(perms && perms.contact_edit);
+  var _pns = document.querySelector('.permns');
+  if (_pns) _pns.checked = !!(perms && perms.nippo_send);
   var _ptitle = document.getElementById('perm-title');
   if (_ptitle) _ptitle.value = (perms && perms.title) || '';
   onPermRoleChange();
@@ -3007,7 +3025,7 @@ async function savePermissions() {
   var mfaEnforced = document.getElementById('perm-mfa-enforced').checked;
   var permissions = null;
   if (role === 'operator' || role === 'admin') {
-    permissions = _buildPermissionsFromForm('perm-cb', 'permf', 'permse', 'permex', 'perm-title');
+    permissions = _buildPermissionsFromForm('perm-cb', 'permf', 'permse', 'permex', 'perm-title', 'permce', 'permns');
   }
   var errEl = document.getElementById('perm-modal-err');
   errEl.style.display = 'none';
