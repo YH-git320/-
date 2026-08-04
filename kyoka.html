@@ -142,6 +142,36 @@ function _getSession() {
   catch { return null; }
 }
 
+// --- ログイン自動更新（期限切れ防止）: 45分ごと＋タブ復帰時に更新。未ログイン時は何もしない ---
+async function refreshSession() {
+  const s = _getSession();
+  if (!s || !s.refresh_token) return false;
+  const _authBase = (typeof AUTH_URL !== 'undefined') ? AUTH_URL
+                  : ((typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : 'https://wxdyqkyqtizhtkwtpvru.supabase.co') + '/auth/v1');
+  const _apiKey = (typeof ANON_KEY !== 'undefined') ? ANON_KEY
+                : (typeof SUPABASE_KEY !== 'undefined' ? SUPABASE_KEY : '');
+  try {
+    const res = await fetch(`${_authBase}/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { 'apikey': _apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: s.refresh_token })
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (!data || !data.access_token) return false;
+    _saveSession(data);
+    return true;
+  } catch { return false; }
+}
+async function ensureFreshToken() {
+  const s = _getSession();
+  if (s && s.expires_at && (s.expires_at - 60) < Math.floor(Date.now() / 1000)) {
+    await refreshSession();
+  }
+}
+setInterval(() => { refreshSession(); }, 45 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureFreshToken(); });
+
 function _clearSession() {
   sessionStorage.removeItem('takao_session');
   sessionStorage.removeItem('takao_role');
