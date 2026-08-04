@@ -857,8 +857,9 @@ function renderStaffGrid() {
     return `
     <div class="staff-card" id="staff-card-${s.id}">
       <div style="flex:1; min-width:0;">
-        <div class="name">${_stEsc(s.name)}${s.name_kana ? ` <span style="font-size:11px;font-weight:normal;color:#888;">${_stEsc(s.name_kana)}</span>` : ''}${age!=='' ? ` <span style="font-size:11px;color:#5a7a65;">（${age}歳）</span>` : ''}</div>
-        <div class="email">✉ ${s.email ? _stEsc(s.email) : '<span style="color:#c0392b;">（メール未登録）</span>'}</div>
+        <div class="name">${_stEsc(s.name)}${s.name_kana ? ` <span style="font-size:11px;font-weight:normal;color:#888;">${_stEsc(s.name_kana)}</span>` : ''}</div>
+        ${age!=='' ? `<div style="font-size:11px;color:#5a7a65;margin-top:1px;">🎂 ${age}歳</div>` : ''}
+        <div class="email" style="margin-top:2px;">✉ ${s.email ? _stEsc(s.email) : '<span style="color:#c0392b;">（メール未登録）</span>'}</div>
         ${s.phone ? `<div style="font-size:11px;color:#666;margin-top:2px;">📱 ${_stEsc(s.phone)}</div>` : ''}
         ${s.address ? `<div style="font-size:11px;color:#666;margin-top:2px;">📮 ${_stEsc(s.address)}</div>` : ''}
       </div>
