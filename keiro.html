@@ -74,7 +74,8 @@ button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
 
   <div id="saveBar" style="display:none;margin:16px 0;">
     <button class="primary" style="width:100%;font-size:16px;padding:13px;" onclick="saveAll()">保存する</button>
-    <p class="muted" style="text-align:center;margin-top:8px;">この添乗員の全コースをまとめて保存します。</p>
+    <div id="saveMsg" style="text-align:center;margin-top:8px;font-weight:600;min-height:20px;"></div>
+    <p class="muted" style="text-align:center;margin-top:4px;">この添乗員の全コースをまとめて保存します。</p>
   </div>
 </main>
 
@@ -1163,6 +1164,13 @@ function yahoo(ci, leg, dir, si){
   const url = 'https://transit.yahoo.co.jp/search/result?from=' + encodeURIComponent(seg['乗車']) + '&to=' + encodeURIComponent(seg['下車']) + '&ticket=normal';
   window.open(url, '_blank');
 }
+function saveStatus(msg, ok){
+  const el = document.getElementById('saveMsg');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = ok ? '#2e7d46' : '#c0392b';
+  if (ok) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 5000);
+}
 async function saveAll(){
   if (!model.staffId) return;
   const rows = model.courses.map(c => {
@@ -1177,17 +1185,18 @@ async function saveAll(){
     if (c.id) row.id = c.id;
     return row;
   });
-  if (!rows.length){ status('保存する経路がありません', false); return; }
+  if (!rows.length){ status('保存する経路がありません', false); saveStatus('保存する経路がありません', false); return; }
   try {
     const res = await fetch(`${REST_URL}/commute_routes?on_conflict=staff_id,course_id`, {
       method: 'POST',
       headers: { ...getH(), 'Prefer': 'resolution=merge-duplicates,return=representation' },
       body: JSON.stringify(rows)
     });
-    if (!res.ok){ const t = await res.text(); status('保存に失敗しました：' + t.slice(0,140), false); return; }
+    if (!res.ok){ const t = await res.text(); status('保存に失敗しました：' + t.slice(0,140), false); saveStatus('保存に失敗しました', false); return; }
     status('保存しました', true);
+    saveStatus('✅ 保存しました', true);
     onStaffChange();
-  } catch(e){ status('保存エラー：' + e.message, false); }
+  } catch(e){ status('保存エラー：' + e.message, false); saveStatus('保存エラー：' + e.message, false); }
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
