@@ -970,6 +970,14 @@ function pickLoc(ci, locId){
 }
 function toggleLocMgr(ci){ const c = model.courses[ci]; c._editLocs = !c._editLocs; render(); }
 
+// 名称欄の文字でGoogleマップ検索を開く（住所の確認用）
+function mapSearch(inputId){
+  const el = document.getElementById(inputId);
+  const q = el ? (el.value || '').trim() : '';
+  if (!q){ status('先に名称（目印）を入れてください', false); return; }
+  window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q), '_blank');
+}
+
 async function addLocInline(ci){
   const c = model.courses[ci];
   const name = (document.getElementById('newlocname-'+ci).value || '').trim();
@@ -1071,12 +1079,14 @@ function courseCardHtml(c, ci){
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;align-items:center;">
           <input id="locname-${l.id}" value="${escAttr(l.name)}" placeholder="名称（例：みなみ野デニーズ前）" style="flex:1;min-width:150px;">
           <input id="locaddr-${l.id}" value="${escAttr(l.address)}" placeholder="住所（検索用）" style="flex:2;min-width:190px;">
+          <button class="mini" onclick="mapSearch('locname-${l.id}')">🗺 地図</button>
           <button class="mini" onclick="saveLoc(${ci},${l.id})">保存</button>
           <button class="link" onclick="delLoc(${ci},${l.id})">削除</button>
         </div>`).join('') || '<p class="muted" style="margin:0 0 6px;">まだ登録がありません。下の欄から追加してください。</p>'}
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;border-top:1px solid #eee;padding-top:8px;align-items:center;">
         <input id="newlocname-${ci}" placeholder="＋ 名称" style="flex:1;min-width:150px;">
         <input id="newlocaddr-${ci}" placeholder="＋ 住所（検索用）" style="flex:2;min-width:190px;">
+        <button class="mini" onclick="mapSearch('newlocname-${ci}')">🗺 地図</button>
         <button class="mini" onclick="addLocInline(${ci})">追加</button>
       </div>
     </div>` : '';
