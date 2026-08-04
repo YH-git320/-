@@ -486,10 +486,20 @@
     <div class="panel" id="notifyPanel" style="display:none;">
       <h2>通知内容プレビュー</h2>
       <div id="notifyList"></div>
-      <div class="action-bar" style="margin-top:16px;">
-        <button class="btn btn-notify" onclick="sendAllNotify()">📧 全員にメール通知を送る</button>
-        <span style="font-size:12px; color:#666;">※メールクライアントが開きます（一人ずつ確認して送信してください）</span>
+      <div style="margin-top:16px; padding:12px 14px; background:#f5f8f4; border:1px solid #d0e4d6; border-radius:10px;">
+        <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer; font-weight:700;">
+          <input type="checkbox" id="notifyTestMode" checked> 🧪 テスト送信（全員分を下のアドレスにまとめて送る／添乗員には届きません）
+        </label>
+        <div style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <span style="font-size:12px; color:#555;">テスト宛先：</span>
+          <input type="email" id="notifyTestAddr" placeholder="確認用のメールアドレス（自分のメール等）" style="font-size:13px; padding:5px 8px; min-width:240px;">
+        </div>
       </div>
+      <div class="action-bar" style="margin-top:12px;">
+        <button class="btn btn-notify" id="btnSendAll" onclick="sendAllNotify()">📧 この日の日報リンクを一括送信</button>
+        <span style="font-size:12px; color:#666;">※本人専用リンクを自動発行し、Resend 経由で自動送信します</span>
+      </div>
+      <div id="notifySendResult" style="margin-top:12px;"></div>
     </div>
   </div>
 
@@ -1012,80 +1022,87 @@ async function previewNotify() {
   Object.entries(staffNotifyMap).forEach(([staffId, items]) => {
     const staff = staffMap[staffId];
     if (!staff) return;
-
-    // 日報URL（複数業務をまとめてroleパラメータに）
-    const tokouItem = items.find(i => i.role === '登校便');
-    const gekouItem = items.find(i => i.role === '下校便');
-    const mainItem = tokouItem || gekouItem || items[0];
-    const mainCourse = mainItem.course;
-
-    const roles = items.filter(i => i.role !== '中間業務').map(i => i.role);
-    const roleParam = [...new Set(roles)].join(',');
-
-    const params = new URLSearchParams({
-      date: date,
-      name: staff.name,
-      school: mainCourse?.school_name || '',
-      course: mainCourse?.course_name || '',
-      role: roleParam || mainItem.role
-    });
-    const formUrl = NIPPO_FORM_URL + '?' + params.toString();
-
-    const body = buildMailBody(staff.name, dateJp, items, formUrl);
-    window._notifyData.push({ staff, body, subject: `【高尾輸送】${dateJp}のご担当業務について`, to: staff.email });
-
+    // 送信用データを保持（トークンリンクは送信時に発行する）
+    window._notifyData.push({ staffId: Number(staffId), name: staff.name, email: staff.email || null, items });
+    const previewBody = buildMailHtml(staff.name, dateJp, items, '（送信時に本人専用リンクを自動発行します）', true);
     html += `
-      <div style="margin-bottom:16px; border:1px solid #d0d0d0; border-radius: 12px; overflow:hidden;">
-        <div style="background:#4d7a5e; color:white; padding:8px 14px; font-weight:bold; font-size:13px;">
-          📧 宛先：${staff.name}（${staff.email || 'メール未登録'}）
+      <div style="margin-bottom:14px; border:1px solid #d0d0d0; border-radius:12px; overflow:hidden;">
+        <div style="background:${staff.email ? '#4d7a5e' : '#b5453a'}; color:white; padding:8px 14px; font-weight:bold; font-size:13px;">
+          📧 宛先：${_stEsc(staff.name)}（${staff.email ? _stEsc(staff.email) : 'メール未登録 ⚠'}）
         </div>
-        <div class="notify-preview">${body}</div>
-        <div style="padding:8px 14px; background:#f8f9fa; display:flex; gap:8px; align-items:center;">
-          ${staff.email
-            ? `<a href="mailto:${staff.email}?subject=${encodeURIComponent(`【高尾輸送】${dateJp}のご担当業務について`)}&body=${encodeURIComponent(body)}"
-                class="btn btn-notify btn-small">このメールを送る</a>`
-            : '<span style="color:#c0392b; font-size:12px;">⚠ メールアドレス未登録</span>'}
-          <span style="font-size:11px; color:#666;">
-            日報リンク：<a href="${formUrl}" target="_blank" style="color:#6b9e7e;">${formUrl.slice(0,60)}...</a>
-          </span>
-        </div>
-      </div>
-    `;
+        <div class="notify-preview" style="padding:10px 14px;">${previewBody}</div>
+      </div>`;
   });
 
   notifyList.innerHTML = html;
   document.getElementById('notifyPanel').style.display = 'block';
 }
 
-function buildMailBody(name, dateJp, items, formUrl) {
-  const lines = [
-    `${name} 様`,
-    '',
-    `${dateJp}のご担当業務についてご連絡いたします。`,
-    '',
-    '【担当業務】',
-    ...items.map(it => `  ・${it.role}：${it.courseName}`),
-    '',
-    '業務終了後、下記リンクより日報の入力をお願いします。',
-    '（スマートフォンからもご入力いただけます）',
-    '',
-    '▼ 日報入力フォーム',
-    formUrl,
-    '',
-    '---',
-    '高尾輸送サービス',
-  ];
-  return lines.join('\n');
+function buildMailHtml(name, dateJp, items, urlOrNote, isPlaceholder) {
+  const rows = items.map(it => `　・${_stEsc(it.role)}：${_stEsc(it.courseName)}`).join('<br>');
+  const linkHtml = isPlaceholder
+    ? `<span style="color:#888;">${_stEsc(urlOrNote)}</span>`
+    : `<a href="${urlOrNote}">${_stEsc(urlOrNote)}</a>`;
+  return `<div style="font-family:'Hiragino Kaku Gothic ProN','Meiryo',sans-serif;font-size:14px;line-height:1.75;color:#222;">
+<p>${_stEsc(name)} 様</p>
+<p>${_stEsc(dateJp)}のご担当業務についてご連絡いたします。</p>
+<p><b>【担当業務】</b><br>${rows}</p>
+<p>業務終了後、下記リンクより日報の入力をお願いします。<br>（スマートフォンからもご入力いただけます）</p>
+<p>▼ 日報入力フォーム<br>${linkHtml}</p>
+<p style="color:#888;">---<br>高尾輸送サービス</p>
+</div>`;
 }
 
-function sendAllNotify() {
-  if (!window._notifyData || window._notifyData.length === 0) return;
-  window._notifyData.forEach(({ staff, body, subject }) => {
-    if (staff.email) {
-      const link = `mailto:${staff.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-      window.open(link, '_blank');
-    }
-  });
+// 一括送信：本人専用トークンを発行 → Resend(send-email)で自動送信。既定はテスト送信（安全側）。
+async function sendAllNotify() {
+  const data = window._notifyData || [];
+  if (!data.length) { alert('先に「プレビューを表示」を押してください'); return; }
+  const date = document.getElementById('notifyDate').value;
+  const dateJp = formatDateJp(date);
+  const testMode = document.getElementById('notifyTestMode').checked;
+  const testAddr = (document.getElementById('notifyTestAddr').value || '').trim();
+  if (testMode && !testAddr) { alert('テスト送信の宛先メールを入力してください'); return; }
+
+  const targets = testMode ? data : data.filter(d => d.email);
+  const skipped = testMode ? 0 : data.filter(d => !d.email).length;
+  if (!targets.length) { alert('送信できる宛先がありません（メール未登録）'); return; }
+
+  const msg = testMode
+    ? `テスト送信：${targets.length}名ぶんを ${testAddr} にまとめて送ります。\n（添乗員には届きません）よろしいですか？`
+    : `本番送信：${targets.length}名の添乗員へ日報リンクを送ります。${skipped ? `\n（メール未登録の${skipped}名は除外）` : ''}\nよろしいですか？`;
+  if (!confirm(msg)) return;
+
+  const btn = document.getElementById('btnSendAll');
+  const resultBox = document.getElementById('notifySendResult');
+  btn.disabled = true;
+  const endpoint = `${SUPABASE_URL}/functions/v1/send-email`;
+  let sent = 0; const fails = [];
+  for (let i = 0; i < targets.length; i++) {
+    const d = targets[i];
+    resultBox.innerHTML = `<p style="color:#666;font-size:13px;">送信中… ${i + 1}/${targets.length}（${_stEsc(d.name)}）</p>`;
+    try {
+      const iss = await fetch(`${SUPABASE_URL}/rest/v1/rpc/issue_nippo_for_day`, {
+        method: 'POST', headers: getH(),
+        body: JSON.stringify({ p_staff_id: d.staffId, p_work_date: date, p_valid_hours: 168 })
+      });
+      if (!iss.ok) throw new Error('リンク発行に失敗');
+      const issData = await iss.json();
+      const url = Array.isArray(issData) ? (issData[0] && issData[0].url) : (issData && issData.url);
+      if (!url) throw new Error('リンクを取得できません');
+      const html = buildMailHtml(d.name, dateJp, d.items, url, false);
+      const to = testMode ? testAddr : d.email;
+      const subject = (testMode ? `[テスト｜本来の宛先：${d.name}] ` : '') + `【高尾輸送】${dateJp}のご担当業務について`;
+      const send = await fetch(endpoint, { method: 'POST', headers: getH(), body: JSON.stringify({ to, subject, html }) });
+      const sr = await send.json().catch(() => ({}));
+      if (send.ok && sr.ok) sent++; else fails.push(`${d.name}：${sr.error || (sr.result && sr.result.message) || ('HTTP ' + send.status)}`);
+    } catch (e) { fails.push(`${d.name}：${e.message}`); }
+  }
+  btn.disabled = false;
+  resultBox.innerHTML = `<div style="padding:10px 12px;border-radius:8px;font-size:13px;background:${fails.length ? '#fdf2f2' : '#eef7f1'};border:1px solid ${fails.length ? '#eeaaa4' : '#b4d4c0'};">
+    ✅ ${sent}件 送信${skipped ? `　／　⏭ 未登録 ${skipped}件 除外` : ''}${fails.length ? `　／　⚠ 失敗 ${fails.length}件` : ''}
+    ${fails.length ? `<div style="margin-top:6px;color:#b5453a;">${fails.map(_stEsc).join('<br>')}</div>` : ''}
+    ${testMode ? '<div style="margin-top:6px;color:#666;">※テスト送信でした（添乗員には届いていません）。本番は「🧪 テスト送信」のチェックを外してください。</div>' : ''}
+  </div>`;
 }
 
 // ========== ユーティリティ ==========
