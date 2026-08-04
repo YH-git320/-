@@ -374,6 +374,19 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
         </div>
         <span id="emp-filter-count" style="font-size:12px; color:#666;"></span>
       </div>
+      <!-- 並び順・未入力フィルタ -->
+      <div style="display:flex; gap:10px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
+        <span style="font-size:13px; font-weight:bold; color:#555;">並び順：</span>
+        <select id="sort-key" onchange="filterEmployees()" style="min-width:150px;">
+          <option value="kana">五十音（フリガナ）</option>
+          <option value="code">社員番号</option>
+          <option value="hire">入社日</option>
+          <option value="age">年齢</option>
+          <option value="dept">部課</option>
+        </select>
+        <button type="button" id="sort-dir-btn" class="btn btn-gray btn-small" onclick="toggleSortDir()">昇順 ▲</button>
+        <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer;margin-left:8px;"><input type="checkbox" id="filter-incomplete" onchange="filterEmployees()"> ⚠ 未入力がある人のみ</label>
+      </div>
       <!-- 表示項目トグル -->
       <div class="col-toggle-bar" style="margin-bottom:10px;">
         <span style="font-size:11px;color:#888;font-weight:bold;margin-right:4px;">表示項目：</span>
@@ -1209,14 +1222,52 @@ async function loadEmployees() {
   }
 }
 
+let _sortDir = 1; // 1=昇順, -1=降順
+function toggleSortDir() {
+  _sortDir = -_sortDir;
+  const b = document.getElementById('sort-dir-btn');
+  if (b) b.textContent = _sortDir === 1 ? '昇順 ▲' : '降順 ▼';
+  filterEmployees();
+}
+// 和暦/西暦の日付テキスト → 比較用の数値(YYYYMMDD)。空・不明は0
+function _dateNum(s) {
+  if (!s) return 0;
+  let m = s.match(/^(令和|平成|昭和|大正|明治)(元|\d+)年(\d+)月(\d+)日$/);
+  if (m) {
+    const base = { '令和':2018, '平成':1988, '昭和':1925, '大正':1911, '明治':1867 }[m[1]];
+    const yn = m[2] === '元' ? 1 : parseInt(m[2], 10);
+    return (base + yn) * 10000 + parseInt(m[3], 10) * 100 + parseInt(m[4], 10);
+  }
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return parseInt(m[1]) * 10000 + parseInt(m[2]) * 100 + parseInt(m[3]);
+  m = s.match(/^(\d{4})年(\d+)月(\d+)日$/);
+  if (m) return parseInt(m[1]) * 10000 + parseInt(m[2]) * 100 + parseInt(m[3]);
+  return 0;
+}
+// 情報が不完全（主要項目のいずれかが未入力）
+function _isIncomplete(e) {
+  return !e.name_kana || !e.employee_code || !e.phone || !e.hire_date || !e.birth_date || !e.address;
+}
+function _empSortCompare(a, b, key) {
+  switch (key) {
+    case 'code': return (parseInt(a.employee_code) || 0) - (parseInt(b.employee_code) || 0);
+    case 'hire': return _dateNum(a.hire_date) - _dateNum(b.hire_date);    // 昇順=古い→新しい
+    case 'age':  return _dateNum(b.birth_date) - _dateNum(a.birth_date);  // 昇順=若い→高齢
+    case 'dept': return (a.department || '').localeCompare(b.department || '', 'ja');
+    default:     return (a.name_kana || a.name || '').localeCompare(b.name_kana || b.name || '', 'ja');
+  }
+}
 function filterEmployees() {
   const jtId    = parseInt(document.getElementById('filter-jobtype').value) || null;
   const nameQ   = document.getElementById('filter-name').value.trim().toLowerCase();
   let filtered  = allEmployees;
   if (jtId)   filtered = filtered.filter(e => e.jobTypes.some(j => j.id === jtId));
   if (nameQ)  filtered = filtered.filter(e => e.name.toLowerCase().includes(nameQ));
+  if (document.getElementById('filter-incomplete')?.checked) filtered = filtered.filter(_isIncomplete);
+  const sortKey = document.getElementById('sort-key')?.value || 'kana';
+  filtered = filtered.slice().sort((a, b) => _empSortCompare(a, b, sortKey) * _sortDir);
   document.getElementById('emp-filter-count').textContent =
-    filtered.length < allEmployees.length ? `${filtered.length}件 表示中` : '';
+    (filtered.length < allEmployees.length ? `${filtered.length}件 表示中` : `${filtered.length}件`);
   renderEmployeeGrid(filtered, getEmpColVisible());
 }
 
