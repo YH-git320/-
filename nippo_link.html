@@ -1001,7 +1001,9 @@ function renderAllResults(results, errors){
       <div class="row"><button class="mini primary" onclick="copyText('${o.url}')">コピー</button><button class="mini" onclick="window.open('${o.url}','_blank')">開く</button></div>
     </div>`).join('');
   const errHtml = errors.length ? `<div style="margin-top:8px;color:#b5453a;font-size:13px;">発行できなかった人：<br>${errors.map(escHtml).join('<br>')}</div>` : '';
-  box.innerHTML = `<div style="margin-top:10px;border:0.5px solid #e0e6e0;border-radius:10px;padding:4px 12px;">${rows || '<p class="muted">発行できる配置がありませんでした。</p>'}</div>${errHtml}`;
+  const _wd = document.getElementById('workDate').value;
+  const notifyBtn = results.length ? `<div style="margin-top:12px;"><a href="tenjo.html?tab=notify&date=${encodeURIComponent(_wd)}" style="display:inline-block;background:#7a5aa0;color:#fff;font-weight:700;padding:8px 16px;border-radius:8px;text-decoration:none;font-size:13px;">📧 この日の通知を送る ▶</a></div>` : '';
+  box.innerHTML = `<div style="margin-top:10px;border:0.5px solid #e0e6e0;border-radius:10px;padding:4px 12px;">${rows || '<p class="muted">発行できる配置がありませんでした。</p>'}</div>${errHtml}${notifyBtn}`;
 }
 function csvAll(){
   const rows = window._allResults || [];
@@ -1020,7 +1022,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!ok) return;
   const now = new Date();
   const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1);
-  document.getElementById('workDate').value = localDate(tomorrow);
+  const _p = new URLSearchParams(location.search);
+  document.getElementById('workDate').value = _p.get('date') || localDate(tomorrow);
   document.getElementById('workDate').addEventListener('change', loadTokens);
   try {
     await loadStaff();
