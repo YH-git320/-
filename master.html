@@ -3171,6 +3171,27 @@ async function ensureFreshToken() {
 }
 setInterval(() => { refreshSession(); }, 45 * 60 * 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureFreshToken(); });
+// 保存等でトークン期限切れ(401)が起きたら、自動更新して1回だけ再送（入力を失わないため）。401は処理未実行の拒否なので再送は安全
+(function(){
+  var _origFetch = window.fetch.bind(window);
+  var _reauth = null;
+  function _reauthOnce(){ if(!_reauth){ _reauth = Promise.resolve(refreshSession()).finally(function(){ _reauth=null; }); } return _reauth; }
+  window.fetch = async function(input, init){
+    var res = await _origFetch(input, init);
+    try{
+      var u = (typeof input==='string') ? input : ((input && input.url) || '');
+      if(res.status===401 && u.indexOf('wxdyqkyqtizhtkwtpvru.supabase.co')!==-1 && u.indexOf('/auth/')===-1 && init){
+        var s=_getSession();
+        if(s && s.refresh_token && await _reauthOnce()){
+          var ns=_getSession(); var h=Object.assign({}, init.headers||{});
+          if(ns && ns.access_token) h['Authorization']='Bearer '+ns.access_token;
+          res = await _origFetch(input, Object.assign({}, init, {headers:h}));
+        }
+      }
+    }catch(e){}
+    return res;
+  };
+})();
 
 function _clearSession() {
   sessionStorage.removeItem('takao_session');
