@@ -845,6 +845,24 @@ const DIRS = ['出勤','帰宅'];
 let STAFF = [];
 let COURSES = [];
 let model = { staffId: null, courses: [] };
+let COURSE_LOCS = {};   // course_id(String) → [{id,name,address}]
+let STAFF_ADDR = {};    // staff_id(String) → 住所（権限スコープに応じた値）
+
+// 全角→半角（数字・各種ハイフン・空白）
+function toHalf(s){
+  return String(s==null?'':s)
+    .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/[‐‑‒–—―ー－]/g, '-')
+    .replace(/　/g, ' ');
+}
+// 住所を「住居表示まで」に丸める（建物名・号室を落とす）。取れなければ元の住所を返す
+function jushoHyoji(addr){
+  let s = toHalf(addr).trim();
+  if (!s) return '';
+  s = s.split(' ')[0].trim();                    // 建物名がスペース区切りなら除去
+  const m = s.match(/^[^\d]*[\d\-丁目番地号]+/);   // 都道府県〜番地の数字ブロックまで
+  return (m ? m[0] : s).trim();
+}
 
 function getH(){
   const s = _getSession();
@@ -901,10 +919,78 @@ async function loadCourses(){
 }
 function courseLabel(cid){ const c = COURSES.find(x => String(x.id) === String(cid)); return c ? `${c.school_name} ／ ${c.course_name}` : `コースID ${cid}`; }
 
+async function loadCourseLocations(){
+  COURSE_LOCS = {};
+  const res = await fetch(`${REST_URL}/course_locations?active=eq.true&select=id,course_id,name,address&order=name`, { headers: getH() });
+  if (!res.ok) return;
+  const rows = await res.json();
+  rows.forEach(r => {
+    const k = String(r.course_id);
+    (COURSE_LOCS[k] = COURSE_LOCS[k] || []).push({ id: r.id, name: r.name, address: r.address || '' });
+  });
+}
+async function loadStaffAddr(){
+  STAFF_ADDR = {};
+  const res = await fetch(`${REST_URL}/rpc/get_staff_directory`, {
+    method:'POST', headers: getH(), body: JSON.stringify({ p_filter: 'active' })
+  });
+  if (!res.ok) return;
+  const rows = await res.json();
+  rows.forEach(r => { if (r && r.id != null) STAFF_ADDR[String(r.id)] = r.address || ''; });
+}
+
+// 経路の両端（自宅側・コース側）の参照。区間が無ければ1本作る
+function ends(c, leg, dir){
+  const s = c.routes[leg][dir];
+  if (!s['区間'].length) s['区間'].push({ '手段':'電車', '乗車':'', '下車':'', '運賃':0 });
+  const segs = s['区間'];
+  const first = segs[0], last = segs[segs.length - 1];
+  return (dir === '出勤')
+    ? { home:{seg:first, key:'乗車'}, course:{seg:last, key:'下車'} }
+    : { home:{seg:last,  key:'下車'}, course:{seg:first, key:'乗車'} };
+}
+function fillHome(ci){
+  const c = model.courses[ci]; const {leg, dir} = c._slot;
+  if (!model.homeAddr){ status('この添乗員の住所が取得できませんでした（従業員マスタで住所を登録してください）', false); return; }
+  const e = ends(c, leg, dir);
+  e.home.seg[e.home.key] = model.homeAddr;
+  render();
+}
+function pickLoc(ci, locId){
+  if (!locId) return;
+  const c = model.courses[ci]; const {leg, dir} = c._slot;
+  const list = COURSE_LOCS[String(c.course_id)] || [];
+  const loc = list.find(x => String(x.id) === String(locId));
+  if (!loc) return;
+  const e = ends(c, leg, dir);
+  e.course.seg[e.course.key] = loc.address || loc.name;
+  c.routes[leg][dir]['場所'] = loc.name;
+  render();
+}
+async function addLoc(ci){
+  const c = model.courses[ci];
+  const name = (prompt('乗車場所の名称（例：みなみ野デニーズ前）') || '').trim();
+  if (!name) return;
+  const address = (prompt('その場所の住所（乗換案内で使います。分かる範囲で）') || '').trim();
+  try {
+    const res = await fetch(`${REST_URL}/course_locations`, {
+      method:'POST', headers: getH(),
+      body: JSON.stringify({ course_id: c.course_id, name, address })
+    });
+    if (!res.ok){ const t = await res.text(); status('場所の追加に失敗：' + t.slice(0,120), false); return; }
+    const rows = await res.json();
+    const created = Array.isArray(rows) ? rows[0] : rows;
+    await loadCourseLocations();
+    status('乗車場所を追加しました', true);
+    if (created && created.id) pickLoc(ci, created.id); else render();
+  } catch(e){ status('場所の追加エラー：' + e.message, false); }
+}
+
 async function onStaffChange(){
   const id = document.getElementById('staffSelect').value;
   model = { staffId: id ? Number(id) : null, courses: [] };
   if (!id){ render(); return; }
+  model.homeAddr = jushoHyoji(STAFF_ADDR[String(id)] || '');
   const res = await fetch(`${REST_URL}/commute_routes?staff_id=eq.${id}&select=*`, { headers: getH() });
   if (!res.ok){ status('経路の読み込みに失敗しました', false); render(); return; }
   const rows = await res.json();
@@ -929,6 +1015,14 @@ function render(){
 
 function courseCardHtml(c, ci){
   const slot = c._slot; const s = c.routes[slot.leg][slot.dir];
+  // 初回表示時、区間が空なら1本作って自宅側を既定入力（住居表示まで）
+  if (!s._init){
+    s._init = true;
+    if (!s['区間'].length && model.homeAddr){
+      const e0 = ends(c, slot.leg, slot.dir);
+      if (!e0.home.seg[e0.home.key]) e0.home.seg[e0.home.key] = model.homeAddr;
+    }
+  }
   const tabs = [];
   LEGS.forEach(l => DIRS.forEach(d => {
     const on = (l === slot.leg && d === slot.dir);
@@ -936,16 +1030,37 @@ function courseCardHtml(c, ci){
   }));
   const segs = s['区間'].map((seg, si) => segHtml(ci, slot.leg, slot.dir, seg, si)).join('');
   const total = s['区間'].reduce((a, x) => a + (Number(x['運賃'])||0), 0);
+  const locs = COURSE_LOCS[String(c.course_id)] || [];
+  const locOpts = ['<option value="">コースの乗車場所を選ぶ…</option>']
+    .concat(locs.map(l => `<option value="${l.id}">${escHtml(l.name)}${l.address?`（${escHtml(l.address)}）`:''}</option>`)).join('');
+  const homeLbl   = (slot.dir === '出勤') ? '出発地（自宅）'                : '到着地（自宅）';
+  const courseLbl = (slot.dir === '出勤') ? '到着地（コースの乗車場所）'   : '出発地（コースの乗車場所）';
   return `<div class="courseCard">
     <div class="courseHead">
       <div class="courseTitle">${escHtml(courseLabel(c.course_id))}</div>
       <button class="link" onclick="delCourse(${ci})">コース削除</button>
     </div>
     <div class="tabs">${tabs.join('')}</div>
-    <label class="fld">出発地／集合場所（この行程の場所）</label>
+    <div style="background:#f6faf7;border:1px solid #e2ede6;border-radius:10px;padding:12px;margin:6px 0 12px;">
+      <div style="display:flex;flex-wrap:wrap;gap:14px;">
+        <div style="flex:1;min-width:230px;">
+          <div class="fld" style="margin:0 0 4px;">🏠 ${homeLbl}</div>
+          <button class="mini" onclick="fillHome(${ci})">住所を入れる</button>
+          <span class="muted" style="font-size:12px;margin-left:6px;">${model.homeAddr ? escHtml(model.homeAddr) : '住所未登録'}</span>
+        </div>
+        <div style="flex:1;min-width:230px;">
+          <div class="fld" style="margin:0 0 4px;">📍 ${courseLbl}</div>
+          <div style="display:flex;gap:6px;">
+            <select onchange="pickLoc(${ci},this.value)" style="flex:1;">${locOpts}</select>
+            <button class="mini" onclick="addLoc(${ci})">＋新規追加</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <label class="fld">集合場所の名称（表示用・任意／上で選ぶと自動で入ります）</label>
     <input type="text" value="${escAttr(s['場所'])}" placeholder="例：みなみ野デニーズ前 ／ 車庫" oninput="upd(${ci},'${slot.leg}','${slot.dir}','場所',null,this.value)">
-    <div style="margin:12px 0 6px;font-size:13px;color:#6b7d72;">行程（区間）— 乗りかえがあれば区間を足してください</div>
-    ${segs || '<p class="muted" style="margin:0 0 8px;">区間がありません。「区間を追加」で足してください。</p>'}
+    <div style="margin:12px 0 6px;font-size:13px;color:#6b7d72;">行程（区間）— 自宅↔乗車場所。乗りかえや「自転車→駅」があれば区間を足してください</div>
+    ${segs || '<p class="muted" style="margin:0 0 8px;">区間がありません。上の「住所を入れる」「乗車場所を選ぶ」で自動作成、または「区間を追加」で足してください。</p>'}
     <button class="mini" onclick="addSeg(${ci},'${slot.leg}','${slot.dir}')">＋ 区間を追加（乗りかえ）</button>
     <div class="total"><span class="muted">この行程の運賃 合計</span><span class="amt" id="total-${ci}">¥${total}</span></div>
   </div>`;
@@ -1009,6 +1124,7 @@ async function saveAll(){
     const routes = JSON.parse(JSON.stringify(c.routes));
     LEGS.forEach(l => DIRS.forEach(d => {
       const s = routes[l][d];
+      delete s._init;
       s['交通費'] = s['区間'].reduce((a, x) => a + (Number(x['運賃'])||0), 0);
       s['手段'] = [...new Set(s['区間'].map(x => x['手段']).filter(Boolean))].join('・');
     }));
@@ -1036,6 +1152,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     await loadStaff();
     await loadCourses();
+    await loadCourseLocations();
+    await loadStaffAddr();
     status('準備ができました。添乗員をえらんでください。', true);
   } catch(e){ status('データ読み込みエラー：' + e.message, false); }
 });
