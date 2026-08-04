@@ -386,6 +386,8 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
         <label><input type="checkbox" id="etog-license" checked onchange="applyEmpColVisible()">🪪 免許情報</label>
         <span class="col-toggle-sep"></span>
         <label><input type="checkbox" id="etog-note" checked onchange="applyEmpColVisible()">📝 備考</label>
+        <span class="col-toggle-sep"></span>
+        <label><input type="checkbox" id="etog-birth" onchange="applyEmpColVisible()">🎂 生年月日・年齢</label>
       </div>
 
       <div class="emp-grid" id="emp-grid">
@@ -1158,6 +1160,7 @@ function getEmpColVisible() {
     address: document.getElementById('etog-address')?.checked ?? false,
     license: document.getElementById('etog-license')?.checked ?? true,
     note:    document.getElementById('etog-note')?.checked ?? true,
+    birth:   document.getElementById('etog-birth')?.checked ?? false,
   };
 }
 function applyEmpColVisible() { filterEmployees(); }
@@ -1226,9 +1229,19 @@ function _canEditStaff() {
   var r = sessionStorage.getItem('takao_role');
   return r === 'super_admin' || !!getPermissions().staff_edit;
 }
+// 生年月日(YYYY-MM-DD)から満年齢を計算
+function _calcAge(d) {
+  if (!d) return '';
+  const b = new Date(d); if (isNaN(b.getTime())) return '';
+  const t = new Date();
+  let a = t.getFullYear() - b.getFullYear();
+  const m = t.getMonth() - b.getMonth();
+  if (m < 0 || (m === 0 && t.getDate() < b.getDate())) a--;
+  return a;
+}
 
 function renderEmployeeGrid(employees, col) {
-  col = col || { contact: true, dates: true, address: false, license: true, note: true };
+  col = col || { contact: true, dates: true, address: false, license: true, note: true, birth: false };
   const _empRole = sessionStorage.getItem('takao_role');
   const _canEdit = _canEditStaff();
   // 閲覧者自身の項目スコープ（住所などの表示制限）。super_adminは常にフル
@@ -1330,6 +1343,7 @@ function renderEmployeeGrid(employees, col) {
               ${emp.hire_date && emp.retirement_date ? '　' : ''}
               ${emp.retirement_date ? '<span style="color:#c17f3e;">🔔 退職：'+esc(emp.retirement_date)+'</span>' : ''}
             </div>` : (emp.retirement_date ? `<div class="emp-sub" style="color:#c17f3e;">🔔 退職：${esc(emp.retirement_date)}</div>` : '')}
+            ${col.birth && emp.birth_date ? `<div class="emp-sub" style="color:#5a7a65;">🎂 生年月日：${esc(emp.birth_date)}（${_calcAge(emp.birth_date)}歳）</div>` : ''}
             ${addrHtml}
             ${col.license ? (licenseExempt ? `<div class="emp-sub">${licenseExemptBadge}</div>` : (emp.license_number ? `<div class="emp-sub">🪪 免許：${esc(emp.license_number)}${emp.license_expiry ? '　有効期限：'+emp.license_expiry : ''}</div>` : '')) : ''}
             ${col.note && emp.note ? `<div class="emp-sub" style="color:#888;">📝 ${esc(emp.note)}</div>` : ''}
