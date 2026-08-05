@@ -920,8 +920,8 @@ async function loadFormsForYear(year){
 }
 async function loadStops(){
   STOPS = {};
-  const res = await fetch(`${REST_URL}/course_locations?active=eq.true&select=course_id,name,address,seq,toukou_time,gekou_offset,gekou_only&order=seq.nullslast,name`, { headers: getH() });
-  if (res.ok){ (await res.json()).forEach(r=>{ const k=String(r.course_id); (STOPS[k]=STOPS[k]||[]).push({ name:r.name||'', address:r.address||'', toukou_time:r.toukou_time||'', gekou_offset:(r.gekou_offset==null?null:r.gekou_offset), gekou_only:!!r.gekou_only }); }); }
+  const res = await fetch(`${REST_URL}/course_locations?active=eq.true&select=course_id,name,address,seq,toukou_time,gekou_offset,gekou_only,coord&order=seq.nullslast,name`, { headers: getH() });
+  if (res.ok){ (await res.json()).forEach(r=>{ const k=String(r.course_id); (STOPS[k]=STOPS[k]||[]).push({ name:r.name||'', address:r.address||'', toukou_time:r.toukou_time||'', gekou_offset:(r.gekou_offset==null?null:r.gekou_offset), gekou_only:!!r.gekou_only, coord:r.coord||'' }); }); }
 }
 
 function statusBadge(c){
@@ -978,6 +978,8 @@ function renderEditor(){
       <span class="muted" style="min-width:20px;text-align:right;">${pos+1}</span>
       <input type="text" value="${escAttr(s.name)}" placeholder="バス停名" oninput="updStopName(${i},this.value)" style="flex:1;min-width:120px;">
       <input type="text" value="${escAttr(s.address)}" placeholder="住所" oninput="updStopAddr(${i},this.value)" style="flex:1;min-width:120px;">
+      <input type="text" value="${escAttr(s.coord||'')}" placeholder="座標(任意)" oninput="updCoord(${i},this.value)" title="臨時運転時の正確な停車位置" style="flex:0 0 120px;">
+      <button class="mini" onclick="mapStop(${i})" title="グーグルマップで開く">🗺</button>
       <input type="time" value="${escAttr(_hm(s.toukou_time))}" onchange="updToukouTime(${i},this.value)" title="登校便のこの停の時刻" style="width:auto;">
       <button class="link" onclick="moveStop(${i},-1)" title="上へ">▲</button>
       <button class="link" onclick="moveStop(${i},1)" title="下へ">▼</button>
@@ -992,10 +994,10 @@ function renderEditor(){
     const s=stops[i];
     const disp = (s.gekou_offset!=null && rM!=null) ? _toHm(rM+s.gekou_offset) : '';
     const nameCell = s.gekou_only
-      ? `<input type="text" value="${escAttr(s.name)}" placeholder="下校専用バス停名" oninput="updStopName(${i},this.value)" style="flex:1;min-width:120px;"><input type="text" value="${escAttr(s.address)}" placeholder="住所" oninput="updStopAddr(${i},this.value)" style="flex:1;min-width:120px;">`
+      ? `<input type="text" value="${escAttr(s.name)}" placeholder="下校専用バス停名" oninput="updStopName(${i},this.value)" style="flex:1;min-width:120px;"><input type="text" value="${escAttr(s.address)}" placeholder="住所" oninput="updStopAddr(${i},this.value)" style="flex:1;min-width:120px;"><input type="text" value="${escAttr(s.coord||'')}" placeholder="座標(任意)" oninput="updCoord(${i},this.value)" style="flex:0 0 120px;">`
       : `<span style="flex:1;min-width:120px;font-size:13px;">${escHtml(s.name||'(停)')}</span>`;
     const delBtn = s.gekou_only ? `<button class="link" onclick="delStop(${i})">削除</button>` : (s.gekou_offset!=null?`<button class="link" onclick="clearGekou(${i})" title="この停は下校で使わない">下校で外す</button>`:'');
-    return `<div class="line" style="margin-bottom:6px;">${nameCell}<input type="time" value="${escAttr(disp)}" onchange="updGekouTime(${i},this.value)" title="基準便でのこの停の時刻" style="width:auto;">${delBtn}</div>`;
+    return `<div class="line" style="margin-bottom:6px;">${nameCell}<input type="time" value="${escAttr(disp)}" onchange="updGekouTime(${i},this.value)" title="基準便でのこの停の時刻" style="width:auto;"><button class="mini" onclick="mapStop(${i})" title="グーグルマップで開く">🗺</button>${delBtn}</div>`;
   }).join('') || '<p class="muted" style="margin:0 0 6px;">登校のバス停を入れると、ここに逆順で出ます。</p>';
 
   area.innerHTML = `<div class="courseCard">
@@ -1055,6 +1057,13 @@ function delForm(fi){ FORMS[String(selCourseId)].splice(fi,1); renderEditor(); }
 
 function updStopName(i,val){ _stops()[i].name=val; }
 function updStopAddr(i,val){ _stops()[i].address=val; }
+function updCoord(i,val){ _stops()[i].coord=val; }
+function mapStop(i){
+  const s=_stops()[i];
+  const q=(s.coord||'').trim() || ((s.name||'')+' '+(s.address||'')).trim();
+  if(!q){ status('バス停名・住所・座標のいずれかを入れてください', false); return; }
+  window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q), '_blank');
+}
 function updToukouTime(i,val){ _stops()[i].toukou_time=val; }
 function addStop(){ _stops().push({name:'',address:'',toukou_time:'',gekou_offset:null,gekou_only:false}); renderEditor(); }
 function delStop(i){ _stops().splice(i,1); renderEditor(); }
@@ -1098,7 +1107,7 @@ async function saveCourse(){
     let seq=0;
     const rows = (STOPS[key]||[]).filter(s=>(s.name||'').trim()||(s.address||'').trim()).map(s=>{
       const r = { course_id:c.id, name:(s.name||'').trim()||(s.address||'').trim(), address:(s.address||'').trim(),
-                  toukou_time:s.toukou_time||null, gekou_offset:(s.gekou_offset==null?null:s.gekou_offset), gekou_only:!!s.gekou_only,
+                  toukou_time:s.toukou_time||null, gekou_offset:(s.gekou_offset==null?null:s.gekou_offset), gekou_only:!!s.gekou_only, coord:s.coord||null,
                   in_gekou:(s.gekou_offset!=null) };
       if(!s.gekou_only){ seq++; r.seq=seq; } else { r.seq=null; }
       return r;
