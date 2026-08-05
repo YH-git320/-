@@ -905,6 +905,21 @@ function nendo(){ const d=new Date(); const y=d.getFullYear(); return (d.getMont
 function _hm(v){ v=String(v||'').trim(); const m=v.match(/^(\d{1,2}):(\d{2})/); return m? (('0'+m[1]).slice(-2)+':'+m[2]) : ''; }
 function _toMin(hm){ const m=String(hm||'').trim().match(/^(\d{1,2}):(\d{2})/); return m? (parseInt(m[1],10)*60+parseInt(m[2],10)) : null; }
 function _toHm(min){ if(min==null||isNaN(min)) return ''; min=((Math.round(min)%1440)+1440)%1440; return ('0'+Math.floor(min/60)).slice(-2)+':'+('0'+(min%60)).slice(-2); }
+// 時刻テキスト欄を HH:MM に整形して返す（欄を離れた/変更した時に呼ぶ）。空はそのまま''。
+function tnorm(el){
+  let v=String(el.value||'').trim(); if(!v){ el.value=''; return ''; }
+  let h,m;
+  if(v.indexOf(':')>=0){ const p=v.split(':'); h=parseInt(p[0],10); m=parseInt(p[1]||'0',10); }
+  else { const d=v.replace(/\D/g,''); if(!d){ el.value=''; return ''; }
+    if(d.length<=2){ h=parseInt(d,10); m=0; }
+    else if(d.length===3){ h=parseInt(d.slice(0,1),10); m=parseInt(d.slice(1),10); }
+    else { h=parseInt(d.slice(0,2),10); m=parseInt(d.slice(2,4),10); } }
+  if(isNaN(h)){ el.value=''; return ''; } if(isNaN(m)) m=0;
+  if(h>23)h=23; if(h<0)h=0; if(m>59)m=59; if(m<0)m=0;
+  const out=('0'+h).slice(-2)+':'+('0'+m).slice(-2); el.value=out; return out;
+}
+// 入力中は数字と : だけ許可（時刻テキスト欄）。二桁がスムーズに打てる。
+document.addEventListener('input',function(e){ const t=e.target; if(t&&t.classList&&t.classList.contains('tinp')){ const c=t.value.replace(/[^0-9:]/g,''); if(c!==t.value) t.value=c; } },true);
 function _c(){ return COURSES.find(x=>String(x.id)===String(selCourseId)); }
 function courseLabel(c){ return `${c.school_name||''} ／ ${c.course_name||''}`; }
 function _stops(){ return STOPS[String(selCourseId)] = STOPS[String(selCourseId)] || []; }
@@ -964,7 +979,7 @@ function renderEditor(){
 
   // 日課フォーム
   const formsHtml = forms.length ? forms.map((f,fi)=>{
-    const times = (f.gekou_departures||[]).map((t,ti)=>`<span style="display:inline-flex;align-items:center;gap:3px;margin:2px 6px 2px 2px;"><input type="time" value="${escAttr(t)}" onchange="updFormTime(${fi},${ti},this.value)" style="width:auto;"><button onclick="delFormTime(${fi},${ti})" title="この便を削除" style="border:none;background:#fdecea;color:#c0392b;border-radius:6px;padding:2px 8px;cursor:pointer;font-weight:700;line-height:1;">×</button></span>`).join('');
+    const times = (f.gekou_departures||[]).map((t,ti)=>`<span style="display:inline-flex;align-items:center;gap:3px;margin:2px 6px 2px 2px;"><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(t)}" onchange="updFormTime(${fi},${ti},tnorm(this))" style="width:64px;text-align:center;"><button onclick="delFormTime(${fi},${ti})" title="この便を削除" style="border:none;background:#fdecea;color:#c0392b;border-radius:6px;padding:2px 8px;cursor:pointer;font-weight:700;line-height:1;">×</button></span>`).join('');
     return `<div class="seg">
       <div class="line"><label class="fld" style="margin:0;">日課</label>
         <input type="text" value="${escAttr(f.form_name)}" placeholder="例：A" onchange="updFormName(${fi},this.value)" style="width:90px;">
@@ -983,7 +998,7 @@ function renderEditor(){
       <input type="text" value="${escAttr(s.address)}" placeholder="住所" oninput="updStopAddr(${i},this.value)" style="flex:1;min-width:120px;">
       <input type="text" value="${escAttr(s.coord||'')}" placeholder="座標(任意)" oninput="updCoord(${i},this.value)" title="臨時運転時の正確な停車位置" style="flex:0 0 120px;">
       <button class="mini" onclick="mapStop(${i})" title="グーグルマップで開く">🗺</button>
-      <input type="time" value="${escAttr(_hm(s.toukou_time))}" onchange="updToukouTime(${i},this.value)" title="登校便のこの停の時刻" style="width:auto;">
+      <input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(s.toukou_time))}" onchange="updToukouTime(${i},tnorm(this))" title="登校便のこの停の時刻" style="width:64px;text-align:center;">
       <button class="link" onclick="moveStop(${i},-1)" title="上へ">▲</button>
       <button class="link" onclick="moveStop(${i},1)" title="下へ">▼</button>
       <button class="link" onclick="delStop(${i})">削除</button>
@@ -1000,7 +1015,7 @@ function renderEditor(){
       ? `<input type="text" value="${escAttr(s.name)}" placeholder="下校専用バス停名" oninput="updStopName(${i},this.value)" style="flex:1;min-width:120px;"><input type="text" value="${escAttr(s.address)}" placeholder="住所" oninput="updStopAddr(${i},this.value)" style="flex:1;min-width:120px;"><input type="text" value="${escAttr(s.coord||'')}" placeholder="座標(任意)" oninput="updCoord(${i},this.value)" style="flex:0 0 120px;">`
       : `<span style="flex:1;min-width:120px;font-size:13px;">${escHtml(s.name||'(停)')}</span>`;
     const delBtn = s.gekou_only ? `<button class="link" onclick="delStop(${i})">削除</button>` : (s.gekou_offset!=null?`<button class="link" onclick="clearGekou(${i})" title="この停は下校で使わない">下校で外す</button>`:'');
-    return `<div class="line" style="margin-bottom:6px;">${nameCell}<input type="time" value="${escAttr(disp)}" onchange="updGekouTime(${i},this.value)" title="基準便でのこの停の時刻" style="width:auto;"><button class="mini" onclick="mapStop(${i})" title="グーグルマップで開く">🗺</button>${delBtn}</div>`;
+    return `<div class="line" style="margin-bottom:6px;">${nameCell}<input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(disp)}" onchange="updGekouTime(${i},tnorm(this))" title="基準便でのこの停の時刻" style="width:64px;text-align:center;"><button class="mini" onclick="mapStop(${i})" title="グーグルマップで開く">🗺</button>${delBtn}</div>`;
   }).join('') || '<p class="muted" style="margin:0 0 6px;">登校のバス停を入れると、ここに逆順で出ます。</p>';
 
   area.innerHTML = `<div class="courseCard">
@@ -1010,8 +1025,8 @@ function renderEditor(){
     </div>
     <label class="fld">【登校便】出社・出庫の時刻（コース共通）</label>
     <div class="line" style="margin-bottom:12px;">
-      <span class="muted" style="min-width:44px;">出社</span><input type="time" value="${escAttr(_hm(c.toukou_shussha))}" onchange="updToukou('toukou_shussha',this.value)" style="width:auto;">
-      <span class="muted" style="min-width:44px;margin-left:8px;">出庫</span><input type="time" value="${escAttr(_hm(c.toukou_shukko))}" onchange="updToukou('toukou_shukko',this.value)" style="width:auto;">
+      <span class="muted" style="min-width:44px;">出社</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(c.toukou_shussha))}" onchange="updToukou('toukou_shussha',tnorm(this))" style="width:64px;text-align:center;">
+      <span class="muted" style="min-width:44px;margin-left:8px;">出庫</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(c.toukou_shukko))}" onchange="updToukou('toukou_shukko',tnorm(this))" style="width:64px;text-align:center;">
     </div>
     <div class="line" style="margin-bottom:6px;"><label class="fld" style="margin:0;">【下校便（時程）】${selYear}年度 — 日課ごとに下校便の学校出発時刻</label><button class="mini" style="margin-left:auto;" onclick="copyPrevYear()">前年度からコピー</button></div>
     ${formsHtml}
@@ -1022,7 +1037,7 @@ function renderEditor(){
     <button class="mini" onclick="addStop()">＋バス停を追加</button>
 
     <label class="fld" style="margin-top:16px;">🔁 下校便のルート・時刻（登校の逆順）</label>
-    <div class="line" style="margin-bottom:8px;"><span class="muted" style="min-width:150px;">基準の下校便（学校出発）</span><input type="time" value="${escAttr(_hm(selRefD))}" onchange="changeRefD(this.value)" style="width:auto;"><span class="muted">の時刻で入力 → 他の便は自動</span></div>
+    <div class="line" style="margin-bottom:8px;"><span class="muted" style="min-width:150px;">基準の下校便（学校出発）</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(selRefD))}" onchange="changeRefD(tnorm(this))" style="width:64px;text-align:center;"><span class="muted">の時刻で入力 → 他の便は自動</span></div>
     ${gekouHtml}
     <button class="mini" onclick="addGekouOnly()">＋下校専用のバス停</button>
     <div style="margin-top:10px;padding:10px;background:#f6faf7;border:1px solid #e2ede6;border-radius:8px;">
@@ -1048,7 +1063,7 @@ function renderGekouPreview(){
       const has = x.ov && x.ov[D]!=null && x.ov[D]!=='';
       const val = has ? _hm(x.ov[D]) : auto;
       const st = has ? 'background:#fff3e0;border-color:#e0a23a;' : '';
-      return `<span style="display:inline-flex;align-items:center;gap:3px;margin:2px 5px;"><span style="font-size:11px;color:#5a7a65;">${escHtml(x.name||'(停)')}</span><input type="time" value="${escAttr(val)}" onchange="updOverride(${x.i},'${escAttr(D)}',this.value,'${auto}')" title="${has?('手修正あり（自動='+auto+'）'):'自動。修正すると例外として保存されます'}" style="width:auto;${st}"></span>`;
+      return `<span style="display:inline-flex;align-items:center;gap:3px;margin:2px 5px;"><span style="font-size:11px;color:#5a7a65;">${escHtml(x.name||'(停)')}</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(val)}" onchange="updOverride(${x.i},'${escAttr(D)}',tnorm(this),'${auto}')" title="${has?('手修正あり（自動='+auto+'）'):'自動。修正すると例外として保存されます'}" style="width:64px;text-align:center;${st}"></span>`;
     }).join('');
     return `<div style="margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid #e2ede6;"><span style="font-weight:700;">学校発 ${escHtml(D)}</span> → ${cells}</div>`;
   }).join('');
