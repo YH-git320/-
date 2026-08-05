@@ -920,15 +920,18 @@ async function loadFormsForYear(year){
 }
 async function loadStops(){
   STOPS = {};
-  const res = await fetch(`${REST_URL}/course_locations?active=eq.true&select=course_id,name,address,seq,toukou_time,gekou_offset,gekou_only,coord&order=seq.nullslast,name`, { headers: getH() });
-  if (res.ok){ (await res.json()).forEach(r=>{ const k=String(r.course_id); (STOPS[k]=STOPS[k]||[]).push({ name:r.name||'', address:r.address||'', toukou_time:r.toukou_time||'', gekou_offset:(r.gekou_offset==null?null:r.gekou_offset), gekou_only:!!r.gekou_only, coord:r.coord||'' }); }); }
+  const res = await fetch(`${REST_URL}/course_locations?active=eq.true&select=course_id,name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_overrides&order=seq.nullslast,name`, { headers: getH() });
+  if (res.ok){ (await res.json()).forEach(r=>{ const k=String(r.course_id); (STOPS[k]=STOPS[k]||[]).push({ name:r.name||'', address:r.address||'', toukou_time:r.toukou_time||'', gekou_offset:(r.gekou_offset==null?null:r.gekou_offset), gekou_only:!!r.gekou_only, coord:r.coord||'', gekou_overrides:(r.gekou_overrides&&typeof r.gekou_overrides==='object')?r.gekou_overrides:{} }); }); }
 }
 
 function statusBadge(c){
   if (!c.active) return '<span style="background:#9bb0a3;color:#fff;border-radius:9px;padding:1px 7px;font-size:10px;">廃止</span>';
-  const has = (FORMS[String(c.id)]||[]).length>0;
-  return has ? '<span style="background:#6b9e7e;color:#fff;border-radius:9px;padding:1px 7px;font-size:10px;">設定済</span>'
-             : '<span style="background:#e0a23a;color:#fff;border-radius:9px;padding:1px 7px;font-size:10px;">未設定</span>';
+  const hasForm = (FORMS[String(c.id)]||[]).length>0;
+  const hasStop = (STOPS[String(c.id)]||[]).length>0;
+  const b = (bg,txt)=>`<span style="background:${bg};color:#fff;border-radius:9px;padding:1px 7px;font-size:10px;">${txt}</span>`;
+  if (hasForm) return b('#6b9e7e','設定済');
+  if (hasStop) return b('#2980b9','ルートのみ');
+  return b('#e0a23a','未設定');
 }
 function renderCourseList(){
   const area = document.getElementById('courseListArea');
@@ -961,7 +964,7 @@ function renderEditor(){
 
   // 日課フォーム
   const formsHtml = forms.length ? forms.map((f,fi)=>{
-    const times = (f.gekou_departures||[]).map((t,ti)=>`<span style="display:inline-flex;align-items:center;gap:2px;margin:2px;"><input type="time" value="${escAttr(t)}" onchange="updFormTime(${fi},${ti},this.value)" style="width:auto;"><button class="link" onclick="delFormTime(${fi},${ti})" title="この便を削除">×</button></span>`).join('');
+    const times = (f.gekou_departures||[]).map((t,ti)=>`<span style="display:inline-flex;align-items:center;gap:3px;margin:2px 6px 2px 2px;"><input type="time" value="${escAttr(t)}" onchange="updFormTime(${fi},${ti},this.value)" style="width:auto;"><button onclick="delFormTime(${fi},${ti})" title="この便を削除" style="border:none;background:#fdecea;color:#c0392b;border-radius:6px;padding:2px 8px;cursor:pointer;font-weight:700;line-height:1;">×</button></span>`).join('');
     return `<div class="seg">
       <div class="line"><label class="fld" style="margin:0;">日課</label>
         <input type="text" value="${escAttr(f.form_name)}" placeholder="例：A" onchange="updFormName(${fi},this.value)" style="width:90px;">
@@ -1034,15 +1037,27 @@ function renderEditor(){
 
 function renderGekouPreview(){
   const stops = _stops();
-  const timed = stops.map(s=>({name:s.name, off:s.gekou_offset})).filter(x=>x.off!=null).sort((a,b)=>a.off-b.off);
-  if(!timed.length) return '<span class="muted">下校の時刻を入れると、日課ごとの時刻表がここに出ます。</span>';
+  const timed = stops.map((s,i)=>({i, name:s.name, off:s.gekou_offset, ov:(s.gekou_overrides||{})})).filter(x=>x.off!=null).sort((a,b)=>a.off-b.off);
+  if(!timed.length) return '<span class="muted">下校の時刻を入れると、日課ごとの時刻表がここに出ます。各時刻は個別に手修正できます。</span>';
   const bins = _gekouBins();
   if(!bins.length) return '<span class="muted">先に日課（下校便の学校出発時刻）を登録してください。</span>';
   return bins.map(D=>{
     const dm=_toMin(D);
-    const seq = timed.map(x=>`${escHtml(x.name||'(停)')} <b>${_toHm(dm+x.off)}</b>`).join(' → ');
-    return `<div style="margin-bottom:4px;">学校発 ${escHtml(D)} → ${seq}</div>`;
+    const cells = timed.map(x=>{
+      const auto=_toHm(dm+x.off);
+      const has = x.ov && x.ov[D]!=null && x.ov[D]!=='';
+      const val = has ? _hm(x.ov[D]) : auto;
+      const st = has ? 'background:#fff3e0;border-color:#e0a23a;' : '';
+      return `<span style="display:inline-flex;align-items:center;gap:3px;margin:2px 5px;"><span style="font-size:11px;color:#5a7a65;">${escHtml(x.name||'(停)')}</span><input type="time" value="${escAttr(val)}" onchange="updOverride(${x.i},'${escAttr(D)}',this.value,'${auto}')" title="${has?('手修正あり（自動='+auto+'）'):'自動。修正すると例外として保存されます'}" style="width:auto;${st}"></span>`;
+    }).join('');
+    return `<div style="margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid #e2ede6;"><span style="font-weight:700;">学校発 ${escHtml(D)}</span> → ${cells}</div>`;
   }).join('');
+}
+function updOverride(i,D,val,auto){
+  const s=_stops()[i]; s.gekou_overrides = s.gekou_overrides||{};
+  const v=_hm(val), a=_hm(auto);
+  if(v && v!==a){ s.gekou_overrides[D]=v; } else { delete s.gekou_overrides[D]; }
+  _updPreview();
 }
 function _updPreview(){ const el=document.getElementById('gekouPreview'); if(el) el.innerHTML=renderGekouPreview(); }
 
@@ -1107,7 +1122,7 @@ async function saveCourse(){
     let seq=0;
     const rows = (STOPS[key]||[]).filter(s=>(s.name||'').trim()||(s.address||'').trim()).map(s=>{
       const r = { course_id:c.id, name:(s.name||'').trim()||(s.address||'').trim(), address:(s.address||'').trim(),
-                  toukou_time:s.toukou_time||null, gekou_offset:(s.gekou_offset==null?null:s.gekou_offset), gekou_only:!!s.gekou_only, coord:s.coord||null,
+                  toukou_time:s.toukou_time||null, gekou_offset:(s.gekou_offset==null?null:s.gekou_offset), gekou_only:!!s.gekou_only, coord:s.coord||null, gekou_overrides:(s.gekou_overrides&&Object.keys(s.gekou_overrides).length)?s.gekou_overrides:{},
                   in_gekou:(s.gekou_offset!=null) };
       if(!s.gekou_only){ seq++; r.seq=seq; } else { r.seq=null; }
       return r;
