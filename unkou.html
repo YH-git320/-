@@ -900,7 +900,8 @@ let STOPS = {};   // course_id(String) -> [{name,address,toukou_time,gekou_offse
 let selYear = 0;
 let selCourseId = null;
 let selRefD = '14:00';  // 下校の基準便（学校出発時刻）
-let TP = {};      // course_id(String) -> [{phase,kind,name,address,coord,shussha,shukko}] 添乗員の乗降場所候補
+let TP = {};      // course_id(String) -> [{phase,kind,name,address,coord,bus_time}] 添乗員の乗降場所候補（バス到着時刻）
+let PS = {};      // course_id(String) -> {phase: {shussha,shukko}} 局面ごとの出社・出庫
 let tpOpen = false;   // ⑤パネルの開閉状態（再描画で保持）
 const PHASES = ['登校前','登校後','下校前','下校後'];
 
@@ -943,8 +944,13 @@ async function loadStops(){
 }
 async function loadTransferPoints(){
   TP = {};
-  const res = await fetch(`${REST_URL}/course_transfer_points?active=eq.true&select=course_id,phase,kind,seq,name,address,coord,shussha,shukko&order=seq.nullslast,id`, { headers: getH() });
-  if (res.ok){ (await res.json()).forEach(r=>{ const k=String(r.course_id); (TP[k]=TP[k]||[]).push({ phase:r.phase, kind:r.kind||'乗車', name:r.name||'', address:r.address||'', coord:r.coord||'', shussha:r.shussha||'', shukko:r.shukko||'' }); }); }
+  const res = await fetch(`${REST_URL}/course_transfer_points?active=eq.true&select=course_id,phase,kind,seq,name,address,coord,bus_time&order=seq.nullslast,id`, { headers: getH() });
+  if (res.ok){ (await res.json()).forEach(r=>{ const k=String(r.course_id); (TP[k]=TP[k]||[]).push({ phase:r.phase, kind:r.kind||'乗車', name:r.name||'', address:r.address||'', coord:r.coord||'', bus_time:r.bus_time||'' }); }); }
+}
+async function loadPhaseSettings(){
+  PS = {};
+  const res = await fetch(`${REST_URL}/course_phase_settings?select=course_id,phase,shussha,shukko`, { headers: getH() });
+  if (res.ok){ (await res.json()).forEach(r=>{ const k=String(r.course_id); (PS[k]=PS[k]||{})[r.phase]={ shussha:r.shussha||'', shukko:r.shukko||'' }; }); }
 }
 
 function statusBadge(c){
@@ -1072,7 +1078,7 @@ function renderEditor(){
     <details ${tpOpen?'open':''} ontoggle="tpOpen=this.open" style="margin-top:16px;">
       <summary style="cursor:pointer;font-weight:700;color:#2d4a38;padding:8px 10px;background:#eef4ef;border-radius:8px;">⑤ 添乗員の送迎・乗降場所（候補）</summary>
       <div style="padding:8px 4px;">
-        <div class="muted" style="font-size:11px;margin-bottom:6px;">このコースで使いうる乗降場所の候補です（人は入れません）。その日に誰がどこで乗降するかは配置画面で選びます。各場所に「その場所を使うときの出社・出庫」を任意で入れられます。②③④は「登校前からコピー」で複製できます。</div>
+        <div class="muted" style="font-size:11px;margin-bottom:6px;">このコースで使いうる乗降場所の候補です（人は入れません）。その日に誰がどこで乗降するかは配置画面で選びます。出社・出庫は局面ごとに1組、各場所には「バスがそこに到着する時刻」を入れます。②③④は「登校前からコピー」で複製できます。（添乗員の到着時間は配置側で「バス到着の○分前」として扱います）</div>
         ${renderTransferPanel()}
       </div>
     </details>
@@ -1159,35 +1165,41 @@ function updGekouTime(i,val){ const s=_stops()[i]; const t=_toMin(val), r=_toMin
 function clearGekou(i){ _stops()[i].gekou_offset=null; renderEditor(); }
 function addGekouOnly(){ _stops().push({name:'',address:'',toukou_time:'',gekou_offset:null,gekou_only:true}); renderEditor(); }
 
-// ⑤ 添乗員の乗降場所候補（人・日付は入れない＝場所メニュー）
+// ⑤ 添乗員の乗降場所候補（人・日付は入れない＝場所メニュー）。出社出庫は局面に1組、各行はバス到着時刻。
 function _tp(){ return TP[String(selCourseId)] = TP[String(selCourseId)] || []; }
+function _ps(ph){ const k=String(selCourseId); PS[k]=PS[k]||{}; PS[k][ph]=PS[k][ph]||{shussha:'',shukko:''}; return PS[k][ph]; }
 function renderTransferPanel(){
   const arr=_tp();
   return PHASES.map(ph=>{
+    const ps=_ps(ph);
     const rowsIdx = arr.map((r,i)=>({r,i})).filter(x=>x.r.phase===ph);
     const rows = rowsIdx.map(({r,i})=>`<div class="line" style="margin-bottom:6px;flex-wrap:wrap;">
-      <select onchange="tpUpd(${i},'kind',this.value)" style="width:64px;"><option value="乗車"${r.kind==='乗車'?' selected':''}>乗車</option><option value="降車"${r.kind==='降車'?' selected':''}>降車</option></select>
+      <select onchange="tpUpd(${i},'kind',this.value)" style="width:74px;flex:0 0 auto;"><option value="乗車"${r.kind==='乗車'?' selected':''}>乗車</option><option value="降車"${r.kind==='降車'?' selected':''}>降車</option></select>
       <input type="text" value="${escAttr(r.name)}" placeholder="場所名" oninput="tpUpd(${i},'name',this.value)" style="flex:1;min-width:100px;">
       <input type="text" value="${escAttr(r.address)}" placeholder="住所" oninput="tpUpd(${i},'address',this.value)" style="flex:1;min-width:100px;">
       <input type="text" value="${escAttr(r.coord||'')}" placeholder="座標(任意)" oninput="tpUpd(${i},'coord',this.value)" style="flex:0 0 110px;">
       <button class="mini" onclick="tpMap(${i})" title="グーグルマップで開く">🗺</button>
-      <span class="muted" style="font-size:11px;">出社</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(r.shussha))}" onchange="tpUpd(${i},'shussha',tnorm(this))" title="この場所を使うときの出社" style="width:60px;text-align:center;">
-      <span class="muted" style="font-size:11px;">出庫</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(r.shukko))}" onchange="tpUpd(${i},'shukko',tnorm(this))" title="この場所を使うときの出庫" style="width:60px;text-align:center;">
+      <span class="muted" style="font-size:11px;">バス時刻</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(r.bus_time))}" onchange="tpUpd(${i},'bus_time',tnorm(this))" title="バス(運転手)がこの場所に到着する時刻" style="width:60px;text-align:center;">
       <button class="link" onclick="tpDel(${i})">削除</button>
     </div>`).join('') || '<p class="muted" style="margin:0 0 4px;">候補なし</p>';
     const copyBtn = ph!=='登校前' ? `<button class="mini" style="margin-left:8px;" onclick="tpCopyFrom('${ph}')" title="登校前の候補をここに複製">登校前からコピー</button>` : '';
     return `<div style="margin:8px 0;padding:8px;border:1px solid #e2ede6;border-radius:8px;">
-      <div class="line" style="margin-bottom:6px;"><span style="font-weight:700;color:#2d4a38;">${ph}</span>${copyBtn}</div>
+      <div class="line" style="margin-bottom:8px;flex-wrap:wrap;"><span style="font-weight:700;color:#2d4a38;">${ph}</span>
+        <span class="muted" style="font-size:11px;margin-left:8px;">この局面のときの</span>
+        <span class="muted" style="font-size:11px;">出社</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(ps.shussha))}" onchange="psUpd('${ph}','shussha',tnorm(this))" title="この局面の送迎をやるときの出社（任意）" style="width:60px;text-align:center;">
+        <span class="muted" style="font-size:11px;">出庫</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(ps.shukko))}" onchange="psUpd('${ph}','shukko',tnorm(this))" title="この局面の送迎をやるときの出庫（任意）" style="width:60px;text-align:center;">
+        ${copyBtn}</div>
       ${rows}
       <button class="mini" onclick="tpAdd('${ph}')">＋場所を追加</button>
     </div>`;
   }).join('');
 }
 function tpUpd(i,field,val){ const a=_tp(); if(a[i]) a[i][field]=val; }
-function tpAdd(ph){ _tp().push({phase:ph,kind:'乗車',name:'',address:'',coord:'',shussha:'',shukko:''}); renderEditor(); }
+function psUpd(ph,field,val){ _ps(ph)[field]=val; }
+function tpAdd(ph){ _tp().push({phase:ph,kind:'乗車',name:'',address:'',coord:'',bus_time:''}); renderEditor(); }
 function tpDel(i){ _tp().splice(i,1); renderEditor(); }
 function tpMap(i){ const r=_tp()[i]; if(!r) return; const q=(r.coord||'').trim()||((r.name||'')+' '+(r.address||'')).trim(); if(!q){ status('場所名・住所・座標のいずれかを入れてください', false); return; } window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q), '_blank'); }
-function tpCopyFrom(ph){ const a=_tp(); const src=a.filter(r=>r.phase==='登校前'); if(!src.length){ alert('登校前の候補がありません'); return; } if(!confirm(`登校前の候補（${src.length}件）を「${ph}」に複製します。よろしいですか？`)) return; src.forEach(r=>a.push({phase:ph,kind:r.kind,name:r.name,address:r.address,coord:r.coord,shussha:r.shussha,shukko:r.shukko})); renderEditor(); }
+function tpCopyFrom(ph){ const a=_tp(); const src=a.filter(r=>r.phase==='登校前'); if(!src.length){ alert('登校前の候補がありません'); return; } if(!confirm(`登校前の候補（${src.length}件）を「${ph}」に複製します。よろしいですか？`)) return; src.forEach(r=>a.push({phase:ph,kind:r.kind,name:r.name,address:r.address,coord:r.coord,bus_time:r.bus_time})); renderEditor(); }
 
 async function copyPrevYear(){
   if (!selCourseId) return;
@@ -1243,11 +1255,15 @@ async function saveCourse(){
       seqByPhase[r.phase]=(seqByPhase[r.phase]||0)+1;
       return { course_id:c.id, phase:r.phase, kind:r.kind||'乗車', seq:seqByPhase[r.phase],
                name:(r.name||'').trim(), address:(r.address||'').trim(), coord:(r.coord||'').trim()||null,
-               shussha:r.shussha||null, shukko:r.shukko||null };
+               bus_time:r.bus_time||null };
     });
     if(tps.length){ const r4=await fetch(`${REST_URL}/course_transfer_points`, { method:'POST', headers:getH(), body:JSON.stringify(tps) }); if(!r4.ok){ const t=await r4.text(); _saveMsg('乗降場所候補の保存に失敗：'+t.slice(0,100), false); return; } }
+    // 5) 局面ごとの出社・出庫（このコースを置き換え）
+    await fetch(`${REST_URL}/course_phase_settings?course_id=eq.${c.id}`, { method:'DELETE', headers:getH() });
+    const psRows = Object.keys(PS[key]||{}).map(ph=>({ph, v:PS[key][ph]})).filter(x=>(x.v.shussha||'').trim()||(x.v.shukko||'').trim()).map(x=>({ course_id:c.id, phase:x.ph, shussha:x.v.shussha||null, shukko:x.v.shukko||null }));
+    if(psRows.length){ const r5=await fetch(`${REST_URL}/course_phase_settings`, { method:'POST', headers:getH(), body:JSON.stringify(psRows) }); if(!r5.ok){ const t=await r5.text(); _saveMsg('局面の出社出庫の保存に失敗：'+t.slice(0,100), false); return; } }
     _saveMsg('✅ 保存しました', true);
-    await loadFormsForYear(selYear); await loadStops(); await loadTransferPoints();
+    await loadFormsForYear(selYear); await loadStops(); await loadTransferPoints(); await loadPhaseSettings();
     renderCourseList();
   }catch(e){ _saveMsg('保存エラー：'+e.message, false); }
 }
@@ -1268,7 +1284,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('courseSearch').addEventListener('input', renderCourseList);
   document.getElementById('activeOnly').addEventListener('change', renderCourseList);
   try{
-    await loadCourses(); await loadFormsForYear(selYear); await loadStops(); await loadTransferPoints();
+    await loadCourses(); await loadFormsForYear(selYear); await loadStops(); await loadTransferPoints(); await loadPhaseSettings();
     renderCourseList(); renderEditor();
     status('準備ができました。コースを選んでください。', true);
   }catch(e){ status('データ読み込みエラー：'+e.message, false); }
