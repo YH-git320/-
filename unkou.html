@@ -1145,7 +1145,12 @@ function addGekouOnly(){ _stops().push({name:'',address:'',toukou_time:'',gekou_
 
 async function copyPrevYear(){
   if (!selCourseId) return;
-  if (!confirm(`${selYear-1}年度の下校時程を、この画面（${selYear}年度）にコピーします。よろしいですか？（保存するまでDBには反映されません）`)) return;
+  const cur = FORMS[String(selCourseId)]||[];
+  const hasData = cur.some(f => (f.form_name||'').trim() || (f.gekou_departures||[]).some(t=>t));
+  const msg = hasData
+    ? `⚠ 現在この画面に入力中の日課（時程）データがあります。\n前年度（${selYear-1}年度）の内容で上書きしてもよろしいですか？\n\n※いまの入力は消えます（保存するまでDBには反映されません）`
+    : `${selYear-1}年度の下校時程を、この画面（${selYear}年度）にコピーします。よろしいですか？\n（保存するまでDBには反映されません）`;
+  if (!confirm(msg)) return;
   const res = await fetch(`${REST_URL}/course_schedule_forms?course_id=eq.${selCourseId}&school_year=eq.${selYear-1}&select=form_name,gekou_departures&order=form_name`, { headers: getH() });
   const rows = res.ok ? await res.json() : [];
   if (!rows.length){ status(`${selYear-1}年度の時程がありません`, false); return; }
