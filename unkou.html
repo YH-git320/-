@@ -900,10 +900,10 @@ let STOPS = {};   // course_id(String) -> [{name,address,toukou_time,gekou_offse
 let selYear = 0;
 let selCourseId = null;
 let selRefD = '14:00';  // 下校の基準便（学校出発時刻）
-let TP = {};      // course_id(String) -> [{phase,kind,name,address,coord,bus_time}] 添乗員の乗降場所候補（バス到着時刻）
-let PS = {};      // course_id(String) -> {phase: {shussha,shukko}} 局面ごとの出社・出庫
+let SCEN = {};    // course_id(String) -> [{dbId?,segment,label,pts:[{phase,kind,name,address,coord,bus_time}],ps:{phase:{shussha,shukko}}}] 送迎シナリオ
 let tpOpen = false;   // ⑤パネルの開閉状態（再描画で保持）
-const PHASES = ['登校前','登校後','下校前','下校後'];
+const SEG_PHASES = { '登校':['登校前','登校後'], '下校':['下校前','下校後'] };
+const PHASE_SETTINGS = { '登校前':['shussha','shukko'], '下校前':['shukko'], '登校後':[], '下校後':[] };
 
 function nendo(){ const d=new Date(); const y=d.getFullYear(); return (d.getMonth()+1>=4)? y : y-1; }
 function _hm(v){ v=String(v||'').trim(); const m=v.match(/^(\d{1,2}):(\d{2})/); return m? (('0'+m[1]).slice(-2)+':'+m[2]) : ''; }
@@ -942,15 +942,14 @@ async function loadStops(){
   const res = await fetch(`${REST_URL}/course_locations?active=eq.true&select=course_id,name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_overrides&order=seq.nullslast,name`, { headers: getH() });
   if (res.ok){ (await res.json()).forEach(r=>{ const k=String(r.course_id); (STOPS[k]=STOPS[k]||[]).push({ name:r.name||'', address:r.address||'', toukou_time:r.toukou_time||'', gekou_offset:(r.gekou_offset==null?null:r.gekou_offset), gekou_only:!!r.gekou_only, coord:r.coord||'', gekou_overrides:(r.gekou_overrides&&typeof r.gekou_overrides==='object')?r.gekou_overrides:{} }); }); }
 }
-async function loadTransferPoints(){
-  TP = {};
-  const res = await fetch(`${REST_URL}/course_transfer_points?active=eq.true&select=course_id,phase,kind,seq,name,address,coord,bus_time&order=seq.nullslast,id`, { headers: getH() });
-  if (res.ok){ (await res.json()).forEach(r=>{ const k=String(r.course_id); (TP[k]=TP[k]||[]).push({ phase:r.phase, kind:r.kind||'乗車', name:r.name||'', address:r.address||'', coord:r.coord||'', bus_time:r.bus_time||'' }); }); }
-}
-async function loadPhaseSettings(){
-  PS = {};
-  const res = await fetch(`${REST_URL}/course_phase_settings?select=course_id,phase,shussha,shukko`, { headers: getH() });
-  if (res.ok){ (await res.json()).forEach(r=>{ const k=String(r.course_id); (PS[k]=PS[k]||{})[r.phase]={ shussha:r.shussha||'', shukko:r.shukko||'' }; }); }
+async function loadScenarios(){
+  SCEN = {}; const byId = {};
+  let res = await fetch(`${REST_URL}/course_scenarios?select=id,course_id,segment,label,seq&order=segment,seq.nullslast,id`, { headers: getH() });
+  if (res.ok){ (await res.json()).forEach(r=>{ const k=String(r.course_id); const o={dbId:r.id, segment:r.segment, label:r.label||'', pts:[], ps:{}}; (SCEN[k]=SCEN[k]||[]).push(o); byId[r.id]=o; }); }
+  res = await fetch(`${REST_URL}/course_transfer_points?scenario_id=not.is.null&select=scenario_id,phase,kind,seq,name,address,coord,bus_time&order=seq.nullslast,id`, { headers: getH() });
+  if (res.ok){ (await res.json()).forEach(r=>{ const o=byId[r.scenario_id]; if(o) o.pts.push({ phase:r.phase, kind:r.kind||'乗車', name:r.name||'', address:r.address||'', coord:r.coord||'', bus_time:r.bus_time||'' }); }); }
+  res = await fetch(`${REST_URL}/course_phase_settings?select=scenario_id,phase,shussha,shukko`, { headers: getH() });
+  if (res.ok){ (await res.json()).forEach(r=>{ const o=byId[r.scenario_id]; if(o) o.ps[r.phase]={ shussha:r.shussha||'', shukko:r.shukko||'' }; }); }
 }
 
 function statusBadge(c){
@@ -1076,10 +1075,10 @@ function renderEditor(){
     </div>
 
     <details ${tpOpen?'open':''} ontoggle="tpOpen=this.open" style="margin-top:16px;">
-      <summary style="cursor:pointer;font-weight:700;color:#2d4a38;padding:8px 10px;background:#eef4ef;border-radius:8px;">⑤ 添乗員の送迎・乗降場所（候補）</summary>
+      <summary style="cursor:pointer;font-weight:700;color:#2d4a38;padding:8px 10px;background:#eef4ef;border-radius:8px;">⑤ 添乗員の送迎シナリオ（登校用・下校用）</summary>
       <div style="padding:8px 4px;">
-        <div class="muted" style="font-size:11px;margin-bottom:6px;">このコースで使いうる乗降場所の候補です（人は入れません）。その日に誰がどこで乗降するかは配置画面で選びます。出社・出庫は局面ごとに1組、各場所には「バスがそこに到着する時刻」を入れます。②③④は「登校前からコピー」で複製できます。（添乗員の到着時間は配置側で「バス到着の○分前」として扱います）</div>
-        ${renderTransferPanel()}
+        <div class="muted" style="font-size:11px;margin-bottom:6px;">添乗員の送迎パターンを、登校用・下校用それぞれ複数持てます（人・日付は入れません）。配置画面で登校便と下校便に別々のシナリオを選べる＝途中交代に対応。各場所には「バスがそこに到着する時刻」を入れ、添乗員の到着は配置側で「その○分前」として扱います。登校後／下校後は「前からコピー」で複製できます。</div>
+        ${renderScenarios()}
       </div>
     </details>
 
@@ -1165,41 +1164,70 @@ function updGekouTime(i,val){ const s=_stops()[i]; const t=_toMin(val), r=_toMin
 function clearGekou(i){ _stops()[i].gekou_offset=null; renderEditor(); }
 function addGekouOnly(){ _stops().push({name:'',address:'',toukou_time:'',gekou_offset:null,gekou_only:true}); renderEditor(); }
 
-// ⑤ 添乗員の乗降場所候補（人・日付は入れない＝場所メニュー）。出社出庫は局面に1組、各行はバス到着時刻。
-function _tp(){ return TP[String(selCourseId)] = TP[String(selCourseId)] || []; }
-function _ps(ph){ const k=String(selCourseId); PS[k]=PS[k]||{}; PS[k][ph]=PS[k][ph]||{shussha:'',shukko:''}; return PS[k][ph]; }
-function renderTransferPanel(){
-  const arr=_tp();
-  return PHASES.map(ph=>{
-    const ps=_ps(ph);
-    const rowsIdx = arr.map((r,i)=>({r,i})).filter(x=>x.r.phase===ph);
-    const rows = rowsIdx.map(({r,i})=>`<div class="line" style="margin-bottom:6px;flex-wrap:wrap;">
-      <select onchange="tpUpd(${i},'kind',this.value)" style="width:74px;flex:0 0 auto;"><option value="乗車"${r.kind==='乗車'?' selected':''}>乗車</option><option value="降車"${r.kind==='降車'?' selected':''}>降車</option></select>
-      <input type="text" value="${escAttr(r.name)}" placeholder="場所名" oninput="tpUpd(${i},'name',this.value)" style="flex:1;min-width:100px;">
-      <input type="text" value="${escAttr(r.address)}" placeholder="住所" oninput="tpUpd(${i},'address',this.value)" style="flex:1;min-width:100px;">
-      <input type="text" value="${escAttr(r.coord||'')}" placeholder="座標(任意)" oninput="tpUpd(${i},'coord',this.value)" style="flex:0 0 110px;">
-      <button class="mini" onclick="tpMap(${i})" title="グーグルマップで開く">🗺</button>
-      <span class="muted" style="font-size:11px;">バス時刻</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(r.bus_time))}" onchange="tpUpd(${i},'bus_time',tnorm(this))" title="バス(運転手)がこの場所に到着する時刻" style="width:60px;text-align:center;">
-      <button class="link" onclick="tpDel(${i})">削除</button>
-    </div>`).join('') || '<p class="muted" style="margin:0 0 4px;">候補なし</p>';
-    const copyBtn = ph!=='登校前' ? `<button class="mini" style="margin-left:8px;" onclick="tpCopyFrom('${ph}')" title="登校前の候補をここに複製">登校前からコピー</button>` : '';
-    return `<div style="margin:8px 0;padding:8px;border:1px solid #e2ede6;border-radius:8px;">
-      <div class="line" style="margin-bottom:8px;flex-wrap:wrap;"><span style="font-weight:700;color:#2d4a38;">${ph}</span>
-        <span class="muted" style="font-size:11px;margin-left:8px;">この局面のときの</span>
-        <span class="muted" style="font-size:11px;">出社</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(ps.shussha))}" onchange="psUpd('${ph}','shussha',tnorm(this))" title="この局面の送迎をやるときの出社（任意）" style="width:60px;text-align:center;">
-        <span class="muted" style="font-size:11px;">出庫</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(ps.shukko))}" onchange="psUpd('${ph}','shukko',tnorm(this))" title="この局面の送迎をやるときの出庫（任意）" style="width:60px;text-align:center;">
-        ${copyBtn}</div>
-      ${rows}
-      <button class="mini" onclick="tpAdd('${ph}')">＋場所を追加</button>
+// ⑤ 添乗員の送迎シナリオ（人・日付は入れない）。登校用／下校用を別々に複数持てる＝途中交代に対応。
+function _scenList(){ return SCEN[String(selCourseId)] = SCEN[String(selCourseId)] || []; }
+function renderScenarios(){
+  const list = _scenList();
+  const seg = (segKey)=>{
+    const items = list.map((s,si)=>({s,si})).filter(x=>x.s.segment===segKey);
+    const cards = items.map(({s,si})=>scenarioCard(s,si)).join('') || `<p class="muted" style="margin:2px 0 6px;">${segKey}シナリオはありません。</p>`;
+    return `<div style="margin:6px 0 12px;">
+      <div class="fld" style="margin:0 0 4px;">🚌 ${segKey}シナリオ</div>
+      ${cards}
+      <button class="mini" onclick="scenAdd('${segKey}')">＋${segKey}シナリオを追加</button>
     </div>`;
-  }).join('');
+  };
+  return seg('登校') + seg('下校');
 }
-function tpUpd(i,field,val){ const a=_tp(); if(a[i]) a[i][field]=val; }
-function psUpd(ph,field,val){ _ps(ph)[field]=val; }
-function tpAdd(ph){ _tp().push({phase:ph,kind:'乗車',name:'',address:'',coord:'',bus_time:''}); renderEditor(); }
-function tpDel(i){ _tp().splice(i,1); renderEditor(); }
-function tpMap(i){ const r=_tp()[i]; if(!r) return; const q=(r.coord||'').trim()||((r.name||'')+' '+(r.address||'')).trim(); if(!q){ status('場所名・住所・座標のいずれかを入れてください', false); return; } window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q), '_blank'); }
-function tpCopyFrom(ph){ const a=_tp(); const src=a.filter(r=>r.phase==='登校前'); if(!src.length){ alert('登校前の候補がありません'); return; } if(!confirm(`登校前の候補（${src.length}件）を「${ph}」に複製します。よろしいですか？`)) return; src.forEach(r=>a.push({phase:ph,kind:r.kind,name:r.name,address:r.address,coord:r.coord,bus_time:r.bus_time})); renderEditor(); }
+function scenarioCard(s, si){
+  const phaseHtml = (SEG_PHASES[s.segment]||[]).map(ph=>renderScenPhase(si, s, ph)).join('');
+  return `<div style="margin:6px 0;padding:8px;border:1px solid #cfe0d5;border-radius:8px;background:#fbfdfc;">
+    <div class="line" style="margin-bottom:6px;flex-wrap:wrap;">
+      <span style="font-weight:700;color:#2d4a38;">${s.segment}シナリオ</span>
+      <input type="text" value="${escAttr(s.label)}" placeholder="名前(任意 例：2名乗車)" oninput="scenUpd(${si},'label',this.value)" style="flex:1;min-width:120px;max-width:240px;">
+      <button class="link" style="margin-left:auto;" onclick="scenDel(${si})">このシナリオを削除</button>
+    </div>
+    ${phaseHtml}
+  </div>`;
+}
+function renderScenPhase(si, s, ph){
+  const setFields = PHASE_SETTINGS[ph] || [];
+  const ps = s.ps[ph] = s.ps[ph] || {shussha:'',shukko:''};
+  const setHtml = setFields.map(f=>{
+    const lbl = f==='shussha'?'出社':'出庫';
+    return `<span class="muted" style="font-size:11px;">${lbl}</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(ps[f]))}" onchange="scenPsUpd(${si},'${ph}','${f}',tnorm(this))" style="width:60px;text-align:center;">`;
+  }).join('');
+  const isAto = (ph==='登校後'||ph==='下校後');
+  const copyBtn = isAto ? `<button class="mini" style="margin-left:8px;" onclick="scenCopyMae(${si},'${ph}')" title="前の局面の乗車場所を降車として複製">${s.segment}前からコピー</button>` : '';
+  const rowsIdx = s.pts.map((r,pi)=>({r,pi})).filter(x=>x.r.phase===ph);
+  const rows = rowsIdx.map(({r,pi})=>{
+    const timeLbl = r.kind==='降車'?'降車時刻':'乗車時刻';
+    return `<div class="line" style="margin:4px 0;flex-wrap:wrap;">
+      <select onchange="scenPtKind(${si},${pi},this.value)" style="width:74px;flex:0 0 auto;"><option value="乗車"${r.kind==='乗車'?' selected':''}>乗車</option><option value="降車"${r.kind==='降車'?' selected':''}>降車</option></select>
+      <input type="text" value="${escAttr(r.name)}" placeholder="場所名" oninput="scenPtUpd(${si},${pi},'name',this.value)" style="flex:1;min-width:100px;">
+      <input type="text" value="${escAttr(r.address)}" placeholder="住所" oninput="scenPtUpd(${si},${pi},'address',this.value)" style="flex:1;min-width:100px;">
+      <input type="text" value="${escAttr(r.coord||'')}" placeholder="座標(任意)" oninput="scenPtUpd(${si},${pi},'coord',this.value)" style="flex:0 0 100px;">
+      <button class="mini" onclick="scenMap(${si},${pi})" title="グーグルマップで開く">🗺</button>
+      <span class="muted" style="font-size:11px;">${timeLbl}</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(r.bus_time))}" onchange="scenPtUpd(${si},${pi},'bus_time',tnorm(this))" style="width:60px;text-align:center;">
+      <button class="link" onclick="scenPtDel(${si},${pi})">削除</button>
+    </div>`;
+  }).join('') || '<span class="muted" style="font-size:11px;">場所なし</span>';
+  return `<div style="margin:4px 0 8px;padding:6px 8px;border-left:3px solid #cfe0d5;">
+    <div class="line" style="margin-bottom:4px;flex-wrap:wrap;"><span style="font-weight:600;color:#2d4a38;">${ph}</span>${setFields.length?`<span class="muted" style="font-size:11px;margin-left:6px;">この局面の</span>${setHtml}`:''}${copyBtn}</div>
+    ${rows}
+    <button class="mini" onclick="scenPtAdd(${si},'${ph}')">＋場所を追加</button>
+  </div>`;
+}
+function scenAdd(seg){ _scenList().push({segment:seg,label:'',pts:[],ps:{}}); renderEditor(); }
+function scenDel(si){ if(!confirm('このシナリオを削除します。よろしいですか？（保存するまでDBには反映されません）')) return; _scenList().splice(si,1); renderEditor(); }
+function scenUpd(si,field,val){ const s=_scenList()[si]; if(s) s[field]=val; }
+function scenPsUpd(si,ph,field,val){ const s=_scenList()[si]; if(!s) return; s.ps[ph]=s.ps[ph]||{shussha:'',shukko:''}; s.ps[ph][field]=val; }
+function scenPtAdd(si,ph){ const s=_scenList()[si]; if(!s) return; const def=(ph==='登校後'||ph==='下校後')?'降車':'乗車'; s.pts.push({phase:ph,kind:def,name:'',address:'',coord:'',bus_time:''}); renderEditor(); }
+function scenPtDel(si,pi){ const s=_scenList()[si]; if(s) s.pts.splice(pi,1); renderEditor(); }
+function scenPtUpd(si,pi,field,val){ const s=_scenList()[si]; if(s&&s.pts[pi]) s.pts[pi][field]=val; }
+function scenPtKind(si,pi,val){ const s=_scenList()[si]; if(s&&s.pts[pi]){ s.pts[pi].kind=val; renderEditor(); } }
+function scenMap(si,pi){ const s=_scenList()[si]; if(!s) return; const r=s.pts[pi]; if(!r) return; const q=(r.coord||'').trim()||((r.name||'')+' '+(r.address||'')).trim(); if(!q){ status('場所名・住所・座標のいずれかを入れてください', false); return; } window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q), '_blank'); }
+function scenCopyMae(si,ph){ const s=_scenList()[si]; if(!s) return; const mae=s.segment+'前'; const src=s.pts.filter(r=>r.phase===mae && r.kind==='乗車'); if(!src.length){ alert(mae+'の乗車場所がありません'); return; } if(!confirm(`${mae}の乗車場所（${src.length}件）を「${ph}」に降車として複製します。よろしいですか？`)) return; src.forEach(r=>s.pts.push({phase:ph,kind:'降車',name:r.name,address:r.address,coord:r.coord,bus_time:r.bus_time})); renderEditor(); }
 
 async function copyPrevYear(){
   if (!selCourseId) return;
@@ -1248,22 +1276,34 @@ async function saveCourse(){
       return r;
     });
     if(rows.length){ const r3=await fetch(`${REST_URL}/course_locations`, { method:'POST', headers:getH(), body:JSON.stringify(rows) }); if(!r3.ok){ const t=await r3.text(); _saveMsg('バス停・ルートの保存に失敗：'+t.slice(0,100), false); return; } }
-    // 4) 添乗員の乗降場所候補（このコースを置き換え）
+    // 4) 送迎シナリオ（このコースを置き換え）— scenarios削除で points/settings も連動削除
     await fetch(`${REST_URL}/course_transfer_points?course_id=eq.${c.id}`, { method:'DELETE', headers:getH() });
-    const seqByPhase={};
-    const tps = (TP[key]||[]).filter(r=>(r.name||'').trim()||(r.address||'').trim()||(r.coord||'').trim()).map(r=>{
-      seqByPhase[r.phase]=(seqByPhase[r.phase]||0)+1;
-      return { course_id:c.id, phase:r.phase, kind:r.kind||'乗車', seq:seqByPhase[r.phase],
-               name:(r.name||'').trim(), address:(r.address||'').trim(), coord:(r.coord||'').trim()||null,
-               bus_time:r.bus_time||null };
-    });
-    if(tps.length){ const r4=await fetch(`${REST_URL}/course_transfer_points`, { method:'POST', headers:getH(), body:JSON.stringify(tps) }); if(!r4.ok){ const t=await r4.text(); _saveMsg('乗降場所候補の保存に失敗：'+t.slice(0,100), false); return; } }
-    // 5) 局面ごとの出社・出庫（このコースを置き換え）
-    await fetch(`${REST_URL}/course_phase_settings?course_id=eq.${c.id}`, { method:'DELETE', headers:getH() });
-    const psRows = Object.keys(PS[key]||{}).map(ph=>({ph, v:PS[key][ph]})).filter(x=>(x.v.shussha||'').trim()||(x.v.shukko||'').trim()).map(x=>({ course_id:c.id, phase:x.ph, shussha:x.v.shussha||null, shukko:x.v.shukko||null }));
-    if(psRows.length){ const r5=await fetch(`${REST_URL}/course_phase_settings`, { method:'POST', headers:getH(), body:JSON.stringify(psRows) }); if(!r5.ok){ const t=await r5.text(); _saveMsg('局面の出社出庫の保存に失敗：'+t.slice(0,100), false); return; } }
+    await fetch(`${REST_URL}/course_scenarios?course_id=eq.${c.id}`, { method:'DELETE', headers:getH() });
+    const scenHasContent = s => s.pts.some(p=>(p.name||'').trim()||(p.address||'').trim()||(p.coord||'').trim())
+      || Object.keys(s.ps||{}).some(ph=>((s.ps[ph]||{}).shussha||'').trim()||((s.ps[ph]||{}).shukko||'').trim())
+      || (s.label||'').trim();
+    const scens = (SCEN[key]||[]).filter(scenHasContent);
+    if(scens.length){
+      const scenRows = scens.map((s,idx)=>({ course_id:c.id, segment:s.segment, label:(s.label||'').trim(), seq:idx+1 }));
+      const rs = await fetch(`${REST_URL}/course_scenarios`, { method:'POST', headers:getH(), body:JSON.stringify(scenRows) });
+      if(!rs.ok){ const t=await rs.text(); _saveMsg('シナリオの保存に失敗：'+t.slice(0,100), false); return; }
+      const inserted = await rs.json();
+      const allPts=[], allPs=[];
+      scens.forEach((s,idx)=>{
+        const sid = inserted[idx] && inserted[idx].id; if(!sid) return;
+        const seqByPhase={};
+        s.pts.filter(p=>(p.name||'').trim()||(p.address||'').trim()||(p.coord||'').trim()).forEach(p=>{
+          seqByPhase[p.phase]=(seqByPhase[p.phase]||0)+1;
+          allPts.push({ course_id:c.id, scenario_id:sid, phase:p.phase, kind:p.kind||'乗車', seq:seqByPhase[p.phase],
+                        name:(p.name||'').trim(), address:(p.address||'').trim(), coord:(p.coord||'').trim()||null, bus_time:p.bus_time||null });
+        });
+        Object.keys(s.ps||{}).forEach(ph=>{ const v=s.ps[ph]||{}; if((v.shussha||'').trim()||(v.shukko||'').trim()){ allPs.push({ scenario_id:sid, phase:ph, shussha:v.shussha||null, shukko:v.shukko||null }); } });
+      });
+      if(allPts.length){ const rp=await fetch(`${REST_URL}/course_transfer_points`, { method:'POST', headers:getH(), body:JSON.stringify(allPts) }); if(!rp.ok){ const t=await rp.text(); _saveMsg('乗降場所の保存に失敗：'+t.slice(0,100), false); return; } }
+      if(allPs.length){ const rq=await fetch(`${REST_URL}/course_phase_settings`, { method:'POST', headers:getH(), body:JSON.stringify(allPs) }); if(!rq.ok){ const t=await rq.text(); _saveMsg('局面の出社出庫の保存に失敗：'+t.slice(0,100), false); return; } }
+    }
     _saveMsg('✅ 保存しました', true);
-    await loadFormsForYear(selYear); await loadStops(); await loadTransferPoints(); await loadPhaseSettings();
+    await loadFormsForYear(selYear); await loadStops(); await loadScenarios();
     renderCourseList();
   }catch(e){ _saveMsg('保存エラー：'+e.message, false); }
 }
@@ -1284,7 +1324,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('courseSearch').addEventListener('input', renderCourseList);
   document.getElementById('activeOnly').addEventListener('change', renderCourseList);
   try{
-    await loadCourses(); await loadFormsForYear(selYear); await loadStops(); await loadTransferPoints(); await loadPhaseSettings();
+    await loadCourses(); await loadFormsForYear(selYear); await loadStops(); await loadScenarios();
     renderCourseList(); renderEditor();
     status('準備ができました。コースを選んでください。', true);
   }catch(e){ status('データ読み込みエラー：'+e.message, false); }
