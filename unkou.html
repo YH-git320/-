@@ -1253,16 +1253,17 @@ function renderScenPhase(si, s, ph){
     setHtml = ['shussha','shukko'].map(f=>{ const lbl=f==='shussha'?'出社':'出庫'; return `<span class="muted" style="font-size:11px;">${lbl}</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(ps[f]))}" onchange="scenPsUpd(${si},'${ph}','${f}',tnorm(this))" style="width:60px;text-align:center;">`; }).join('');
   } else if(ph==='下校前'){
     const lead=ps.shukko_lead, ex=_gekouExamples(lead);
-    setHtml = `<span class="muted" style="font-size:11px;">出庫＝下校便出発の</span><input type="number" min="0" id="slH${si}" value="${lead!=null?Math.floor(lead/60):''}" onchange="scenShukkoLead(${si})" style="flex:0 0 auto;width:56px;text-align:center;"><span class="muted" style="font-size:11px;">時間</span><input type="number" min="0" max="59" id="slM${si}" value="${lead!=null?(lead%60):''}" onchange="scenShukkoLead(${si})" style="flex:0 0 auto;width:56px;text-align:center;"><span class="muted" style="font-size:11px;">分前</span>${ex?`<span class="muted" style="font-size:11px;margin-left:6px;">実出庫 ${escHtml(ex)}</span>`:''}`;
+    setHtml = `<span class="muted" style="font-size:11px;">出庫＝下校便出発の</span><input type="number" min="0" id="slH${si}" value="${lead!=null?Math.floor(lead/60):''}" onchange="scenShukkoLead(${si})" style="flex:0 0 auto;width:56px;text-align:center;"><span class="muted" style="font-size:11px;">時間</span><input type="number" min="0" max="59" id="slM${si}" value="${lead!=null?(lead%60):''}" onchange="scenShukkoLead(${si})" style="flex:0 0 auto;width:56px;text-align:center;"><span class="muted" style="font-size:11px;">分前</span>${ex?`<span style="flex:0 0 100%;font-size:13px;color:#3d6b4f;margin-top:2px;">実出庫 ${escHtml(ex)}</span>`:''}`;
   }
   const isAto = (ph==='登校後'||ph==='下校後');
   const copyBtn = isAto ? `<button class="mini" style="margin-left:8px;" onclick="scenCopyMae(${si},'${ph}')" title="前の局面の乗車場所を降車として複製">${s.segment}前からコピー</button>` : '';
   const rowsIdx = s.pts.map((r,pi)=>({r,pi})).filter(x=>x.r.phase===ph);
   const rows = rowsIdx.map(({r,pi})=>{
-    let timeCell;
+    let timeCell, exCell='';
     if(isGekou){
       const lead=r.time_lead, ex=_gekouExamples(lead), kw=r.kind==='降車'?'降車':'乗車';
-      timeCell = `<span class="muted" style="font-size:11px;">${kw}＝下校便出発の</span><input type="number" min="0" value="${lead!=null?lead:''}" onchange="scenPtLead(${si},${pi},this.value)" style="flex:0 0 auto;width:56px;text-align:center;"><span class="muted" style="font-size:11px;">分前</span>${ex?`<span class="muted" style="font-size:11px;margin-left:4px;">${escHtml(ex)}</span>`:''}`;
+      timeCell = `<span class="muted" style="font-size:11px;">${kw}＝下校便出発の</span><input type="number" min="0" value="${lead!=null?lead:''}" onchange="scenPtLead(${si},${pi},this.value)" style="flex:0 0 auto;width:56px;text-align:center;"><span class="muted" style="font-size:11px;">分前</span>`;
+      if(ex) exCell = `<span style="flex:0 0 100%;font-size:13px;color:#3d6b4f;margin-top:2px;">${kw==='降車'?'実降車':'実乗車'} ${escHtml(ex)}</span>`;
     } else {
       const timeLbl=r.kind==='降車'?'降車時刻':'乗車時刻';
       timeCell = `<span class="muted" style="font-size:11px;">${timeLbl}</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(r.bus_time))}" onchange="scenPtUpd(${si},${pi},'bus_time',tnorm(this))" style="width:60px;text-align:center;">`;
@@ -1275,6 +1276,7 @@ function renderScenPhase(si, s, ph){
       <button class="mini" onclick="scenMap(${si},${pi})" title="グーグルマップで開く">🗺</button>
       ${timeCell}
       <button class="link" onclick="scenPtDel(${si},${pi})">削除</button>
+      ${exCell}
     </div>`;
   }).join('') || '<span class="muted" style="font-size:11px;">場所なし</span>';
   return `<div style="margin:4px 0 8px;padding:6px 8px;border-left:3px solid #cfe0d5;">
