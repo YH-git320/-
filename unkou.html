@@ -1085,9 +1085,11 @@ function renderEditor(){
 
     <label class="fld" style="margin-top:18px;">③ 【下校便（時程）】${selYear}年度 — 日課ごとの下校便の学校出発時刻</label>
     <div class="muted" style="font-size:11px;margin:-4px 0 6px;">最初の日課が基準になります。次の日課の出発時刻を入れると、下の「自動生成」に各停の時刻が自動で入ります（あとで手修正も可）。</div>
-    <div class="line" style="margin:0 0 8px;flex-wrap:wrap;font-size:12px;">
-      <span class="muted">出庫＝下校便出発の</span><input type="number" min="0" id="shLeadH" value="${c.gekou_shukko_lead!=null?Math.floor(c.gekou_shukko_lead/60):''}" onchange="updShukkoLead()" style="width:48px;text-align:center;"><span class="muted">時間</span><input type="number" min="0" max="59" id="shLeadM" value="${c.gekou_shukko_lead!=null?(c.gekou_shukko_lead%60):''}" onchange="updShukkoLead()" style="width:48px;text-align:center;"><span class="muted">分前</span>
-      <span class="muted" style="margin-left:12px;">配車＝下校便出発の</span><input type="number" min="0" id="haLeadM" value="${c.gekou_haisha_lead!=null?c.gekou_haisha_lead:''}" onchange="updHaishaLead()" style="width:56px;text-align:center;"><span class="muted">分前</span>
+    <div class="line" style="margin:0 0 4px;flex-wrap:wrap;font-size:12px;align-items:center;gap:4px;">
+      <span class="muted" style="flex:0 0 auto;">出庫＝下校便出発の</span><input type="number" min="0" id="shLeadH" value="${c.gekou_shukko_lead!=null?Math.floor(c.gekou_shukko_lead/60):''}" onchange="updShukkoLead()" style="flex:0 0 auto;width:64px;text-align:center;"><span class="muted" style="flex:0 0 auto;">時間</span><input type="number" min="0" max="59" id="shLeadM" value="${c.gekou_shukko_lead!=null?(c.gekou_shukko_lead%60):''}" onchange="updShukkoLead()" style="flex:0 0 auto;width:64px;text-align:center;"><span class="muted" style="flex:0 0 auto;">分前</span>
+    </div>
+    <div class="line" style="margin:0 0 8px;flex-wrap:wrap;font-size:12px;align-items:center;gap:4px;">
+      <span class="muted" style="flex:0 0 auto;">配車＝下校便出発の</span><input type="number" min="0" id="haLeadM" value="${c.gekou_haisha_lead!=null?c.gekou_haisha_lead:''}" onchange="updHaishaLead()" style="flex:0 0 auto;width:64px;text-align:center;"><span class="muted" style="flex:0 0 auto;">分前</span>
     </div>
     ${formsHtml}
     <button class="mini" onclick="addForm()">＋日課を追加</button>
