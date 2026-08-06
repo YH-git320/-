@@ -946,10 +946,10 @@ async function loadScenarios(){
   SCEN = {}; const byId = {};
   let res = await fetch(`${REST_URL}/course_scenarios?select=id,course_id,segment,label,seq&order=segment,seq.nullslast,id`, { headers: getH() });
   if (res.ok){ (await res.json()).forEach(r=>{ const k=String(r.course_id); const o={dbId:r.id, segment:r.segment, label:r.label||'', pts:[], ps:{}}; (SCEN[k]=SCEN[k]||[]).push(o); byId[r.id]=o; }); }
-  res = await fetch(`${REST_URL}/course_transfer_points?scenario_id=not.is.null&select=scenario_id,phase,kind,seq,name,address,coord,bus_time&order=seq.nullslast,id`, { headers: getH() });
-  if (res.ok){ (await res.json()).forEach(r=>{ const o=byId[r.scenario_id]; if(o) o.pts.push({ phase:r.phase, kind:r.kind||'乗車', name:r.name||'', address:r.address||'', coord:r.coord||'', bus_time:r.bus_time||'' }); }); }
-  res = await fetch(`${REST_URL}/course_phase_settings?select=scenario_id,phase,shussha,shukko`, { headers: getH() });
-  if (res.ok){ (await res.json()).forEach(r=>{ const o=byId[r.scenario_id]; if(o) o.ps[r.phase]={ shussha:r.shussha||'', shukko:r.shukko||'' }; }); }
+  res = await fetch(`${REST_URL}/course_transfer_points?scenario_id=not.is.null&select=scenario_id,phase,kind,seq,name,address,coord,bus_time,time_lead&order=seq.nullslast,id`, { headers: getH() });
+  if (res.ok){ (await res.json()).forEach(r=>{ const o=byId[r.scenario_id]; if(o) o.pts.push({ phase:r.phase, kind:r.kind||'乗車', name:r.name||'', address:r.address||'', coord:r.coord||'', bus_time:r.bus_time||'', time_lead:(r.time_lead==null?null:r.time_lead) }); }); }
+  res = await fetch(`${REST_URL}/course_phase_settings?select=scenario_id,phase,shussha,shukko,shukko_lead`, { headers: getH() });
+  if (res.ok){ (await res.json()).forEach(r=>{ const o=byId[r.scenario_id]; if(o) o.ps[r.phase]={ shussha:r.shussha||'', shukko:r.shukko||'', shukko_lead:(r.shukko_lead==null?null:r.shukko_lead) }; }); }
 }
 
 function statusBadge(c){
@@ -1233,30 +1233,52 @@ function scenarioCard(s, si){
     ${phaseHtml}
   </div>`;
 }
+// 日課ごとの実時刻の例示（下校便出発−リード分）。例 "A 13:10　B 14:10"
+function _gekouExamples(leadMin){
+  if(leadMin==null) return '';
+  const parts=[];
+  (FORMS[String(selCourseId)]||[]).forEach(f=>{
+    const deps=(f.gekou_departures||[]).filter(t=>t); if(!deps.length) return;
+    const times=deps.map(D=>{ const dm=_toMin(D); return dm!=null?_toHm(dm-leadMin):''; }).filter(Boolean);
+    if(times.length) parts.push((f.form_name||'?')+' '+times.join('/'));
+  });
+  return parts.join('　');
+}
 function renderScenPhase(si, s, ph){
-  const setFields = PHASE_SETTINGS[ph] || [];
-  const ps = s.ps[ph] = s.ps[ph] || {shussha:'',shukko:''};
-  const setHtml = setFields.map(f=>{
-    const lbl = f==='shussha'?'出社':'出庫';
-    return `<span class="muted" style="font-size:11px;">${lbl}</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(ps[f]))}" onchange="scenPsUpd(${si},'${ph}','${f}',tnorm(this))" style="width:60px;text-align:center;">`;
-  }).join('');
+  const isGekou = (s.segment==='下校');
+  const ps = s.ps[ph] = s.ps[ph] || {};
+  const hasSet = (ph==='登校前'||ph==='下校前');
+  let setHtml='';
+  if(ph==='登校前'){
+    setHtml = ['shussha','shukko'].map(f=>{ const lbl=f==='shussha'?'出社':'出庫'; return `<span class="muted" style="font-size:11px;">${lbl}</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(ps[f]))}" onchange="scenPsUpd(${si},'${ph}','${f}',tnorm(this))" style="width:60px;text-align:center;">`; }).join('');
+  } else if(ph==='下校前'){
+    const lead=ps.shukko_lead, ex=_gekouExamples(lead);
+    setHtml = `<span class="muted" style="font-size:11px;">出庫＝下校便出発の</span><input type="number" min="0" id="slH${si}" value="${lead!=null?Math.floor(lead/60):''}" onchange="scenShukkoLead(${si})" style="flex:0 0 auto;width:56px;text-align:center;"><span class="muted" style="font-size:11px;">時間</span><input type="number" min="0" max="59" id="slM${si}" value="${lead!=null?(lead%60):''}" onchange="scenShukkoLead(${si})" style="flex:0 0 auto;width:56px;text-align:center;"><span class="muted" style="font-size:11px;">分前</span>${ex?`<span class="muted" style="font-size:11px;margin-left:6px;">実出庫 ${escHtml(ex)}</span>`:''}`;
+  }
   const isAto = (ph==='登校後'||ph==='下校後');
   const copyBtn = isAto ? `<button class="mini" style="margin-left:8px;" onclick="scenCopyMae(${si},'${ph}')" title="前の局面の乗車場所を降車として複製">${s.segment}前からコピー</button>` : '';
   const rowsIdx = s.pts.map((r,pi)=>({r,pi})).filter(x=>x.r.phase===ph);
   const rows = rowsIdx.map(({r,pi})=>{
-    const timeLbl = r.kind==='降車'?'降車時刻':'乗車時刻';
-    return `<div class="line" style="margin:4px 0;flex-wrap:wrap;">
+    let timeCell;
+    if(isGekou){
+      const lead=r.time_lead, ex=_gekouExamples(lead), kw=r.kind==='降車'?'降車':'乗車';
+      timeCell = `<span class="muted" style="font-size:11px;">${kw}＝下校便出発の</span><input type="number" min="0" value="${lead!=null?lead:''}" onchange="scenPtLead(${si},${pi},this.value)" style="flex:0 0 auto;width:56px;text-align:center;"><span class="muted" style="font-size:11px;">分前</span>${ex?`<span class="muted" style="font-size:11px;margin-left:4px;">${escHtml(ex)}</span>`:''}`;
+    } else {
+      const timeLbl=r.kind==='降車'?'降車時刻':'乗車時刻';
+      timeCell = `<span class="muted" style="font-size:11px;">${timeLbl}</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(r.bus_time))}" onchange="scenPtUpd(${si},${pi},'bus_time',tnorm(this))" style="width:60px;text-align:center;">`;
+    }
+    return `<div class="line" style="margin:4px 0;flex-wrap:wrap;align-items:center;gap:4px;">
       <select onchange="scenPtKind(${si},${pi},this.value)" style="width:74px;flex:0 0 auto;"><option value="乗車"${r.kind==='乗車'?' selected':''}>乗車</option><option value="降車"${r.kind==='降車'?' selected':''}>降車</option></select>
       <input type="text" value="${escAttr(r.name)}" placeholder="場所名" oninput="scenPtUpd(${si},${pi},'name',this.value)" style="flex:1;min-width:100px;">
       <input type="text" value="${escAttr(r.address)}" placeholder="住所" oninput="scenPtUpd(${si},${pi},'address',this.value)" style="flex:1;min-width:100px;">
       <input type="text" value="${escAttr(r.coord||'')}" placeholder="座標(任意)" oninput="scenPtUpd(${si},${pi},'coord',this.value)" style="flex:0 0 100px;">
       <button class="mini" onclick="scenMap(${si},${pi})" title="グーグルマップで開く">🗺</button>
-      <span class="muted" style="font-size:11px;">${timeLbl}</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(r.bus_time))}" onchange="scenPtUpd(${si},${pi},'bus_time',tnorm(this))" style="width:60px;text-align:center;">
+      ${timeCell}
       <button class="link" onclick="scenPtDel(${si},${pi})">削除</button>
     </div>`;
   }).join('') || '<span class="muted" style="font-size:11px;">場所なし</span>';
   return `<div style="margin:4px 0 8px;padding:6px 8px;border-left:3px solid #cfe0d5;">
-    <div class="line" style="margin-bottom:4px;flex-wrap:wrap;"><span style="font-weight:600;color:#2d4a38;">${ph}</span>${setFields.length?`<span class="muted" style="font-size:11px;margin-left:6px;">この局面の</span>${setHtml}`:''}${copyBtn}</div>
+    <div class="line" style="margin-bottom:4px;flex-wrap:wrap;align-items:center;gap:4px;"><span style="font-weight:600;color:#2d4a38;">${ph}</span>${hasSet?setHtml:''}${copyBtn}</div>
     ${rows}
     <button class="mini" onclick="scenPtAdd(${si},'${ph}')">＋場所を追加</button>
   </div>`;
@@ -1264,13 +1286,15 @@ function renderScenPhase(si, s, ph){
 function scenAdd(seg){ _scenList().push({segment:seg,label:'',pts:[],ps:{}}); renderEditor(); }
 function scenDel(si){ if(!confirm('このシナリオを削除します。よろしいですか？（保存するまでDBには反映されません）')) return; _scenList().splice(si,1); renderEditor(); }
 function scenUpd(si,field,val){ const s=_scenList()[si]; if(s) s[field]=val; }
-function scenPsUpd(si,ph,field,val){ const s=_scenList()[si]; if(!s) return; s.ps[ph]=s.ps[ph]||{shussha:'',shukko:''}; s.ps[ph][field]=val; }
-function scenPtAdd(si,ph){ const s=_scenList()[si]; if(!s) return; const def=(ph==='登校後'||ph==='下校後')?'降車':'乗車'; s.pts.push({phase:ph,kind:def,name:'',address:'',coord:'',bus_time:''}); renderEditor(); }
+function scenPsUpd(si,ph,field,val){ const s=_scenList()[si]; if(!s) return; s.ps[ph]=s.ps[ph]||{}; s.ps[ph][field]=val; }
+function scenShukkoLead(si){ const s=_scenList()[si]; if(!s) return; const g=id=>{const e=document.getElementById(id);return e?parseInt(e.value||'0',10)||0:0;}; const t=g('slH'+si)*60+g('slM'+si); s.ps['下校前']=s.ps['下校前']||{}; s.ps['下校前'].shukko_lead = t>0?t:null; renderEditor(); }
+function scenPtLead(si,pi,val){ const s=_scenList()[si]; if(s&&s.pts[pi]){ const n=parseInt(val,10); s.pts[pi].time_lead=(isNaN(n)||n<0)?null:n; renderEditor(); } }
+function scenPtAdd(si,ph){ const s=_scenList()[si]; if(!s) return; const def=(ph==='登校後'||ph==='下校後')?'降車':'乗車'; s.pts.push({phase:ph,kind:def,name:'',address:'',coord:'',bus_time:'',time_lead:null}); renderEditor(); }
 function scenPtDel(si,pi){ const s=_scenList()[si]; if(s) s.pts.splice(pi,1); renderEditor(); }
 function scenPtUpd(si,pi,field,val){ const s=_scenList()[si]; if(s&&s.pts[pi]) s.pts[pi][field]=val; }
 function scenPtKind(si,pi,val){ const s=_scenList()[si]; if(s&&s.pts[pi]){ s.pts[pi].kind=val; renderEditor(); } }
 function scenMap(si,pi){ const s=_scenList()[si]; if(!s) return; const r=s.pts[pi]; if(!r) return; const q=(r.coord||'').trim()||((r.name||'')+' '+(r.address||'')).trim(); if(!q){ status('場所名・住所・座標のいずれかを入れてください', false); return; } window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q), '_blank'); }
-function scenCopyMae(si,ph){ const s=_scenList()[si]; if(!s) return; const mae=s.segment+'前'; const src=s.pts.filter(r=>r.phase===mae && r.kind==='乗車'); if(!src.length){ alert(mae+'の乗車場所がありません'); return; } if(!confirm(`${mae}の乗車場所（${src.length}件）を「${ph}」に降車として複製します。よろしいですか？`)) return; src.forEach(r=>s.pts.push({phase:ph,kind:'降車',name:r.name,address:r.address,coord:r.coord,bus_time:r.bus_time})); renderEditor(); }
+function scenCopyMae(si,ph){ const s=_scenList()[si]; if(!s) return; const mae=s.segment+'前'; const src=s.pts.filter(r=>r.phase===mae && r.kind==='乗車'); if(!src.length){ alert(mae+'の乗車場所がありません'); return; } if(!confirm(`${mae}の乗車場所（${src.length}件）を「${ph}」に降車として複製します。よろしいですか？`)) return; src.forEach(r=>s.pts.push({phase:ph,kind:'降車',name:r.name,address:r.address,coord:r.coord,bus_time:r.bus_time,time_lead:(r.time_lead==null?null:r.time_lead)})); renderEditor(); }
 
 async function copyPrevYear(){
   if (!selCourseId) return;
@@ -1338,9 +1362,10 @@ async function saveCourse(){
         s.pts.filter(p=>(p.name||'').trim()||(p.address||'').trim()||(p.coord||'').trim()).forEach(p=>{
           seqByPhase[p.phase]=(seqByPhase[p.phase]||0)+1;
           allPts.push({ course_id:c.id, scenario_id:sid, phase:p.phase, kind:p.kind||'乗車', seq:seqByPhase[p.phase],
-                        name:(p.name||'').trim(), address:(p.address||'').trim(), coord:(p.coord||'').trim()||null, bus_time:p.bus_time||null });
+                        name:(p.name||'').trim(), address:(p.address||'').trim(), coord:(p.coord||'').trim()||null,
+                        bus_time:(s.segment==='下校'?null:(p.bus_time||null)), time_lead:(s.segment==='下校'?(p.time_lead==null?null:p.time_lead):null) });
         });
-        Object.keys(s.ps||{}).forEach(ph=>{ const v=s.ps[ph]||{}; if((v.shussha||'').trim()||(v.shukko||'').trim()){ allPs.push({ scenario_id:sid, phase:ph, shussha:v.shussha||null, shukko:v.shukko||null }); } });
+        Object.keys(s.ps||{}).forEach(ph=>{ const v=s.ps[ph]||{}; if((v.shussha||'').trim()||(v.shukko||'').trim()||v.shukko_lead!=null){ allPs.push({ scenario_id:sid, phase:ph, shussha:v.shussha||null, shukko:(s.segment==='下校'?null:(v.shukko||null)), shukko_lead:(s.segment==='下校'?(v.shukko_lead==null?null:v.shukko_lead):null) }); } });
       });
       if(allPts.length){ const rp=await fetch(`${REST_URL}/course_transfer_points`, { method:'POST', headers:getH(), body:JSON.stringify(allPts) }); if(!rp.ok){ const t=await rp.text(); _saveMsg('乗降場所の保存に失敗：'+t.slice(0,100), false); return; } }
       if(allPs.length){ const rq=await fetch(`${REST_URL}/course_phase_settings`, { method:'POST', headers:getH(), body:JSON.stringify(allPs) }); if(!rq.ok){ const t=await rq.text(); _saveMsg('局面の出社出庫の保存に失敗：'+t.slice(0,100), false); return; } }
