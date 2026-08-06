@@ -967,7 +967,13 @@ function _gekouBins(){
   (FORMS[String(selCourseId)]||[]).forEach(f=>(f.gekou_departures||[]).forEach(t=>{ if(t) set.add(t); }));
   return [...set].sort((a,b)=>_toMin(a)-_toMin(b));
 }
-function selectCourse(id){ selCourseId = id; const b=_gekouBins(); selRefD = b.length? b[0] : '14:00'; renderCourseList(); renderEditor(); }
+// 基準＝最初の日課（入力順）の最初の下校便。これを軸に他の日課を自動算出。
+function _refDeparture(){
+  const forms = FORMS[String(selCourseId)]||[];
+  for(const f of forms){ for(const t of (f.gekou_departures||[])){ if(t) return t; } }
+  return '';
+}
+function selectCourse(id){ selCourseId = id; selRefD = _refDeparture() || '14:00'; renderCourseList(); renderEditor(); }
 
 function renderEditor(){
   const area = document.getElementById('editorArea');
@@ -976,6 +982,7 @@ function renderEditor(){
   const key = String(c.id);
   const forms = FORMS[key] = FORMS[key] || [];
   const stops = _stops();
+  selRefD = _refDeparture() || '14:00';   // 基準は常に「最初の日課の最初の下校便」
 
   // 日課フォーム
   const formsHtml = forms.length ? forms.map((f,fi)=>{
@@ -1015,33 +1022,42 @@ function renderEditor(){
       ? `<input type="text" value="${escAttr(s.name)}" placeholder="下校専用バス停名" oninput="updStopName(${i},this.value)" style="flex:1;min-width:120px;"><input type="text" value="${escAttr(s.address)}" placeholder="住所" oninput="updStopAddr(${i},this.value)" style="flex:1;min-width:120px;"><input type="text" value="${escAttr(s.coord||'')}" placeholder="座標(任意)" oninput="updCoord(${i},this.value)" style="flex:0 0 120px;">`
       : `<span style="flex:1;min-width:120px;font-size:13px;">${escHtml(s.name||'(停)')}</span>`;
     const delBtn = s.gekou_only ? `<button class="link" onclick="delStop(${i})">削除</button>` : (s.gekou_offset!=null?`<button class="link" onclick="clearGekou(${i})" title="この停は下校で使わない">下校で外す</button>`:'');
-    return `<div class="line" style="margin-bottom:6px;">${nameCell}<input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(disp)}" onchange="updGekouTime(${i},tnorm(this))" title="基準便でのこの停の時刻" style="width:64px;text-align:center;"><button class="mini" onclick="mapStop(${i})" title="グーグルマップで開く">🗺</button>${delBtn}</div>`;
+    return `<div class="line" style="margin-bottom:6px;">${nameCell}<input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(disp)}" onchange="updGekouTime(${i},tnorm(this))" title="最初の日課(基準便)でのこの停の時刻" style="width:64px;text-align:center;"><button class="mini" onclick="mapStop(${i})" title="グーグルマップで開く">🗺</button>${delBtn}</div>`;
   }).join('') || '<p class="muted" style="margin:0 0 6px;">登校のバス停を入れると、ここに逆順で出ます。</p>';
 
+  const refD = _refDeparture();
+  const firstFormName = (forms.find(f=>(f.gekou_departures||[]).some(t=>t))||{}).form_name || '';
   area.innerHTML = `<div class="courseCard">
     <div class="courseHead">
       <div class="courseTitle">${escHtml(courseLabel(c))}</div>
       <button class="${c.active?'':'primary'}" onclick="toggleActive()">${c.active?'✅ 有効（クリックで廃止）':'🚫 廃止中（クリックで有効）'}</button>
     </div>
-    <label class="fld">【登校便】出社・出庫の時刻（コース共通）</label>
-    <div class="line" style="margin-bottom:12px;">
+    <div class="line" style="margin:4px 0 16px;"><button class="mini" onclick="copyPrevYear()">📋 前年度からコピー</button><span class="muted" style="font-size:11px;">前年度の内容をこの画面に複製して手直しできます</span></div>
+
+    <label class="fld">① 【登校便】出社・出庫の時刻（コース共通）</label>
+    <div class="line" style="margin-bottom:16px;">
       <span class="muted" style="min-width:44px;">出社</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(c.toukou_shussha))}" onchange="updToukou('toukou_shussha',tnorm(this))" style="width:64px;text-align:center;">
       <span class="muted" style="min-width:44px;margin-left:8px;">出庫</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(c.toukou_shukko))}" onchange="updToukou('toukou_shukko',tnorm(this))" style="width:64px;text-align:center;">
     </div>
-    <div class="line" style="margin-bottom:6px;"><label class="fld" style="margin:0;">【下校便（時程）】${selYear}年度 — 日課ごとに下校便の学校出発時刻</label><button class="mini" style="margin-left:auto;" onclick="copyPrevYear()">前年度からコピー</button></div>
-    ${formsHtml}
-    <button class="mini" onclick="addForm()">＋日課を追加</button>
 
-    <label class="fld" style="margin-top:16px;">🚏 登校便のルート（バス停一覧＝順路）— 上から順に、各停の登校時刻</label>
+    <label class="fld">② 🚏 登校便のルート（バス停一覧＝順路）— 上から順に、各停の登校時刻</label>
     ${toukouHtml}
     <button class="mini" onclick="addStop()">＋バス停を追加</button>
 
-    <label class="fld" style="margin-top:16px;">🔁 下校便のルート・時刻（登校の逆順）</label>
-    <div class="line" style="margin-bottom:8px;"><span class="muted" style="min-width:150px;">基準の下校便（学校出発）</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(selRefD))}" onchange="changeRefD(tnorm(this))" style="width:64px;text-align:center;"><span class="muted">の時刻で入力 → 他の便は自動</span></div>
+    <label class="fld" style="margin-top:18px;">③ 【下校便（時程）】${selYear}年度 — 日課ごとの下校便の学校出発時刻</label>
+    <div class="muted" style="font-size:11px;margin:-4px 0 8px;">最初の日課が基準になります。次の日課の出発時刻を入れると、下の「自動生成」に各停の時刻が自動で入ります（あとで手修正も可）。</div>
+    ${formsHtml}
+    <button class="mini" onclick="addForm()">＋日課を追加</button>
+
+    <label class="fld" style="margin-top:18px;">④ 🔁 下校便のルート・時刻（登校の逆順）</label>
+    ${ refD
+        ? `<div class="line" style="margin-bottom:8px;"><span class="muted">基準＝最初の日課${firstFormName?`「${escHtml(firstFormName)}」`:''}の下校便 <b>${escHtml(refD)}</b>。この便での各停の時刻を入れてください → 他の日課は自動。</span></div>`
+        : `<div class="line" style="margin-bottom:8px;"><span class="muted">先に③で日課を1つ（下校便の出発時刻つき）追加してください。最初の日課が基準になります。</span></div>` }
     ${gekouHtml}
     <button class="mini" onclick="addGekouOnly()">＋下校専用のバス停</button>
-    <div style="margin-top:10px;padding:10px;background:#f6faf7;border:1px solid #e2ede6;border-radius:8px;">
-      <div class="fld" style="margin:0 0 6px;">自動生成（確認用）— 日課の下校便ごとの時刻</div>
+
+    <div style="margin-top:14px;padding:10px;background:#f6faf7;border:1px solid #e2ede6;border-radius:8px;">
+      <div class="fld" style="margin:0 0 6px;">自動生成（確認用）— 登校便／日課ごとの下校便の時刻</div>
       <div id="gekouPreview" style="font-size:12px;line-height:1.7;">${renderGekouPreview()}</div>
     </div>
 
@@ -1051,22 +1067,47 @@ function renderEditor(){
 }
 
 function renderGekouPreview(){
+  const c=_c();
   const stops = _stops();
-  const timed = stops.map((s,i)=>({i, name:s.name, off:s.gekou_offset, ov:(s.gekou_overrides||{})})).filter(x=>x.off!=null).sort((a,b)=>a.off-b.off);
-  if(!timed.length) return '<span class="muted">下校の時刻を入れると、日課ごとの時刻表がここに出ます。各時刻は個別に手修正できます。</span>';
-  const bins = _gekouBins();
-  if(!bins.length) return '<span class="muted">先に日課（下校便の学校出発時刻）を登録してください。</span>';
-  return bins.map(D=>{
-    const dm=_toMin(D);
-    const cells = timed.map(x=>{
-      const auto=_toHm(dm+x.off);
-      const has = x.ov && x.ov[D]!=null && x.ov[D]!=='';
-      const val = has ? _hm(x.ov[D]) : auto;
-      const st = has ? 'background:#fff3e0;border-color:#e0a23a;' : '';
-      return `<span style="display:inline-flex;align-items:center;gap:3px;margin:2px 5px;"><span style="font-size:11px;color:#5a7a65;">${escHtml(x.name||'(停)')}</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(val)}" onchange="updOverride(${x.i},'${escAttr(D)}',tnorm(this),'${auto}')" title="${has?('手修正あり（自動='+auto+'）'):'自動。修正すると例外として保存されます'}" style="width:64px;text-align:center;${st}"></span>`;
-    }).join('');
-    return `<div style="margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid #e2ede6;"><span style="font-weight:700;">学校発 ${escHtml(D)}</span> → ${cells}</div>`;
+
+  // ── 登校便（出社・出庫＋登校ルート各停の時刻を順路どおりに表示）
+  const shussha=_hm(c&&c.toukou_shussha), shukko=_hm(c&&c.toukou_shukko);
+  const toCells = stops.map((s,i)=>({s,i})).filter(x=>!x.s.gekou_only).map(x=>{
+    const t=_hm(x.s.toukou_time);
+    return `<span style="display:inline-flex;align-items:center;gap:3px;margin:2px 6px;"><span style="font-size:11px;color:#5a7a65;">${escHtml(x.s.name||'(停)')}</span><span style="font-weight:600;">${t||'—'}</span></span>`;
   }).join('');
+  const toukouBlock = `<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e2ede6;">
+    <div style="font-weight:700;color:#2d4a38;margin-bottom:2px;">▼ 登校便　<span style="font-size:11px;color:#5a7a65;">出社 ${shussha||'—'} ／ 出庫 ${shukko||'—'}</span></div>
+    ${ toCells ? `<div>${toCells}<span style="font-size:11px;color:#5a7a65;margin-left:4px;">→ 学校</span></div>` : '<span class="muted">②で登校ルートを入れると、各停の時刻がここに出ます。</span>' }
+  </div>`;
+
+  // ── 下校便（日課の入力順。各停は下校の並び＝offsetの小さい順）
+  const timed = stops.map((s,i)=>({i, name:s.name, off:s.gekou_offset, ov:(s.gekou_overrides||{})})).filter(x=>x.off!=null).sort((a,b)=>a.off-b.off);
+  const forms = FORMS[String(selCourseId)]||[];
+  const anyDep = forms.some(f=>(f.gekou_departures||[]).some(t=>t));
+  let gekouBlock;
+  if(!anyDep){ gekouBlock = '<span class="muted">③で日課に下校便の出発時刻を入れると、ここに時刻表が出ます。</span>'; }
+  else if(!timed.length){ gekouBlock = '<span class="muted">④で下校の各停の時刻を入れると、日課ごとの時刻表がここに出ます。各時刻は個別に手修正できます。</span>'; }
+  else {
+    gekouBlock = forms.map(f=>{
+      const deps=(f.gekou_departures||[]).filter(t=>t);
+      const nm = escHtml(f.form_name||'(名称未設定)');
+      if(!deps.length) return `<div style="margin-bottom:4px;"><span style="font-weight:700;color:#2d4a38;">日課 ${nm}</span> <span class="muted">下校便なし（登校のみ）</span></div>`;
+      const rows = deps.map(D=>{
+        const dm=_toMin(D);
+        const cells = timed.map(x=>{
+          const auto=_toHm(dm+x.off);
+          const has = x.ov && x.ov[D]!=null && x.ov[D]!=='';
+          const val = has ? _hm(x.ov[D]) : auto;
+          const st = has ? 'background:#fff3e0;border-color:#e0a23a;' : '';
+          return `<span style="display:inline-flex;align-items:center;gap:3px;margin:2px 5px;"><span style="font-size:11px;color:#5a7a65;">${escHtml(x.name||'(停)')}</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(val)}" onchange="updOverride(${x.i},'${escAttr(D)}',tnorm(this),'${auto}')" title="${has?('手修正あり（自動='+auto+'）'):'自動。修正すると例外として保存されます'}" style="width:64px;text-align:center;${st}"></span>`;
+        }).join('');
+        return `<div style="margin:2px 0 4px;"><span style="font-weight:600;">学校発 ${escHtml(D)}</span> → ${cells}</div>`;
+      }).join('');
+      return `<div style="margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid #e2ede6;"><div style="font-weight:700;color:#2d4a38;">日課 ${nm}</div>${rows}</div>`;
+    }).join('');
+  }
+  return toukouBlock + gekouBlock;
 }
 function updOverride(i,D,val,auto){
   const s=_stops()[i]; s.gekou_overrides = s.gekou_overrides||{};
@@ -1079,7 +1120,7 @@ function _updPreview(){ const el=document.getElementById('gekouPreview'); if(el)
 function updToukou(field, val){ const c=_c(); if(c) c[field]=val; }
 function toggleActive(){ const c=_c(); if(c){ c.active=!c.active; renderEditor(); renderCourseList(); } }
 function updFormName(fi,val){ FORMS[String(selCourseId)][fi].form_name = val; }
-function updFormTime(fi,ti,val){ FORMS[String(selCourseId)][fi].gekou_departures[ti]=val; selRefD=(_gekouBins()[0]||selRefD); renderEditor(); }
+function updFormTime(fi,ti,val){ FORMS[String(selCourseId)][fi].gekou_departures[ti]=val; renderEditor(); }
 function addFormTime(fi){ FORMS[String(selCourseId)][fi].gekou_departures.push(''); renderEditor(); }
 function delFormTime(fi,ti){ FORMS[String(selCourseId)][fi].gekou_departures.splice(ti,1); renderEditor(); }
 function addForm(){ (FORMS[String(selCourseId)]=FORMS[String(selCourseId)]||[]).push({form_name:'',gekou_departures:['']}); renderEditor(); }
@@ -1098,7 +1139,6 @@ function updToukouTime(i,val){ _stops()[i].toukou_time=val; }
 function addStop(){ _stops().push({name:'',address:'',toukou_time:'',gekou_offset:null,gekou_only:false}); renderEditor(); }
 function delStop(i){ _stops().splice(i,1); renderEditor(); }
 function moveStop(i,dir){ const a=_stops(); const j=i+dir; if(j<0||j>=a.length) return; const t=a[i]; a[i]=a[j]; a[j]=t; renderEditor(); }
-function changeRefD(val){ selRefD=val; renderEditor(); }
 function updGekouTime(i,val){ const s=_stops()[i]; const t=_toMin(val), r=_toMin(selRefD); s.gekou_offset=(t!=null&&r!=null)?(t-r):null; _updPreview(); }
 function clearGekou(i){ _stops()[i].gekou_offset=null; renderEditor(); }
 function addGekouOnly(){ _stops().push({name:'',address:'',toukou_time:'',gekou_offset:null,gekou_only:true}); renderEditor(); }
