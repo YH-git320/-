@@ -60,8 +60,6 @@ button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
 
   <div class="panel">
     <div class="row">
-      <label class="fld" for="yearSelect" style="margin:0;">年度</label>
-      <select id="yearSelect" style="width:auto;"></select>
       <input id="courseSearch" type="text" placeholder="学校名・コース名でしぼり込み" style="flex:1;min-width:160px;">
       <label style="font-size:13px;display:flex;align-items:center;gap:5px;white-space:nowrap;"><input type="checkbox" id="activeOnly" checked style="width:auto;"> 有効のみ</label>
     </div>
@@ -898,6 +896,9 @@ let COURSES = [];
 let FORMS = {};   // course_id(String) -> [{form_name, gekou_departures:[]}]（選択年度）
 let STOPS = {};   // course_id(String) -> [{name,address,toukou_time,gekou_offset,gekou_only}]（配列順=登校順路）
 let selYear = 0;
+let VERS = {};        // course_id(String) -> [{id,valid_from,note}] 降順（先頭=最新）
+let selVerId = null;  // いま編集/閲覧している版のid
+let _nvOpen = false;  // 「新版を作成」パネルの開閉
 let selCourseId = null;
 let selRefD = '14:00';  // 下校の基準便（学校出発時刻）
 let SCEN = {};    // course_id(String) -> [{dbId?,segment,label,pts:[{phase,kind,name,address,coord,bus_time}],ps:{phase:{shussha,shukko}}}] 送迎シナリオ
@@ -932,15 +933,35 @@ async function loadCourses(){
   const res = await fetch(`${REST_URL}/courses?select=id,prefecture,school_name,course_name,active,toukou_shussha,toukou_shukko,after_toukou,after_toukou_place,after_toukou_addr,after_toukou_coord,gekou_shukko_lead,gekou_haisha_lead&order=prefecture,school_name,course_name`, { headers: getH() });
   COURSES = res.ok ? await res.json() : [];
 }
-async function loadFormsForYear(year){
+function _vers(cid){ return VERS[String(cid)]||[]; }
+function latestVerId(cid){ const a=_vers(cid); return a.length?a[0].id:null; }
+function curVer(){ const a=_vers(selCourseId); return a.find(v=>v.id===selVerId)||a[0]||null; }
+function isLatestVer(){ return selVerId!=null && selVerId===latestVerId(selCourseId); }
+function _mapForm(r){ return { form_name:r.form_name, gekou_departures:Array.isArray(r.gekou_departures)?r.gekou_departures.slice():[], after_toukou:r.after_toukou||'', after_toukou_place:r.after_toukou_place||'', after_toukou_addr:r.after_toukou_addr||'', after_toukou_coord:r.after_toukou_coord||'', dep_overrides:(r.dep_overrides&&typeof r.dep_overrides==='object')?r.dep_overrides:{} }; }
+function _mapStop(r){ return { name:r.name||'', address:r.address||'', toukou_time:r.toukou_time||'', gekou_offset:(r.gekou_offset==null?null:r.gekou_offset), gekou_only:!!r.gekou_only, coord:r.coord||'', gekou_overrides:(r.gekou_overrides&&typeof r.gekou_overrides==='object')?r.gekou_overrides:{} }; }
+async function loadVersions(){
+  VERS = {};
+  const res = await fetch(`${REST_URL}/course_timetable_versions?select=id,course_id,valid_from,note&order=valid_from.desc,id.desc`, { headers: getH() });
+  if (res.ok){ (await res.json()).forEach(r=>{ const k=String(r.course_id); (VERS[k]=VERS[k]||[]).push({ id:r.id, valid_from:r.valid_from, note:r.note||'' }); }); }
+}
+// 各コースの「最新版」の内容をバッファへ（コース一覧の設定済表示＋既定編集対象）
+async function loadFormsLatest(){
   FORMS = {};
-  const res = await fetch(`${REST_URL}/course_schedule_forms?school_year=eq.${year}&select=course_id,form_name,gekou_departures,after_toukou,after_toukou_place,after_toukou_addr,after_toukou_coord,dep_overrides&order=form_name`, { headers: getH() });
-  if (res.ok){ (await res.json()).forEach(r=>{ const k=String(r.course_id); (FORMS[k]=FORMS[k]||[]).push({ form_name:r.form_name, gekou_departures:Array.isArray(r.gekou_departures)?r.gekou_departures.slice():[], after_toukou:r.after_toukou||'', after_toukou_place:r.after_toukou_place||'', after_toukou_addr:r.after_toukou_addr||'', after_toukou_coord:r.after_toukou_coord||'', dep_overrides:(r.dep_overrides&&typeof r.dep_overrides==='object')?r.dep_overrides:{} }); }); }
+  const res = await fetch(`${REST_URL}/course_schedule_forms?select=course_id,version_id,form_name,gekou_departures,after_toukou,after_toukou_place,after_toukou_addr,after_toukou_coord,dep_overrides&order=form_name`, { headers: getH() });
+  if (res.ok){ (await res.json()).forEach(r=>{ if(r.version_id!==latestVerId(r.course_id)) return; const k=String(r.course_id); (FORMS[k]=FORMS[k]||[]).push(_mapForm(r)); }); }
 }
 async function loadStops(){
   STOPS = {};
-  const res = await fetch(`${REST_URL}/course_locations?active=eq.true&select=course_id,name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_overrides&order=seq.nullslast,name`, { headers: getH() });
-  if (res.ok){ (await res.json()).forEach(r=>{ const k=String(r.course_id); (STOPS[k]=STOPS[k]||[]).push({ name:r.name||'', address:r.address||'', toukou_time:r.toukou_time||'', gekou_offset:(r.gekou_offset==null?null:r.gekou_offset), gekou_only:!!r.gekou_only, coord:r.coord||'', gekou_overrides:(r.gekou_overrides&&typeof r.gekou_overrides==='object')?r.gekou_overrides:{} }); }); }
+  const res = await fetch(`${REST_URL}/course_locations?select=course_id,version_id,name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_overrides&order=seq.nullslast,name`, { headers: getH() });
+  if (res.ok){ (await res.json()).forEach(r=>{ if(r.version_id!==latestVerId(r.course_id)) return; const k=String(r.course_id); (STOPS[k]=STOPS[k]||[]).push(_mapStop(r)); }); }
+}
+// 指定コース・指定版の内容をバッファへ（版切替・新版作成後）
+async function loadVersionInto(cid, verId){
+  const k=String(cid);
+  const rf = await fetch(`${REST_URL}/course_schedule_forms?version_id=eq.${verId}&select=form_name,gekou_departures,after_toukou,after_toukou_place,after_toukou_addr,after_toukou_coord,dep_overrides&order=form_name`, { headers: getH() });
+  FORMS[k] = rf.ok ? (await rf.json()).map(_mapForm) : [];
+  const rs = await fetch(`${REST_URL}/course_locations?version_id=eq.${verId}&select=name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_overrides&order=seq.nullslast,name`, { headers: getH() });
+  STOPS[k] = rs.ok ? (await rs.json()).map(_mapStop) : [];
 }
 async function loadScenarios(){
   SCEN = {}; const byId = {};
@@ -986,7 +1007,57 @@ function _refDeparture(){
   for(const f of forms){ for(const t of (f.gekou_departures||[])){ if(t) return t; } }
   return '';
 }
-function selectCourse(id){ selCourseId = id; selRefD = _refDeparture() || '14:00'; renderCourseList(); renderEditor(); }
+async function selectCourse(id){ selCourseId = id; selVerId = latestVerId(id); _nvOpen=false; if(selVerId) await loadVersionInto(id, selVerId); selRefD = _refDeparture() || '14:00'; renderCourseList(); renderEditor(); }
+async function changeVersion(verId){ selVerId = Number(verId); await loadVersionInto(selCourseId, selVerId); selRefD = _refDeparture() || '14:00'; renderEditor(); }
+function _nextApril(){ const d=new Date(); const y=d.getFullYear(); const ny=(d.getMonth()+1>=4)?y+1:y; return ny+'-04-01'; }
+// 版セレクタ＋「新版をコピー作成」パネル
+function renderVersionBar(c){
+  const vers=_vers(c.id), latest=latestVerId(c.id);
+  const isLatest = selVerId!=null && selVerId===latest;
+  const opts = vers.map(v=>`<option value="${v.id}"${v.id===selVerId?' selected':''}>${escHtml(String(v.valid_from))}${v.id===latest?'（最新）':''}${v.note?(' '+escHtml(v.note)):''}</option>`).join('') || '<option>（版なし）</option>';
+  const warn = isLatest ? '' : `<span style="font-size:11px;color:#b0451f;font-weight:700;">過去版＝閲覧のみ（保存不可）</span>`;
+  const src = COURSES.map(x=>{ const lv=latestVerId(x.id); if(!lv) return ''; return `<option value="${x.id}:${lv}"${String(x.id)===String(c.id)?' selected':''}>${escHtml(courseLabel(x))}${String(x.id)===String(c.id)?'（このコース・最新）':''}</option>`; }).filter(Boolean).join('');
+  const panel = _nvOpen ? `<div class="seg" style="margin:6px 0;">
+      <div class="line" style="flex-wrap:wrap;gap:6px;"><label class="fld" style="margin:0;">新版の適用開始日</label><input type="date" id="nvDate" value="${_nextApril()}" style="width:auto;"></div>
+      <div class="line" style="flex-wrap:wrap;gap:6px;margin-top:4px;"><span class="muted" style="font-size:12px;">コピー元</span><select id="nvSource" style="font-size:12px;max-width:300px;">${src}</select></div>
+      <div class="line" style="flex-wrap:wrap;gap:6px;margin-top:4px;"><input type="text" id="nvNote" placeholder="メモ（任意：例 令和8年度／9月転居対応）" style="flex:1;min-width:160px;"></div>
+      <div class="line" style="gap:6px;margin-top:6px;"><button class="primary" onclick="createVersion()">この内容で新版を作成</button><button class="mini" onclick="_nvOpen=false;renderEditor()">やめる</button></div>
+      <div class="muted" style="font-size:11px;margin-top:4px;">選んだ版の路線・日課を複製し、新しい適用開始日で作ります。旧版はそのまま残ります（過去に干渉しません）。</div>
+    </div>` : '';
+  return `<div class="line" style="margin:4px 0 12px;flex-wrap:wrap;gap:8px;align-items:center;">
+      <span class="muted" style="font-size:12px;">版（適用開始日）</span><select onchange="changeVersion(this.value)" style="font-size:12px;">${opts}</select>
+      ${warn}
+      <button class="mini" onclick="_nvOpen=!_nvOpen;renderEditor()">📋 前年度／別コースからコピーして新版を作成</button>
+    </div>${panel}`;
+}
+async function createVersion(){
+  const c=_c(); if(!c) return;
+  const vf=(document.getElementById('nvDate')||{}).value||'';
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(vf)){ _saveMsg('適用開始日を選んでください', false); return; }
+  if(_vers(c.id).some(v=>String(v.valid_from)===vf)){ _saveMsg('その適用開始日の版が既にあります', false); return; }
+  const sv=((document.getElementById('nvSource')||{}).value||'').split(':').map(Number);
+  const srcVid=sv[1];
+  if(!srcVid){ _saveMsg('コピー元を選んでください', false); return; }
+  const note=((document.getElementById('nvNote')||{}).value||'').trim();
+  const vy=Number(vf.slice(0,4));
+  await ensureFreshToken();
+  try{
+    const rv=await fetch(`${REST_URL}/course_timetable_versions`, { method:'POST', headers:{...getH(),'Prefer':'return=representation'}, body:JSON.stringify({ course_id:c.id, valid_from:vf, note:note||null }) });
+    if(!rv.ok){ const t=await rv.text(); _saveMsg('版作成に失敗：'+t.slice(0,120), false); return; }
+    const newId=(await rv.json())[0].id;
+    const [sf,ss]=await Promise.all([
+      fetch(`${REST_URL}/course_schedule_forms?version_id=eq.${srcVid}&select=form_name,gekou_departures,after_toukou,after_toukou_place,after_toukou_addr,after_toukou_coord,dep_overrides`, { headers:getH() }),
+      fetch(`${REST_URL}/course_locations?version_id=eq.${srcVid}&select=name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_overrides`, { headers:getH() })
+    ]);
+    const forms=(sf.ok?await sf.json():[]).map(r=>({ course_id:c.id, version_id:newId, school_year:vy, form_name:r.form_name, gekou_departures:r.gekou_departures, after_toukou:r.after_toukou, after_toukou_place:r.after_toukou_place, after_toukou_addr:r.after_toukou_addr, after_toukou_coord:r.after_toukou_coord, dep_overrides:r.dep_overrides||{} }));
+    const stops=(ss.ok?await ss.json():[]).map(r=>({ course_id:c.id, version_id:newId, name:r.name, address:r.address, seq:r.seq, toukou_time:r.toukou_time, gekou_offset:r.gekou_offset, gekou_only:r.gekou_only, coord:r.coord, gekou_overrides:r.gekou_overrides||{}, in_gekou:(r.gekou_offset!=null) }));
+    if(forms.length){ const r=await fetch(`${REST_URL}/course_schedule_forms`, { method:'POST', headers:getH(), body:JSON.stringify(forms) }); if(!r.ok){ const t=await r.text(); _saveMsg('日課の複製に失敗：'+t.slice(0,120), false); return; } }
+    if(stops.length){ const r=await fetch(`${REST_URL}/course_locations`, { method:'POST', headers:getH(), body:JSON.stringify(stops) }); if(!r.ok){ const t=await r.text(); _saveMsg('停留所の複製に失敗：'+t.slice(0,120), false); return; } }
+    await loadVersions(); selVerId=newId; await loadVersionInto(c.id, newId);
+    _nvOpen=false; selRefD=_refDeparture()||'14:00'; renderEditor();
+    _saveMsg('✅ 新しい版を作成しました。内容を確認して保存してください。', true);
+  }catch(e){ _saveMsg('版作成エラー：'+e.message, false); }
+}
 
 function renderEditor(){
   const area = document.getElementById('editorArea');
@@ -1068,7 +1139,7 @@ function renderEditor(){
       <div class="courseTitle">${escHtml(courseLabel(c))}</div>
       <button class="${c.active?'':'primary'}" onclick="toggleActive()">${c.active?'✅ 有効（クリックで廃止）':'🚫 廃止中（クリックで有効）'}</button>
     </div>
-    <div class="line" style="margin:4px 0 16px;"><button class="mini" onclick="copyPrevYear()">📋 前年度からコピー</button><span class="muted" style="font-size:11px;">前年度の内容をこの画面に複製して手直しできます</span></div>
+    ${renderVersionBar(c)}
 
     <label class="fld">① 【登校便】出社・出庫の時刻（コース共通）</label>
     <div class="line" style="margin-bottom:16px;">
@@ -1084,7 +1155,7 @@ function renderEditor(){
       <span class="muted" style="font-size:11px;">（日課ごとに上書きできます）</span></div>
     ${c.after_toukou==='他所移動'?`<div class="line" style="flex-wrap:wrap;margin:2px 0 0;"><input type="text" value="${escAttr(c.after_toukou_place||'')}" placeholder="移動先の名称" oninput="updToukou('after_toukou_place',this.value)" style="flex:1;min-width:120px;"><input type="text" value="${escAttr(c.after_toukou_addr||'')}" placeholder="住所" oninput="updToukou('after_toukou_addr',this.value)" style="flex:1;min-width:120px;"><input type="text" value="${escAttr(c.after_toukou_coord||'')}" placeholder="座標(任意)" oninput="updToukou('after_toukou_coord',this.value)" style="flex:0 0 120px;"><button class="mini" onclick="mapAfterC()" title="グーグルマップで開く">🗺</button></div>`:''}
 
-    <label class="fld" style="margin-top:18px;">③ 【下校便（時程）】${selYear}年度 — 日課ごとの下校便の学校出発時刻</label>
+    <label class="fld" style="margin-top:18px;">③ 【下校便（時程）】${(function(){const v=curVer();return v?('適用 '+escHtml(String(v.valid_from))+'〜'):'';})()} — 日課ごとの下校便の学校出発時刻</label>
     <div class="muted" style="font-size:11px;margin:-4px 0 6px;">最初の日課が基準になります。次の日課の出発時刻を入れると、下の「自動生成」に各停の時刻が自動で入ります（あとで手修正も可）。</div>
     <div class="line" style="margin:0 0 4px;flex-wrap:wrap;font-size:12px;align-items:center;gap:4px;">
       <span class="muted" style="flex:0 0 auto;">出庫＝下校便出発の</span><input type="number" min="0" id="shLeadH" value="${c.gekou_shukko_lead!=null?Math.floor(c.gekou_shukko_lead/60):''}" onchange="updShukkoLead()" style="flex:0 0 auto;width:64px;text-align:center;"><span class="muted" style="flex:0 0 auto;">時間</span><input type="number" min="0" max="59" id="shLeadM" value="${c.gekou_shukko_lead!=null?(c.gekou_shukko_lead%60):''}" onchange="updShukkoLead()" style="flex:0 0 auto;width:64px;text-align:center;"><span class="muted" style="flex:0 0 auto;">分前</span>
@@ -1336,7 +1407,10 @@ function _saveMsg(msg, ok){ const el=document.getElementById('editSaveMsg'); if(
 
 async function saveCourse(){
   const c=_c(); if(!c) return;
+  if(!selVerId){ _saveMsg('版がありません。まず版を作成してください。', false); return; }
+  if(!isLatestVer()){ _saveMsg('過去版は保存できません。最新版を選ぶか、「新版を作成」してから編集してください。', false); return; }
   const key=String(c.id);
+  const vy = Number(String((curVer()||{}).valid_from||'').slice(0,4)) || nendo();
   await ensureFreshToken();
   try{
     // 検証：時刻はあるのに日課名が空の行があれば中止（取りこぼし防止）
@@ -1347,14 +1421,14 @@ async function saveCourse(){
     const r1 = await fetch(`${REST_URL}/courses?id=eq.${c.id}`, { method:'PATCH', headers:getH(), body:JSON.stringify({ toukou_shussha:c.toukou_shussha||null, toukou_shukko:c.toukou_shukko||null, active:c.active, after_toukou:c.after_toukou||'帰庫', after_toukou_place:(c.after_toukou==='他所移動'?(c.after_toukou_place||null):null), after_toukou_addr:(c.after_toukou==='他所移動'?(c.after_toukou_addr||null):null), after_toukou_coord:(c.after_toukou==='他所移動'?(c.after_toukou_coord||null):null), gekou_shukko_lead:(c.gekou_shukko_lead==null?null:c.gekou_shukko_lead), gekou_haisha_lead:(c.gekou_haisha_lead==null?null:c.gekou_haisha_lead) }) });
     if(!r1.ok){ const t=await r1.text(); _saveMsg('コース情報の保存に失敗：'+t.slice(0,100), false); return; }
     // 2) 下校フォーム（この年度・このコースを置き換え）
-    await fetch(`${REST_URL}/course_schedule_forms?course_id=eq.${c.id}&school_year=eq.${selYear}`, { method:'DELETE', headers:getH() });
-    const forms = (FORMS[key]||[]).filter(f=>(f.form_name||'').trim()).map(f=>({ course_id:c.id, school_year:selYear, form_name:f.form_name.trim(), gekou_departures:(f.gekou_departures||[]).filter(t=>t), after_toukou:(f.after_toukou||'')||null, after_toukou_place:(f.after_toukou==='他所移動'?(f.after_toukou_place||null):null), after_toukou_addr:(f.after_toukou==='他所移動'?(f.after_toukou_addr||null):null), after_toukou_coord:(f.after_toukou==='他所移動'?(f.after_toukou_coord||null):null), dep_overrides:(f.dep_overrides&&Object.keys(f.dep_overrides).length)?f.dep_overrides:{} }));
+    await fetch(`${REST_URL}/course_schedule_forms?version_id=eq.${selVerId}`, { method:'DELETE', headers:getH() });
+    const forms = (FORMS[key]||[]).filter(f=>(f.form_name||'').trim()).map(f=>({ course_id:c.id, version_id:selVerId, school_year:vy, form_name:f.form_name.trim(), gekou_departures:(f.gekou_departures||[]).filter(t=>t), after_toukou:(f.after_toukou||'')||null, after_toukou_place:(f.after_toukou==='他所移動'?(f.after_toukou_place||null):null), after_toukou_addr:(f.after_toukou==='他所移動'?(f.after_toukou_addr||null):null), after_toukou_coord:(f.after_toukou==='他所移動'?(f.after_toukou_coord||null):null), dep_overrides:(f.dep_overrides&&Object.keys(f.dep_overrides).length)?f.dep_overrides:{} }));
     if(forms.length){ const r2=await fetch(`${REST_URL}/course_schedule_forms`, { method:'POST', headers:getH(), body:JSON.stringify(forms) }); if(!r2.ok){ const t=await r2.text(); _saveMsg('時程の保存に失敗：'+t.slice(0,100), false); return; } }
     // 3) バス停・ルート（このコースを置き換え）
-    await fetch(`${REST_URL}/course_locations?course_id=eq.${c.id}`, { method:'DELETE', headers:getH() });
+    await fetch(`${REST_URL}/course_locations?version_id=eq.${selVerId}`, { method:'DELETE', headers:getH() });
     let seq=0;
     const rows = (STOPS[key]||[]).filter(s=>(s.name||'').trim()||(s.address||'').trim()).map(s=>{
-      const r = { course_id:c.id, name:(s.name||'').trim()||(s.address||'').trim(), address:(s.address||'').trim(),
+      const r = { course_id:c.id, version_id:selVerId, name:(s.name||'').trim()||(s.address||'').trim(), address:(s.address||'').trim(),
                   toukou_time:s.toukou_time||null, gekou_offset:(s.gekou_offset==null?null:s.gekou_offset), gekou_only:!!s.gekou_only, coord:s.coord||null, gekou_overrides:(s.gekou_overrides&&Object.keys(s.gekou_overrides).length)?s.gekou_overrides:{},
                   in_gekou:(s.gekou_offset!=null) };
       if(!s.gekou_only){ seq++; r.seq=seq; } else { r.seq=null; }
@@ -1389,8 +1463,9 @@ async function saveCourse(){
       if(allPs.length){ const rq=await fetch(`${REST_URL}/course_phase_settings`, { method:'POST', headers:getH(), body:JSON.stringify(allPs) }); if(!rq.ok){ const t=await rq.text(); _saveMsg('局面の出社出庫の保存に失敗：'+t.slice(0,100), false); return; } }
     }
     _saveMsg('✅ 保存しました', true);
-    await loadFormsForYear(selYear); await loadStops(); await loadScenarios();
-    renderCourseList();
+    await loadVersions(); await loadStops(); await loadFormsLatest(); await loadScenarios();
+    if(selVerId) await loadVersionInto(c.id, selVerId);
+    renderCourseList(); renderEditor();
   }catch(e){ _saveMsg('保存エラー：'+e.message, false); }
 }
 
@@ -1405,12 +1480,10 @@ async function onYearChange(){ selYear = Number(document.getElementById('yearSel
 document.addEventListener('DOMContentLoaded', async () => {
   const ok = await initAuth(['super_admin','admin','operator','staff']);
   if (!ok) return;
-  fillYearOptions();
-  document.getElementById('yearSelect').addEventListener('change', onYearChange);
   document.getElementById('courseSearch').addEventListener('input', renderCourseList);
   document.getElementById('activeOnly').addEventListener('change', renderCourseList);
   try{
-    await loadCourses(); await loadFormsForYear(selYear); await loadStops(); await loadScenarios();
+    await loadCourses(); await loadVersions(); await loadStops(); await loadFormsLatest(); await loadScenarios();
     renderCourseList(); renderEditor();
     status('準備ができました。コースを選んでください。', true);
   }catch(e){ status('データ読み込みエラー：'+e.message, false); }
