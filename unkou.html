@@ -1143,18 +1143,23 @@ function renderGekouPreview(){
   if(!anyDep){ gekouBlock = '<span class="muted">③で日課に下校便の出発時刻を入れると、ここに時刻表が出ます。</span>'; }
   else if(!timed.length){ gekouBlock = '<span class="muted">④で下校の各停の時刻を入れると、日課ごとの時刻表がここに出ます。各時刻は個別に手修正できます。</span>'; }
   else {
-    gekouBlock = forms.map(f=>{
+    gekouBlock = forms.map((f,fi)=>{
       const deps=(f.gekou_departures||[]).filter(t=>t);
       const nm = escHtml(f.form_name||'(名称未設定)');
       if(!deps.length) return `<div style="margin-bottom:4px;"><span style="font-weight:700;color:#2d4a38;">日課 ${nm}</span> <span class="muted">下校便なし（登校のみ）</span></div>`;
+      const fov = (f.dep_overrides&&typeof f.dep_overrides==='object') ? f.dep_overrides : {};
       const rows = deps.map(D=>{
         const dm=_toMin(D);
+        const skip = (fov[D]&&Array.isArray(fov[D].skip)) ? fov[D].skip : [];
         const cells = timed.map(x=>{
+          if(skip.includes(x.name)){
+            return `<span style="display:inline-flex;align-items:center;gap:3px;margin:2px 5px;"><span style="font-size:11px;color:#b0451f;text-decoration:line-through;">${escHtml(x.name||'(停)')}</span><span style="font-size:11px;color:#b0451f;">通らない</span><button class="link" onclick="toggleSkip(${fi},'${escAttr(D)}','${escAttr(x.name)}',false)" title="この便でこの停を通す">戻す</button></span>`;
+          }
           const auto=_toHm(dm+x.off);
           const has = x.ov && x.ov[D]!=null && x.ov[D]!=='';
           const val = has ? _hm(x.ov[D]) : auto;
           const st = has ? 'background:#fff3e0;border-color:#e0a23a;' : '';
-          return `<span style="display:inline-flex;align-items:center;gap:3px;margin:2px 5px;"><span style="font-size:11px;color:#5a7a65;">${escHtml(x.name||'(停)')}</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(val)}" onchange="updOverride(${x.i},'${escAttr(D)}',tnorm(this),'${auto}')" title="${has?('手修正あり（自動='+auto+'）'):'自動。修正すると例外として保存されます'}" style="width:64px;text-align:center;${st}"></span>`;
+          return `<span style="display:inline-flex;align-items:center;gap:3px;margin:2px 5px;"><span style="font-size:11px;color:#5a7a65;">${escHtml(x.name||'(停)')}</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(val)}" onchange="updOverride(${x.i},'${escAttr(D)}',tnorm(this),'${auto}')" title="${has?('手修正あり（自動='+auto+'）'):'自動。修正すると例外として保存されます'}" style="width:64px;text-align:center;${st}"><button class="link" onclick="toggleSkip(${fi},'${escAttr(D)}','${escAttr(x.name)}',true)" title="この便はこの停を通らない">×</button></span>`;
         }).join('');
         return `<div style="margin:2px 0 4px;"><span style="font-weight:600;">学校発 ${escHtml(D)}</span> → ${cells}</div>`;
       }).join('');
@@ -1167,6 +1172,17 @@ function updOverride(i,D,val,auto){
   const s=_stops()[i]; s.gekou_overrides = s.gekou_overrides||{};
   const v=_hm(val), a=_hm(auto);
   if(v && v!==a){ s.gekou_overrides[D]=v; } else { delete s.gekou_overrides[D]; }
+  _updPreview();
+}
+// この日課・この下校便で、指定の停を「通らない」に切替（dep_overrides[出発時刻].skip=[停名...]）
+function toggleSkip(fi,D,name,on){
+  const f=FORMS[String(selCourseId)][fi]; if(!f) return;
+  f.dep_overrides = f.dep_overrides||{};
+  const cur = f.dep_overrides[D]||{};
+  let sk = Array.isArray(cur.skip)?cur.skip.slice():[];
+  if(on){ if(!sk.includes(name)) sk.push(name); } else { sk=sk.filter(n=>n!==name); }
+  if(sk.length) cur.skip=sk; else delete cur.skip;
+  if(Object.keys(cur).length) f.dep_overrides[D]=cur; else delete f.dep_overrides[D];
   _updPreview();
 }
 function _updPreview(){ const el=document.getElementById('gekouPreview'); if(el) el.innerHTML=renderGekouPreview(); }
