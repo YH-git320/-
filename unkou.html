@@ -899,6 +899,7 @@ let selYear = 0;
 let VERS = {};        // course_id(String) -> [{id,valid_from,note}] 降順（先頭=最新）
 let selVerId = null;  // いま編集/閲覧している版のid
 let _nvOpen = false;  // 「新版を作成」パネルの開閉
+let selTab = 'main';  // 編集タブ：main=主要・登校便 / gekou=下校便 / tensou=添乗員送迎（コースを替えても保持）
 let selCourseId = null;
 let selRefD = '14:00';  // 下校の基準便（学校出発時刻）
 let SCEN = {};    // course_id(String) -> [{dbId?,segment,label,pts:[{phase,kind,name,address,coord,bus_time}],ps:{phase:{shussha,shukko}}}] 送迎シナリオ
@@ -1010,6 +1011,9 @@ function _refDeparture(){
 async function selectCourse(id){ selCourseId = id; selVerId = latestVerId(id); _nvOpen=false; if(selVerId) await loadVersionInto(id, selVerId); selRefD = _refDeparture() || '14:00'; renderCourseList(); renderEditor(); }
 async function changeVersion(verId){ selVerId = Number(verId); await loadVersionInto(selCourseId, selVerId); selRefD = _refDeparture() || '14:00'; renderEditor(); }
 function _nextApril(){ const d=new Date(); const y=d.getFullYear(); const ny=(d.getMonth()+1>=4)?y+1:y; return ny+'-04-01'; }
+// 編集タブ（主要・登校便／下校便／添乗員送迎）。再描画せず表示切替＝入力途中も保持・軽快
+function _tabBtn(k,label){ const on=(selTab===k); return `<button id="tabbtn-${k}" onclick="setTab('${k}')" style="border:1px solid ${on?'#4d7a5e':'#cfe0d5'};background:${on?'#4d7a5e':'#eef4ef'};color:${on?'#fff':'#2d4a38'};padding:7px 13px;border-radius:9px 9px 0 0;cursor:pointer;font-size:13px;font-weight:${on?'700':'500'};font-family:inherit;">${label}</button>`; }
+function setTab(t){ selTab=t; ['main','gekou','tensou'].forEach(k=>{ const el=document.getElementById('tab-'+k); if(el) el.style.display=(k===t?'':'none'); const b=document.getElementById('tabbtn-'+k); if(b){ const on=(k===t); b.style.background=on?'#4d7a5e':'#eef4ef'; b.style.color=on?'#fff':'#2d4a38'; b.style.borderColor=on?'#4d7a5e':'#cfe0d5'; b.style.fontWeight=on?'700':'500'; } }); }
 // 版セレクタ＋「新版をコピー作成」パネル
 function renderVersionBar(c){
   const vers=_vers(c.id), latest=latestVerId(c.id);
@@ -1135,12 +1139,16 @@ function renderEditor(){
   const refD = _refDeparture();
   const firstFormName = (forms.find(f=>(f.gekou_departures||[]).some(t=>t))||{}).form_name || '';
   area.innerHTML = `<div class="courseCard">
-    <div class="courseHead">
-      <div class="courseTitle">${escHtml(courseLabel(c))}</div>
-      <button class="${c.active?'':'primary'}" onclick="toggleActive()">${c.active?'✅ 有効（クリックで廃止）':'🚫 廃止中（クリックで有効）'}</button>
+    <div style="position:sticky;top:0;z-index:6;background:#fff;padding:8px 0 0;border-bottom:1px solid #e2ede6;margin-bottom:12px;">
+      <div class="courseHead" style="margin-bottom:8px;">
+        <div class="courseTitle">${escHtml(courseLabel(c))}</div>
+        <button class="${c.active?'':'primary'}" onclick="toggleActive()">${c.active?'✅ 有効（クリックで廃止）':'🚫 廃止中（クリックで有効）'}</button>
+      </div>
+      ${renderVersionBar(c)}
+      <div class="line" style="gap:4px;margin:2px 0 -1px;flex-wrap:wrap;">${_tabBtn('main','① 主要情報・登校便')}${_tabBtn('gekou','② 下校便')}${_tabBtn('tensou','③ 添乗員送迎')}</div>
     </div>
-    ${renderVersionBar(c)}
 
+    <div id="tab-main" style="display:${selTab==='main'?'':'none'};">
     <label class="fld">① 【登校便】出社・出庫の時刻（コース共通）</label>
     <div class="line" style="margin-bottom:16px;">
       <span class="muted" style="min-width:44px;">出社</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(c.toukou_shussha))}" onchange="updToukou('toukou_shussha',tnorm(this))" style="width:64px;text-align:center;">
@@ -1154,8 +1162,10 @@ function renderEditor(){
       <select onchange="updAfterToukou(this.value)" style="font-size:12px;"><option value="帰庫"${(c.after_toukou||'帰庫')==='帰庫'?' selected':''}>帰庫</option><option value="他所移動"${c.after_toukou==='他所移動'?' selected':''}>他所移動</option><option value="学校留置き"${c.after_toukou==='学校留置き'?' selected':''}>学校留置き</option></select>
       <span class="muted" style="font-size:11px;">（日課ごとに上書きできます）</span></div>
     ${c.after_toukou==='他所移動'?`<div class="line" style="flex-wrap:wrap;margin:2px 0 0;"><input type="text" value="${escAttr(c.after_toukou_place||'')}" placeholder="移動先の名称" oninput="updToukou('after_toukou_place',this.value)" style="flex:1;min-width:120px;"><input type="text" value="${escAttr(c.after_toukou_addr||'')}" placeholder="住所" oninput="updToukou('after_toukou_addr',this.value)" style="flex:1;min-width:120px;"><input type="text" value="${escAttr(c.after_toukou_coord||'')}" placeholder="座標(任意)" oninput="updToukou('after_toukou_coord',this.value)" style="flex:0 0 120px;"><button class="mini" onclick="mapAfterC()" title="グーグルマップで開く">🗺</button></div>`:''}
+    </div>
 
-    <label class="fld" style="margin-top:18px;">③ 【下校便（時程）】${(function(){const v=curVer();return v?('適用 '+escHtml(String(v.valid_from))+'〜'):'';})()} — 日課ごとの下校便の学校出発時刻</label>
+    <div id="tab-gekou" style="display:${selTab==='gekou'?'':'none'};">
+    <label class="fld" style="margin-top:2px;">③ 【下校便（時程）】${(function(){const v=curVer();return v?('適用 '+escHtml(String(v.valid_from))+'〜'):'';})()} — 日課ごとの下校便の学校出発時刻</label>
     <div class="muted" style="font-size:11px;margin:-4px 0 6px;">最初の日課が基準になります。次の日課の出発時刻を入れると、下の「自動生成」に各停の時刻が自動で入ります（あとで手修正も可）。</div>
     <div class="line" style="margin:0 0 4px;flex-wrap:wrap;font-size:12px;align-items:center;gap:4px;">
       <span class="muted" style="flex:0 0 auto;">出庫＝下校便出発の</span><input type="number" min="0" id="shLeadH" value="${c.gekou_shukko_lead!=null?Math.floor(c.gekou_shukko_lead/60):''}" onchange="updShukkoLead()" style="flex:0 0 auto;width:64px;text-align:center;"><span class="muted" style="flex:0 0 auto;">時間</span><input type="number" min="0" max="59" id="shLeadM" value="${c.gekou_shukko_lead!=null?(c.gekou_shukko_lead%60):''}" onchange="updShukkoLead()" style="flex:0 0 auto;width:64px;text-align:center;"><span class="muted" style="flex:0 0 auto;">分前</span>
@@ -1177,16 +1187,14 @@ function renderEditor(){
       <div class="fld" style="margin:0 0 6px;">自動生成（確認用）— 登校便／日課ごとの下校便の時刻</div>
       <div id="gekouPreview" style="font-size:12px;line-height:1.7;">${renderGekouPreview()}</div>
     </div>
+    </div>
 
-    <details ${tpOpen?'open':''} ontoggle="tpOpen=this.open" style="margin-top:16px;">
-      <summary style="cursor:pointer;font-weight:700;color:#2d4a38;padding:8px 10px;background:#eef4ef;border-radius:8px;">⑤ 添乗員の送迎シナリオ（登校用・下校用）</summary>
-      <div style="padding:8px 4px;">
-        <div class="muted" style="font-size:11px;margin-bottom:6px;">添乗員の送迎パターンを、登校用・下校用それぞれ複数持てます（人・日付は入れません）。配置画面で登校便と下校便に別々のシナリオを選べる＝途中交代に対応。各場所には「バスがそこに到着する時刻」を入れ、添乗員の到着は配置側で「その○分前」として扱います。登校後／下校後は「前からコピー」で複製できます。</div>
-        ${renderScenarios()}
-      </div>
-    </details>
+    <div id="tab-tensou" style="display:${selTab==='tensou'?'':'none'};">
+      <div class="muted" style="font-size:11px;margin:2px 0 8px;">添乗員の送迎パターンを、登校用・下校用それぞれ複数持てます（人・日付は入れません）。配置画面で登校便と下校便に別々のシナリオを選べる＝途中交代に対応。各場所には「バスがそこに到着する時刻」を入れ、添乗員の到着は配置側で「その○分前」として扱います。登校後／下校後は「前からコピー」で複製できます。</div>
+      ${renderScenarios()}
+    </div>
 
-    <div style="margin-top:16px;"><button class="primary" style="width:100%;padding:12px;" onclick="saveCourse()">💾 このコースを保存</button>
+    <div style="position:sticky;bottom:0;background:#fff;padding:10px 0 2px;margin-top:12px;border-top:1px solid #e2ede6;"><button class="primary" style="width:100%;padding:12px;" onclick="saveCourse()">💾 このコースを保存</button>
       <div id="editSaveMsg" style="text-align:center;margin-top:8px;font-weight:600;min-height:20px;"></div></div>
   </div>`;
 }
