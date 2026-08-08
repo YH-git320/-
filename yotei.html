@@ -69,7 +69,7 @@ button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
       <button class="primary" onclick="calSave()">💾 変更を保存</button>
       <span id="calDirty" class="muted" style="font-size:12px;"></span>
     </div>
-    <div class="muted" style="font-size:11px;margin-top:6px;">凡例：<b>各コースの日課</b>はその月に有効な版のA/B/C…（括弧内は下校便の学校発時刻）。空欄＝未設定／運休＝バス無し。セルの📝で注意書き（中間利用・イレギュラー等）。土＝青／日祝＝赤。</div>
+    <div class="muted" style="font-size:11px;margin-top:6px;">凡例：<b>各コースの日課</b>はその月に有効な版のA/B/C…（括弧内は下校便の学校発時刻）。空欄＝未設定／運休＝バス無し。セルの📝で注意書き（中間利用・イレギュラー等）。<b>欠便は▼の「欠便区分」から選択</b>（日課は保持したまま赤で表示）。土＝青／日祝＝赤。</div>
   </div>
 
   <div id="calArea" style="overflow:auto;max-height:78vh;border:1px solid var(--line);border-radius:8px;background:#fff;"></div>
@@ -1497,8 +1497,8 @@ function calBuildForms(){
 async function calLoadMonth(){
   const ym=_ym(); const start=ym+'-01', end=ym+'-'+_p2(_dim(ym));
   CDATA={};
-  const r = await fetch(`${REST_URL}/course_schedule_calendar?cal_date=gte.${start}&cal_date=lte.${end}&select=course_id,cal_date,form_name,note`, {headers:getH()});
-  if(r.ok){ (await r.json()).forEach(x=>{ const k=String(x.course_id); (CDATA[k]=CDATA[k]||{})[x.cal_date]={form_name:x.form_name||'', note:x.note||''}; }); }
+  const r = await fetch(`${REST_URL}/course_schedule_calendar?cal_date=gte.${start}&cal_date=lte.${end}&select=course_id,cal_date,form_name,note,kekkin`, {headers:getH()});
+  if(r.ok){ (await r.json()).forEach(x=>{ const k=String(x.course_id); (CDATA[k]=CDATA[k]||{})[x.cal_date]={form_name:x.form_name||'', note:x.note||'', kekkin:x.kekkin||''}; }); }
 }
 function _shortLabel(cid, v){
   if(v===''||v==null) return '—';
@@ -1508,8 +1508,10 @@ function _shortLabel(cid, v){
 }
 function _cellBg(v){ if(v==='運休') return '#eceff0'; if(v==='') return '#fff'; return '#eaf5ee'; }
 function _note(cid,date){ return ((CDATA[String(cid)]||{})[date]||{}).note||''; }
-function _btnBg(cid,date,v){ return _note(cid,date) ? '#ffe1b0' : _cellBg(v); }
-function _btnBd(cid,date){ return _note(cid,date) ? '#e0821a' : '#cfe0d5'; }
+function _kekkin(cid,date){ return ((CDATA[String(cid)]||{})[date]||{}).kekkin||''; }
+function _btnBg(cid,date,v){ if(_kekkin(cid,date)) return '#ffd6d6'; return _note(cid,date) ? '#ffe1b0' : _cellBg(v); }
+function _btnBd(cid,date){ if(_kekkin(cid,date)) return '#d9534f'; return _note(cid,date) ? '#e0821a' : '#cfe0d5'; }
+function _btnHtml(cid,date,v){ const kk=_kekkin(cid,date); return escHtml(_shortLabel(cid,v))+' ▾'+(kk?`<div style="font-size:9px;line-height:1.1;color:#b30000;font-weight:700;">${escHtml(kk)}</div>`:''); }
 function calRender(){
   const ym=_ym(); if(!ym){ return; }
   const [y,m]=ym.split('-').map(Number); const dim=_dim(ym);
@@ -1528,7 +1530,7 @@ function calRender(){
       const date=`${ym}-${_p2(d)}`; const cell=cd[date]||{form_name:'',note:''}; const v=cell.form_name||''; const wd=new Date(y,m-1,d).getDay();
       const noteMark = cell.note ? `<span onclick="calNote(${cid},'${date}')" title="${escAttr(cell.note)}" style="cursor:pointer;color:#e0821a;font-size:11px;">📝</span>` : `<span onclick="calNote(${cid},'${date}')" title="注意書きを追加" style="cursor:pointer;color:#c3cec7;font-size:11px;">＋</span>`;
       tds+=`<td id="c_${cid}_${date}" style="border:1px solid #e2ede6;padding:1px 2px;min-width:68px;background:${wd===0||wd===6?'#fafbfa':'#fff'};text-align:center;vertical-align:top;">`
-         +`<div id="b_${cid}_${date}" onclick="calOpen(${cid},'${date}',this)" style="cursor:pointer;font-size:11px;padding:2px 3px;border:1px solid ${_btnBd(cid,date)};border-radius:4px;background:${_btnBg(cid,date,v)};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(_shortLabel(cid,v))} ▾</div>`
+         +`<div id="b_${cid}_${date}" onclick="calOpen(${cid},'${date}',this)" style="cursor:pointer;font-size:11px;padding:2px 3px;border:1px solid ${_btnBd(cid,date)};border-radius:4px;background:${_btnBg(cid,date,v)};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_btnHtml(cid,date,v)}</div>`
          +`<div style="line-height:1;">${noteMark}</div></td>`;
     }
     return `<tr>${tds}</tr>`;
@@ -1539,7 +1541,7 @@ function calRender(){
   _calDirtyView();
 }
 function _key(cid,date){ return cid+'|'+date; }
-function _mark(cid,date){ const cd=CDATA[String(cid)]||{}; const cell=cd[date]||{form_name:'',note:''}; CDIRTY[_key(cid,date)]={course_id:cid, cal_date:date, form_name:cell.form_name||'', note:cell.note||''}; _calDirtyView(); }
+function _mark(cid,date){ const cd=CDATA[String(cid)]||{}; const cell=cd[date]||{form_name:'',note:'',kekkin:''}; CDIRTY[_key(cid,date)]={course_id:cid, cal_date:date, form_name:cell.form_name||'', note:cell.note||'', kekkin:cell.kekkin||''}; _calDirtyView(); }
 function _calDirtyView(){ const n=Object.keys(CDIRTY).length; const el=document.getElementById('calDirty'); if(el) el.textContent = n? `未保存 ${n}件`:''; }
 function calOpen(cid,date,el){
   const pop=document.getElementById('calPop'); if(!pop) return;
@@ -1549,6 +1551,8 @@ function calOpen(cid,date,el){
   (CFORMS[String(cid)]||[]).forEach(f=>{ h+=`<div class="calopt" onclick="calPick('${escAttr(f.name)}')" style="padding:6px 12px;cursor:pointer;font-size:12px;white-space:nowrap;">${escHtml(_formLabel(f))}</div>`; });
   h+=`<div class="calopt" onclick="calPick('運休')" style="padding:6px 12px;cursor:pointer;font-size:12px;">運休</div>`;
   h+=`<div class="calopt" onclick="calPick('')" style="padding:6px 12px;cursor:pointer;font-size:12px;color:#888;">—（未設定）</div>`;
+  h+=`<div style="padding:3px 10px;font-size:10px;color:#b30000;border-top:1px solid #e2ede6;background:#fff6f6;">欠便区分（日課は保持）</div>`;
+  ['なし','欠便','登校欠便','下校欠便','一部欠便'].forEach(kk=>{ const val=(kk==='なし')?'':kk; h+=`<div class="calopt" onclick="calPickKekkin('${val}')" style="padding:5px 12px;cursor:pointer;font-size:12px;color:${val?'#b30000':'#888'};">${kk}</div>`; });
   pop.innerHTML=h; pop.style.display='block';
   const r=el.getBoundingClientRect(); const pw=pop.offsetWidth, ph=pop.offsetHeight;
   let left=r.left, top=r.bottom+2;
@@ -1559,7 +1563,13 @@ function calOpen(cid,date,el){
 function calPick(val){
   if(CUR_CID==null) return; const cid=CUR_CID, date=CUR_DATE;
   const k=String(cid); CDATA[k]=CDATA[k]||{}; CDATA[k][date]=CDATA[k][date]||{form_name:'',note:''}; CDATA[k][date].form_name=val; _mark(cid,date);
-  const b=document.getElementById(`b_${cid}_${date}`); if(b){ b.style.background=_btnBg(cid,date,val); b.style.borderColor=_btnBd(cid,date); b.innerHTML=escHtml(_shortLabel(cid,val))+' ▾'; }
+  const b=document.getElementById(`b_${cid}_${date}`); if(b){ b.style.background=_btnBg(cid,date,val); b.style.borderColor=_btnBd(cid,date); b.innerHTML=_btnHtml(cid,date,val); }
+  const pop=document.getElementById('calPop'); if(pop) pop.style.display='none'; CUR_CID=null;
+}
+function calPickKekkin(val){
+  if(CUR_CID==null) return; const cid=CUR_CID, date=CUR_DATE;
+  const k=String(cid); CDATA[k]=CDATA[k]||{}; CDATA[k][date]=CDATA[k][date]||{form_name:'',note:'',kekkin:''}; CDATA[k][date].kekkin=val; _mark(cid,date);
+  const v=(CDATA[k][date].form_name||''); const b=document.getElementById(`b_${cid}_${date}`); if(b){ b.style.background=_btnBg(cid,date,v); b.style.borderColor=_btnBd(cid,date); b.innerHTML=_btnHtml(cid,date,v); }
   const pop=document.getElementById('calPop'); if(pop) pop.style.display='none'; CUR_CID=null;
 }
 function calNote(cid,date){ const k=String(cid); CDATA[k]=CDATA[k]||{}; const cur=(CDATA[k][date]||{}).note||''; const v=prompt('注意書き（中間利用・イレギュラー等）', cur); if(v===null) return; CDATA[k][date]=CDATA[k][date]||{form_name:'',note:''}; CDATA[k][date].note=v.trim(); _mark(cid,date); calRender(); }
@@ -1567,8 +1577,8 @@ async function calSave(){
   const items=Object.values(CDIRTY); if(!items.length){ status('変更はありません', true); return; }
   await ensureFreshToken();
   try{
-    const dels=items.filter(x=>!x.form_name && !x.note);
-    const ups =items.filter(x=> x.form_name || x.note).map(x=>({course_id:x.course_id, cal_date:x.cal_date, form_name:x.form_name||null, note:x.note||null}));
+    const dels=items.filter(x=>!x.form_name && !x.note && !x.kekkin);
+    const ups =items.filter(x=> x.form_name || x.note || x.kekkin).map(x=>({course_id:x.course_id, cal_date:x.cal_date, form_name:x.form_name||null, note:x.note||null, kekkin:x.kekkin||null}));
     for(const d of dels){ const r=await fetch(`${REST_URL}/course_schedule_calendar?course_id=eq.${d.course_id}&cal_date=eq.${d.cal_date}`,{method:'DELETE',headers:getH()}); if(!r.ok){ throw new Error('削除失敗:'+(await r.text()).slice(0,80)); } }
     if(ups.length){ const r=await fetch(`${REST_URL}/course_schedule_calendar?on_conflict=course_id,cal_date`,{method:'POST',headers:{...getH(),'Prefer':'resolution=merge-duplicates'},body:JSON.stringify(ups)}); if(!r.ok){ throw new Error('保存失敗:'+(await r.text()).slice(0,120)); } }
     CDIRTY={}; await calLoadMonth(); calRender();
