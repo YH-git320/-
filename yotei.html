@@ -1471,7 +1471,7 @@ const WD=['日','月','火','水','木','金','土'];
 function _p2(n){ return ('0'+n).slice(-2); }
 function _ym(){ return document.getElementById('calMonth').value; }
 function _dim(ym){ const [y,m]=ym.split('-').map(Number); return new Date(y,m,0).getDate(); }
-function _formLabel(f){ return f.dep ? (f.name+' '+f.dep) : f.name; }
+function _formLabel(f){ return (f.deps&&f.deps.length) ? (f.name+' '+f.deps.join('・')) : f.name; }
 
 async function calLoadBase(){
   let r = await fetch(`${REST_URL}/courses?select=id,prefecture,school_name,course_name,active&order=prefecture,school_name,course_name`, {headers:getH()});
@@ -1481,7 +1481,7 @@ async function calLoadBase(){
   if(r.ok){ (await r.json()).forEach(v=>{ const k=String(v.course_id); (VERSALL[k]=VERSALL[k]||[]).push({id:v.id, valid_from:v.valid_from}); }); }
   FORMSBYVER={};
   r = await fetch(`${REST_URL}/course_schedule_forms?select=version_id,form_name,gekou_departures&order=form_name`, {headers:getH()});
-  if(r.ok){ (await r.json()).forEach(f=>{ const k=String(f.version_id); const dep=(Array.isArray(f.gekou_departures)&&f.gekou_departures.length)?_hm(f.gekou_departures[0]):''; (FORMSBYVER[k]=FORMSBYVER[k]||[]).push({name:f.form_name, dep}); }); }
+  if(r.ok){ (await r.json()).forEach(f=>{ const k=String(f.version_id); const deps=Array.isArray(f.gekou_departures)?f.gekou_departures.map(_hm).filter(Boolean):[]; (FORMSBYVER[k]=FORMSBYVER[k]||[]).push({name:f.form_name, deps}); }); }
 }
 function calBuildForms(){
   const end=_ym()+'-'+_p2(_dim(_ym()));
@@ -1511,7 +1511,7 @@ function calRender(){
   const list=CY.filter(c=>(!activeOnly||c.active)&&(!pref||c.prefecture===pref)&&(!q||((c.school_name||'')+(c.course_name||'')).indexOf(q)!==-1));
   const th=x=>`<th style="position:sticky;top:0;z-index:3;background:#eef4ef;border:1px solid #d7e2da;padding:3px 4px;font-size:11px;font-weight:700;color:#2d4a38;">${x}</th>`;
   let head=`<tr><th style="position:sticky;left:0;top:0;z-index:5;background:#eef4ef;border:1px solid #d7e2da;padding:4px 8px;font-size:12px;min-width:190px;text-align:left;">学校 ／ コース</th>`;
-  for(let d=1; d<=dim; d++){ const wd=new Date(y,m-1,d).getDay(); const col= wd===0?'#c0392b': wd===6?'#2673c0':'#2d4a38'; head+=`<th style="position:sticky;top:0;z-index:3;background:${wd===0||wd===6?'#f0f3f0':'#eef4ef'};border:1px solid #d7e2da;padding:2px 3px;font-size:11px;color:${col};min-width:62px;">${d}<br>${WD[wd]}</th>`; }
+  for(let d=1; d<=dim; d++){ const wd=new Date(y,m-1,d).getDay(); const col= wd===0?'#c0392b': wd===6?'#2673c0':'#2d4a38'; head+=`<th style="position:sticky;top:0;z-index:3;background:${wd===0||wd===6?'#f0f3f0':'#eef4ef'};border:1px solid #d7e2da;padding:2px 3px;font-size:11px;color:${col};min-width:88px;">${d}<br>${WD[wd]}</th>`; }
   head+='</tr>';
   const rows=list.map(c=>{
     const cid=c.id; const cd=CDATA[String(cid)]||{};
@@ -1519,8 +1519,8 @@ function calRender(){
     for(let d=1; d<=dim; d++){
       const date=`${ym}-${_p2(d)}`; const cell=cd[date]||{form_name:'',note:''}; const v=cell.form_name||''; const wd=new Date(y,m-1,d).getDay();
       const noteMark = cell.note ? `<span onclick="calNote(${cid},'${date}')" title="${escAttr(cell.note)}" style="cursor:pointer;color:#e0821a;font-size:11px;">📝</span>` : `<span onclick="calNote(${cid},'${date}')" title="注意書きを追加" style="cursor:pointer;color:#c3cec7;font-size:11px;">＋</span>`;
-      tds+=`<td id="c_${cid}_${date}" style="border:1px solid #e2ede6;padding:1px 2px;background:${wd===0||wd===6?'#fafbfa':'#fff'};text-align:center;vertical-align:top;">`
-         +`<select onchange="calSet(${cid},'${date}',this.value)" style="width:56px;font-size:11px;padding:1px;background:${_cellBg(v)};">${_optHtml(cid,v)}</select>`
+      tds+=`<td id="c_${cid}_${date}" style="border:1px solid #e2ede6;padding:1px 2px;min-width:88px;background:${wd===0||wd===6?'#fafbfa':'#fff'};text-align:center;vertical-align:top;">`
+         +`<select onchange="calSet(${cid},'${date}',this.value)" style="width:100%;font-size:11px;padding:1px;background:${_cellBg(v)};">${_optHtml(cid,v)}</select>`
          +`<div style="line-height:1;">${noteMark}</div></td>`;
     }
     return `<tr>${tds}</tr>`;
