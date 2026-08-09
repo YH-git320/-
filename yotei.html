@@ -1500,10 +1500,12 @@ async function calLoadMonth(){
   const r = await fetch(`${REST_URL}/course_schedule_calendar?cal_date=gte.${start}&cal_date=lte.${end}&select=course_id,cal_date,form_name,note,kekkin`, {headers:getH()});
   if(r.ok){ (await r.json()).forEach(x=>{ const k=String(x.course_id); (CDATA[k]=CDATA[k]||{})[x.cal_date]={form_name:x.form_name||'', note:x.note||'', kekkin:x.kekkin||''}; }); }
 }
-// 日課の並び順：通常→短縮→午前→その他（同区分内は下校開始が早い順→便数少ない順）。
+// 月次予定で選べる「その他」選択肢（日課ではない・登下校のない日の送迎等）。一番下に表示。
+const CAL_EXTRA=['プール','その他送迎','研修','試走'];
+// 日課の並び順：通常→小1→短縮→午前→その他（同区分内は下校開始が早い順→便数少ない順）。
 // その他（A/B/C等）は名前順を維持。
 function _cmpForm(a,b){
-  const cat=n=>{n=n||''; return n.indexOf('通常')===0?0:n.indexOf('短縮')===0?1:n.indexOf('午前')===0?2:9;};
+  const cat=n=>{n=n||''; return n.indexOf('通常')===0?0:n.indexOf('小1')===0?1:n.indexOf('短縮')===0?2:n.indexOf('午前')===0?3:9;};
   const fmin=t=>{const m=/^(\d{1,2}):(\d{2})/.exec(t||''); return m?(+m[1]*60+ +m[2]):1e9;};
   const first=d=>{let x=1e9;(d||[]).forEach(t=>{const v=fmin(t);if(v<x)x=v;});return x;};
   const ca=cat(a.name),cb=cat(b.name); if(ca!==cb)return ca-cb;
@@ -1516,9 +1518,11 @@ function _shortLabel(cid, v){
   if(v===''||v==null) return '—';
   if(v==='運休') return '運休';
   const f=(CFORMS[String(cid)]||[]).find(x=>x.name===v);
-  return f ? (f.name + (f.deps&&f.deps.length ? (' '+f.deps[0]) : '')) : (v+'(?)');
+  if(f) return f.name + (f.deps&&f.deps.length ? (' '+f.deps[0]) : '');
+  if(CAL_EXTRA.indexOf(v)>=0) return v;
+  return v+'(?)';
 }
-function _cellBg(v){ if(v==='運休') return '#eceff0'; if(v==='') return '#fff'; return '#eaf5ee'; }
+function _cellBg(v){ if(v==='運休') return '#eceff0'; if(v==='') return '#fff'; if(CAL_EXTRA.indexOf(v)>=0) return '#e6eefb'; return '#eaf5ee'; }
 function _note(cid,date){ return ((CDATA[String(cid)]||{})[date]||{}).note||''; }
 function _kekkin(cid,date){ return ((CDATA[String(cid)]||{})[date]||{}).kekkin||''; }
 function _btnBg(cid,date,v){ if(_kekkin(cid,date)) return '#ffd6d6'; return _note(cid,date) ? '#ffe1b0' : _cellBg(v); }
@@ -1563,6 +1567,8 @@ function calOpen(cid,date,el){
   (CFORMS[String(cid)]||[]).forEach(f=>{ h+=`<div class="calopt" onclick="calPick('${escAttr(f.name)}')" style="padding:6px 12px;cursor:pointer;font-size:12px;white-space:nowrap;">${escHtml(_formLabel(f))}</div>`; });
   h+=`<div class="calopt" onclick="calPick('運休')" style="padding:6px 12px;cursor:pointer;font-size:12px;">運休</div>`;
   h+=`<div class="calopt" onclick="calPick('')" style="padding:6px 12px;cursor:pointer;font-size:12px;color:#888;">—（未設定）</div>`;
+  h+=`<div style="padding:3px 10px;font-size:10px;color:#3355aa;border-top:1px solid #e2ede6;background:#eef2fb;">その他（登下校のない日の送迎等）</div>`;
+  CAL_EXTRA.forEach(x=>{ h+=`<div class="calopt" onclick="calPick('${escAttr(x)}')" style="padding:6px 12px;cursor:pointer;font-size:12px;color:#3355aa;">${escHtml(x)}</div>`; });
   h+=`<div style="padding:3px 10px;font-size:10px;color:#b30000;border-top:1px solid #e2ede6;background:#fff6f6;">欠便区分（日課は保持）</div>`;
   ['なし','欠便','登校欠便','下校欠便','一部欠便'].forEach(kk=>{ const val=(kk==='なし')?'':kk; h+=`<div class="calopt" onclick="calPickKekkin('${val}')" style="padding:5px 12px;cursor:pointer;font-size:12px;color:${val?'#b30000':'#888'};">${kk}</div>`; });
   pop.innerHTML=h; pop.style.display='block';
