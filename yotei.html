@@ -1484,7 +1484,7 @@ async function calLoadBase(){
   if(r.ok){ (await r.json()).forEach(v=>{ const k=String(v.course_id); (VERSALL[k]=VERSALL[k]||[]).push({id:v.id, valid_from:v.valid_from}); }); }
   FORMSBYVER={};
   r = await fetch(`${REST_URL}/course_schedule_forms?select=version_id,form_name,gekou_departures&order=form_name`, {headers:getH()});
-  if(r.ok){ (await r.json()).forEach(f=>{ const k=String(f.version_id); const deps=Array.isArray(f.gekou_departures)?f.gekou_departures.map(_hm).filter(Boolean):[]; (FORMSBYVER[k]=FORMSBYVER[k]||[]).push({name:f.form_name, deps}); }); }
+  if(r.ok){ (await r.json()).forEach(f=>{ const k=String(f.version_id); const deps=Array.isArray(f.gekou_departures)?f.gekou_departures.map(_hm).filter(Boolean):[]; (FORMSBYVER[k]=FORMSBYVER[k]||[]).push({name:f.form_name, deps}); }); Object.keys(FORMSBYVER).forEach(k=>FORMSBYVER[k].sort(_cmpForm)); }
   TOUKBYVER={};
   r = await fetch(`${REST_URL}/course_locations?select=version_id,toukou_time,gekou_only`, {headers:getH()});
   if(r.ok){ (await r.json()).forEach(s=>{ if(s.gekou_only) return; const t=_hm(s.toukou_time); if(!t) return; const k=String(s.version_id); if(!TOUKBYVER[k]||t<TOUKBYVER[k]) TOUKBYVER[k]=t; }); }
@@ -1499,6 +1499,18 @@ async function calLoadMonth(){
   CDATA={};
   const r = await fetch(`${REST_URL}/course_schedule_calendar?cal_date=gte.${start}&cal_date=lte.${end}&select=course_id,cal_date,form_name,note,kekkin`, {headers:getH()});
   if(r.ok){ (await r.json()).forEach(x=>{ const k=String(x.course_id); (CDATA[k]=CDATA[k]||{})[x.cal_date]={form_name:x.form_name||'', note:x.note||'', kekkin:x.kekkin||''}; }); }
+}
+// 日課の並び順：通常→短縮→午前→その他（同区分内は下校開始が早い順→便数少ない順）。
+// その他（A/B/C等）は名前順を維持。
+function _cmpForm(a,b){
+  const cat=n=>{n=n||''; return n.indexOf('通常')===0?0:n.indexOf('短縮')===0?1:n.indexOf('午前')===0?2:9;};
+  const fmin=t=>{const m=/^(\d{1,2}):(\d{2})/.exec(t||''); return m?(+m[1]*60+ +m[2]):1e9;};
+  const first=d=>{let x=1e9;(d||[]).forEach(t=>{const v=fmin(t);if(v<x)x=v;});return x;};
+  const ca=cat(a.name),cb=cat(b.name); if(ca!==cb)return ca-cb;
+  if(ca===9)return String(a.name||'').localeCompare(String(b.name||''),'ja');
+  const fa=first(a.deps),fb=first(b.deps); if(fa!==fb)return fa-fb;
+  const na=(a.deps||[]).length,nb=(b.deps||[]).length; if(na!==nb)return na-nb;
+  return String(a.name||'').localeCompare(String(b.name||''),'ja');
 }
 function _shortLabel(cid, v){
   if(v===''||v==null) return '—';

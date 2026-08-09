@@ -945,11 +945,23 @@ async function loadVersions(){
   const res = await fetch(`${REST_URL}/course_timetable_versions?select=id,course_id,valid_from,note&order=valid_from.desc,id.desc`, { headers: getH() });
   if (res.ok){ (await res.json()).forEach(r=>{ const k=String(r.course_id); (VERS[k]=VERS[k]||[]).push({ id:r.id, valid_from:r.valid_from, note:r.note||'' }); }); }
 }
+// 日課の並び順：通常→短縮→午前→その他（同区分内は下校開始が早い順→便数少ない順）。
+// その他（A/B/C等）は名前順を維持。
+function _cmpForm(a,b){
+  const cat=n=>{n=n||''; return n.indexOf('通常')===0?0:n.indexOf('短縮')===0?1:n.indexOf('午前')===0?2:9;};
+  const fmin=t=>{const m=/^(\d{1,2}):(\d{2})/.exec(t||''); return m?(+m[1]*60+ +m[2]):1e9;};
+  const first=d=>{let x=1e9;(d||[]).forEach(t=>{const v=fmin(t);if(v<x)x=v;});return x;};
+  const ca=cat(a.form_name),cb=cat(b.form_name); if(ca!==cb)return ca-cb;
+  if(ca===9)return String(a.form_name||'').localeCompare(String(b.form_name||''),'ja');
+  const fa=first(a.gekou_departures),fb=first(b.gekou_departures); if(fa!==fb)return fa-fb;
+  const na=(a.gekou_departures||[]).length,nb=(b.gekou_departures||[]).length; if(na!==nb)return na-nb;
+  return String(a.form_name||'').localeCompare(String(b.form_name||''),'ja');
+}
 // 各コースの「最新版」の内容をバッファへ（コース一覧の設定済表示＋既定編集対象）
 async function loadFormsLatest(){
   FORMS = {};
   const res = await fetch(`${REST_URL}/course_schedule_forms?select=course_id,version_id,form_name,gekou_departures,after_toukou,after_toukou_place,after_toukou_addr,after_toukou_coord,dep_overrides&order=form_name`, { headers: getH() });
-  if (res.ok){ (await res.json()).forEach(r=>{ if(r.version_id!==latestVerId(r.course_id)) return; const k=String(r.course_id); (FORMS[k]=FORMS[k]||[]).push(_mapForm(r)); }); }
+  if (res.ok){ (await res.json()).forEach(r=>{ if(r.version_id!==latestVerId(r.course_id)) return; const k=String(r.course_id); (FORMS[k]=FORMS[k]||[]).push(_mapForm(r)); }); Object.keys(FORMS).forEach(k=>FORMS[k].sort(_cmpForm)); }
 }
 async function loadStops(){
   STOPS = {};
@@ -960,7 +972,7 @@ async function loadStops(){
 async function loadVersionInto(cid, verId){
   const k=String(cid);
   const rf = await fetch(`${REST_URL}/course_schedule_forms?version_id=eq.${verId}&select=form_name,gekou_departures,after_toukou,after_toukou_place,after_toukou_addr,after_toukou_coord,dep_overrides&order=form_name`, { headers: getH() });
-  FORMS[k] = rf.ok ? (await rf.json()).map(_mapForm) : [];
+  FORMS[k] = rf.ok ? (await rf.json()).map(_mapForm) : []; FORMS[k].sort(_cmpForm);
   const rs = await fetch(`${REST_URL}/course_locations?version_id=eq.${verId}&select=name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_overrides&order=seq.nullslast,name`, { headers: getH() });
   STOPS[k] = rs.ok ? (await rs.json()).map(_mapStop) : [];
 }
