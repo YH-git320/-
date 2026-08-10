@@ -1314,10 +1314,15 @@ function renderEmployeeGrid(employees, col) {
     // operatorは電話・メールを表示するが「マスク済み」ラベルを付与
     const phoneTxt = (col.contact && emp.phone) ? emp.phone : null;
     const emailTxt = (col.contact && emp.email) ? emp.email : null;
+    const emailPart = emailTxt
+      ? '✉ '+esc(emailTxt) + (emp.email_confirmed
+          ? '<span title="本人にメール到達を確認済み" style="margin-left:4px;padding:0 5px;border-radius:8px;background:#e3f3e8;color:#1f7a43;font-size:10px;font-weight:700;">✓確認済</span>'
+          : '<span title="登録済み・本人到達は未確認" style="margin-left:4px;padding:0 5px;border-radius:8px;background:#f3edda;color:#8a6d1a;font-size:10px;">未確認</span>')
+      : null;
     const sub = [emp.employee_code ? '社員番号：'+emp.employee_code : null,
                  emp.department || null,
                  phoneTxt ? '📞 '+phoneTxt : null,
-                 emailTxt ? '✉ '+emailTxt : null].filter(Boolean).join('　|　');
+                 emailPart].filter(Boolean).join('　|　');
     // 業務チップ: operator は削除×ボタンなし
     const chips = emp.jobTypes.map((jt, i) => {
       const ci = allJobTypes.findIndex(j => j.id === jt.id);
