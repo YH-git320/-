@@ -71,7 +71,7 @@ button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
       <button class="primary" onclick="calSave()">💾 変更を保存</button>
       <span id="calDirty" class="muted" style="font-size:12px;"></span>
     </div>
-    <div class="muted" style="font-size:11px;margin-top:6px;">凡例：<b>各コースの日課</b>はその月に有効な版のA/B/C…（括弧内は下校便の学校発時刻）。空欄＝未設定／運休＝バス無し。セルの📝で注意書き（中間利用・イレギュラー等）。<b>欠便は▼の「欠便区分」から選択</b>（日課は保持したまま赤で表示）。土＝青／日祝＝赤。<br>セルは略記表示：<b>①</b>=通常①便／<b>①②</b>=通常①②便／<b>②</b>=通常②便／<b>⓪</b>=午前⓪便／<b>小1①</b>=小1＋①便／<b>登</b>=登校のみ（マイクロ等・下校便なし）（数字の右は下校便の発時刻）。</div>
+    <div class="muted" style="font-size:11px;margin-top:6px;">凡例：<b>各コースの日課</b>はその月に有効な版のA/B/C…（括弧内は下校便の学校発時刻）。空欄＝未設定／運休＝バス無し。セルの📝で注意書き（中間利用・イレギュラー等）。<b>欠便は▼の「欠便区分」から選択</b>（日課は保持したまま赤で表示）。土＝青／日祝＝赤。<br>セルは略記表示：<b>①</b>=通常①便／<b>①②</b>=通常①②便／<b>②</b>=通常②便／<b>⓪</b>=午前⓪便／<b>小1①</b>=小1＋①便／<b>登校</b>のみ=マイクロ等・下校便なし（数字の右は下校便の発時刻）。</div>
   </div>
 
   <div id="calArea" style="overflow:auto;max-height:78vh;border:1px solid var(--line);border-radius:8px;background:#fff;"></div>
@@ -1534,15 +1534,17 @@ function _shortName(n){ n=n||'';
   if(n.indexOf('小1')===0) return '小1①';
   if(n.indexOf('午前')===0) return '⓪';
   if(n.indexOf('短縮')===0) return '短';
-  if(n.indexOf('登校')===0) return '登';
+  if(n.indexOf('登校')===0) return '登校';
   if(n.indexOf('通常')===0) return n.replace('通常','').replace('便','');
   return n;
 }
+// 略記の後ろに小さく添える語（例：登校＋「のみ」）
+function _shortSuffix(n){ return (n||'').indexOf('登校')===0 ? 'のみ' : ''; }
 function _shortLabel(cid, v){
   if(v===''||v==null) return '—';
   if(v==='運休') return '運休';
   const f=(CFORMS[String(cid)]||[]).find(x=>x.name===v);
-  if(f) return _shortName(f.name) + (f.deps&&f.deps.length ? (' '+f.deps[0]) : '');
+  if(f) return _shortName(f.name) + _shortSuffix(f.name) + (f.deps&&f.deps.length ? (' '+f.deps[0]) : '');
   if(CAL_EXTRA.indexOf(v)>=0) return v;
   return v+'(?)';
 }
@@ -1557,7 +1559,10 @@ function _btnHtml(cid,date,v){
   if(v===''||v==null) main='—';
   else if(v==='運休') main='<b style="font-weight:700;font-size:13px;">運休</b>';
   else { const f=(CFORMS[String(cid)]||[]).find(x=>x.name===v);
-    if(f){ const t=(f.deps&&f.deps.length)?(f.deps[0]):''; main=`<b style="font-weight:700;font-size:13px;">${escHtml(_shortName(f.name))}</b>${t?` <span style="font-size:10px;">${escHtml(t)}</span>`:''}`; }
+    if(f){ const t=(f.deps&&f.deps.length)?(f.deps[0]):''; const sx=_shortSuffix(f.name);
+      main=`<b style="font-weight:700;font-size:13px;">${escHtml(_shortName(f.name))}</b>`
+         + (sx?`<span style="font-size:10px;font-weight:400;">${escHtml(sx)}</span>`:'')
+         + (t?` <span style="font-size:10px;">${escHtml(t)}</span>`:''); }
     else if(CAL_EXTRA.indexOf(v)>=0) main=`<b style="font-weight:700;font-size:13px;">${escHtml(v)}</b>`;
     else main=escHtml(v+'(?)'); }
   return main+' ▾'+(kk?`<div style="font-size:9px;line-height:1.1;color:#b30000;font-weight:700;">${escHtml(kk)}</div>`:'');
