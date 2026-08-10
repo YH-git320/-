@@ -1550,7 +1550,17 @@ function _note(cid,date){ return ((CDATA[String(cid)]||{})[date]||{}).note||''; 
 function _kekkin(cid,date){ return ((CDATA[String(cid)]||{})[date]||{}).kekkin||''; }
 function _btnBg(cid,date,v){ if(_kekkin(cid,date)) return '#ffd6d6'; return _note(cid,date) ? '#ffe1b0' : _cellBg(v); }
 function _btnBd(cid,date){ if(_kekkin(cid,date)) return '#d9534f'; return _note(cid,date) ? '#e0821a' : '#cfe0d5'; }
-function _btnHtml(cid,date,v){ const kk=_kekkin(cid,date); return escHtml(_shortLabel(cid,v))+' ▾'+(kk?`<div style="font-size:9px;line-height:1.1;color:#b30000;font-weight:700;">${escHtml(kk)}</div>`:''); }
+function _btnHtml(cid,date,v){
+  const kk=_kekkin(cid,date);
+  let main;
+  if(v===''||v==null) main='—';
+  else if(v==='運休') main='<b>運休</b>';
+  else { const f=(CFORMS[String(cid)]||[]).find(x=>x.name===v);
+    if(f){ const t=(f.deps&&f.deps.length)?(' '+f.deps[0]):''; main=`<b style="font-weight:700;">${escHtml(_shortName(f.name))}</b>${escHtml(t)}`; }
+    else if(CAL_EXTRA.indexOf(v)>=0) main=`<b style="font-weight:700;">${escHtml(v)}</b>`;
+    else main=escHtml(v+'(?)'); }
+  return main+' ▾'+(kk?`<div style="font-size:9px;line-height:1.1;color:#b30000;font-weight:700;">${escHtml(kk)}</div>`:'');
+}
 function calRender(){
   const ym=_ym(); if(!ym){ return; }
   const [y,m]=ym.split('-').map(Number); const dim=_dim(ym);
