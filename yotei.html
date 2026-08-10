@@ -12,6 +12,8 @@ header{background:#fff;border-bottom:1px solid var(--line);padding:12px 16px;dis
 header .brand{font-size:16px;font-weight:700;color:var(--g2);}
 header nav a{color:var(--g);text-decoration:none;font-size:13px;margin-right:12px;}
 main{max-width:840px;margin:0 auto;padding:16px;}
+/* カレンダーだけ画面幅いっぱいに広げる（transform不使用＝sticky維持） */
+#calArea{width:96vw;margin-left:calc(50% - 48vw);}
 h1{font-size:19px;color:var(--g2);margin:0 0 4px;}
 .sub{font-size:13px;color:#6b7d72;margin:0 0 16px;line-height:1.6;}
 .panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px;}
@@ -69,7 +71,7 @@ button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
       <button class="primary" onclick="calSave()">💾 変更を保存</button>
       <span id="calDirty" class="muted" style="font-size:12px;"></span>
     </div>
-    <div class="muted" style="font-size:11px;margin-top:6px;">凡例：<b>各コースの日課</b>はその月に有効な版のA/B/C…（括弧内は下校便の学校発時刻）。空欄＝未設定／運休＝バス無し。セルの📝で注意書き（中間利用・イレギュラー等）。<b>欠便は▼の「欠便区分」から選択</b>（日課は保持したまま赤で表示）。土＝青／日祝＝赤。</div>
+    <div class="muted" style="font-size:11px;margin-top:6px;">凡例：<b>各コースの日課</b>はその月に有効な版のA/B/C…（括弧内は下校便の学校発時刻）。空欄＝未設定／運休＝バス無し。セルの📝で注意書き（中間利用・イレギュラー等）。<b>欠便は▼の「欠便区分」から選択</b>（日課は保持したまま赤で表示）。土＝青／日祝＝赤。<br>セルは略記表示：<b>①</b>=通常①便／<b>①②</b>=通常①②便／<b>②</b>=通常②便／<b>⓪</b>=午前⓪便／<b>小1①</b>=小1＋①便（数字の右は下校便の発時刻）。</div>
   </div>
 
   <div id="calArea" style="overflow:auto;max-height:78vh;border:1px solid var(--line);border-radius:8px;background:#fff;"></div>
@@ -1524,11 +1526,22 @@ function _cmpForm(a,b){
   const na=(a.deps||[]).length,nb=(b.deps||[]).length; if(na!==nb)return na-nb;
   return String(a.name||'').localeCompare(String(b.name||''),'ja');
 }
+// セル（閉じた状態）の略記：①=通常①便／①②=通常①②便／②=通常②便／⓪=午前⓪便／小1①=小1＋①便／短=短縮。A/B/C等はそのまま。
+function _shortName(n){ n=n||'';
+  if(n==='通常①②便') return '①②';
+  if(n==='通常①便') return '①';
+  if(n==='通常②便') return '②';
+  if(n.indexOf('小1')===0) return '小1①';
+  if(n.indexOf('午前')===0) return '⓪';
+  if(n.indexOf('短縮')===0) return '短';
+  if(n.indexOf('通常')===0) return n.replace('通常','').replace('便','');
+  return n;
+}
 function _shortLabel(cid, v){
   if(v===''||v==null) return '—';
   if(v==='運休') return '運休';
   const f=(CFORMS[String(cid)]||[]).find(x=>x.name===v);
-  if(f) return f.name + (f.deps&&f.deps.length ? (' '+f.deps[0]) : '');
+  if(f) return _shortName(f.name) + (f.deps&&f.deps.length ? (' '+f.deps[0]) : '');
   if(CAL_EXTRA.indexOf(v)>=0) return v;
   return v+'(?)';
 }
@@ -1547,7 +1560,7 @@ function calRender(){
   const list=CY.filter(c=>(!activeOnly||c.active)&&(!pref||c.prefecture===pref)&&(!q||((c.school_name||'')+(c.course_name||'')).indexOf(q)!==-1));
   const th=x=>`<th style="position:sticky;top:0;z-index:3;background:#eef4ef;border:1px solid #d7e2da;padding:3px 4px;font-size:11px;font-weight:700;color:#2d4a38;">${x}</th>`;
   let head=`<tr><th style="position:sticky;left:0;top:0;z-index:5;background:#eef4ef;border:1px solid #d7e2da;padding:4px 8px;font-size:12px;min-width:190px;text-align:left;">学校 ／ コース</th>`;
-  for(let d=1; d<=dim; d++){ const wd=new Date(y,m-1,d).getDay(); const col= wd===0?'#c0392b': wd===6?'#2673c0':'#2d4a38'; head+=`<th style="position:sticky;top:0;z-index:3;background:${wd===0||wd===6?'#f0f3f0':'#eef4ef'};border:1px solid #d7e2da;padding:2px 3px;font-size:11px;color:${col};min-width:68px;">${d}<br>${WD[wd]}</th>`; }
+  for(let d=1; d<=dim; d++){ const wd=new Date(y,m-1,d).getDay(); const col= wd===0?'#c0392b': wd===6?'#2673c0':'#2d4a38'; head+=`<th style="position:sticky;top:0;z-index:3;background:${wd===0||wd===6?'#f0f3f0':'#eef4ef'};border:1px solid #d7e2da;padding:2px 3px;font-size:11px;color:${col};min-width:58px;">${d}<br>${WD[wd]}</th>`; }
   head+='</tr>';
   const rows=list.map(c=>{
     const cid=c.id; const cd=CDATA[String(cid)]||{};
@@ -1555,7 +1568,7 @@ function calRender(){
     for(let d=1; d<=dim; d++){
       const date=`${ym}-${_p2(d)}`; const cell=cd[date]||{form_name:'',note:''}; const v=cell.form_name||''; const wd=new Date(y,m-1,d).getDay();
       const noteMark = cell.note ? `<span onclick="calNote(${cid},'${date}')" title="${escAttr(cell.note)}" style="cursor:pointer;color:#e0821a;font-size:11px;">📝</span>` : `<span onclick="calNote(${cid},'${date}')" title="注意書きを追加" style="cursor:pointer;color:#c3cec7;font-size:11px;">＋</span>`;
-      tds+=`<td id="c_${cid}_${date}" style="border:1px solid #e2ede6;padding:1px 2px;min-width:68px;background:${wd===0||wd===6?'#fafbfa':'#fff'};text-align:center;vertical-align:top;">`
+      tds+=`<td id="c_${cid}_${date}" style="border:1px solid #e2ede6;padding:1px 2px;min-width:58px;background:${wd===0||wd===6?'#fafbfa':'#fff'};text-align:center;vertical-align:top;">`
          +`<div id="b_${cid}_${date}" onclick="calOpen(${cid},'${date}',this)" style="cursor:pointer;font-size:11px;padding:2px 3px;border:1px solid ${_btnBd(cid,date)};border-radius:4px;background:${_btnBg(cid,date,v)};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_btnHtml(cid,date,v)}</div>`
          +`<div style="line-height:1;">${noteMark}</div></td>`;
     }
