@@ -1554,10 +1554,10 @@ function _btnHtml(cid,date,v){
   const kk=_kekkin(cid,date);
   let main;
   if(v===''||v==null) main='—';
-  else if(v==='運休') main='<b>運休</b>';
+  else if(v==='運休') main='<b style="font-weight:700;font-size:13px;">運休</b>';
   else { const f=(CFORMS[String(cid)]||[]).find(x=>x.name===v);
-    if(f){ const t=(f.deps&&f.deps.length)?(' '+f.deps[0]):''; main=`<b style="font-weight:700;">${escHtml(_shortName(f.name))}</b>${escHtml(t)}`; }
-    else if(CAL_EXTRA.indexOf(v)>=0) main=`<b style="font-weight:700;">${escHtml(v)}</b>`;
+    if(f){ const t=(f.deps&&f.deps.length)?(f.deps[0]):''; main=`<b style="font-weight:700;font-size:13px;">${escHtml(_shortName(f.name))}</b>${t?` <span style="font-size:10px;">${escHtml(t)}</span>`:''}`; }
+    else if(CAL_EXTRA.indexOf(v)>=0) main=`<b style="font-weight:700;font-size:13px;">${escHtml(v)}</b>`;
     else main=escHtml(v+'(?)'); }
   return main+' ▾'+(kk?`<div style="font-size:9px;line-height:1.1;color:#b30000;font-weight:700;">${escHtml(kk)}</div>`:'');
 }
