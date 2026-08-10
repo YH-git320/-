@@ -71,7 +71,7 @@ button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
       <button class="primary" onclick="calSave()">💾 変更を保存</button>
       <span id="calDirty" class="muted" style="font-size:12px;"></span>
     </div>
-    <div class="muted" style="font-size:11px;margin-top:6px;">凡例：<b>各コースの日課</b>はその月に有効な版のA/B/C…（括弧内は下校便の学校発時刻）。空欄＝未設定／運休＝バス無し。セルの📝で注意書き（中間利用・イレギュラー等）。<b>欠便は▼の「欠便区分」から選択</b>（日課は保持したまま赤で表示）。土＝青／日祝＝赤。<br>セルは略記表示：<b>①</b>=通常①便／<b>①②</b>=通常①②便／<b>②</b>=通常②便／<b>⓪</b>=午前⓪便／<b>小1①</b>=小1＋①便（数字の右は下校便の発時刻）。</div>
+    <div class="muted" style="font-size:11px;margin-top:6px;">凡例：<b>各コースの日課</b>はその月に有効な版のA/B/C…（括弧内は下校便の学校発時刻）。空欄＝未設定／運休＝バス無し。セルの📝で注意書き（中間利用・イレギュラー等）。<b>欠便は▼の「欠便区分」から選択</b>（日課は保持したまま赤で表示）。土＝青／日祝＝赤。<br>セルは略記表示：<b>①</b>=通常①便／<b>①②</b>=通常①②便／<b>②</b>=通常②便／<b>⓪</b>=午前⓪便／<b>小1①</b>=小1＋①便／<b>登</b>=登校のみ（マイクロ等・下校便なし）（数字の右は下校便の発時刻）。</div>
   </div>
 
   <div id="calArea" style="overflow:auto;max-height:78vh;border:1px solid var(--line);border-radius:8px;background:#fff;"></div>
@@ -1534,6 +1534,7 @@ function _shortName(n){ n=n||'';
   if(n.indexOf('小1')===0) return '小1①';
   if(n.indexOf('午前')===0) return '⓪';
   if(n.indexOf('短縮')===0) return '短';
+  if(n.indexOf('登校')===0) return '登';
   if(n.indexOf('通常')===0) return n.replace('通常','').replace('便','');
   return n;
 }
