@@ -1476,18 +1476,29 @@ function _ym(){ return document.getElementById('calMonth').value; }
 function _dim(ym){ const [y,m]=ym.split('-').map(Number); return new Date(y,m,0).getDate(); }
 function _formLabel(f){ return (f.deps&&f.deps.length) ? (f.name+' '+f.deps.join('・')) : f.name; }
 
+// PostgREST は1回最大1000行のため、1000件ずつ全件取得する（東京+神奈川で月1000行超のため必須）
+async function _fetchAll(pathWithQuery){
+  const out=[]; let from=0; const step=1000;
+  for(;;){
+    const sep = pathWithQuery.indexOf('?')>=0?'&':'?';
+    const r = await fetch(`${REST_URL}/${pathWithQuery}${sep}limit=${step}&offset=${from}`, {headers:getH()});
+    if(!r.ok) break;
+    const rows = await r.json();
+    out.push(...rows);
+    if(rows.length<step) break;
+    from += step;
+  }
+  return out;
+}
 async function calLoadBase(){
-  let r = await fetch(`${REST_URL}/courses?select=id,prefecture,school_name,course_name,active&order=prefecture,school_name,course_name`, {headers:getH()});
-  CY = r.ok ? await r.json() : [];
+  CY = await _fetchAll(`courses?select=id,prefecture,school_name,course_name,active&order=prefecture,school_name,course_name`);
   VERSALL={};
-  r = await fetch(`${REST_URL}/course_timetable_versions?select=id,course_id,valid_from&order=valid_from.desc,id.desc`, {headers:getH()});
-  if(r.ok){ (await r.json()).forEach(v=>{ const k=String(v.course_id); (VERSALL[k]=VERSALL[k]||[]).push({id:v.id, valid_from:v.valid_from}); }); }
+  (await _fetchAll(`course_timetable_versions?select=id,course_id,valid_from&order=valid_from.desc,id.desc`)).forEach(v=>{ const k=String(v.course_id); (VERSALL[k]=VERSALL[k]||[]).push({id:v.id, valid_from:v.valid_from}); });
   FORMSBYVER={};
-  r = await fetch(`${REST_URL}/course_schedule_forms?select=version_id,form_name,gekou_departures&order=form_name`, {headers:getH()});
-  if(r.ok){ (await r.json()).forEach(f=>{ const k=String(f.version_id); const deps=Array.isArray(f.gekou_departures)?f.gekou_departures.map(_hm).filter(Boolean):[]; (FORMSBYVER[k]=FORMSBYVER[k]||[]).push({name:f.form_name, deps}); }); Object.keys(FORMSBYVER).forEach(k=>FORMSBYVER[k].sort(_cmpForm)); }
+  (await _fetchAll(`course_schedule_forms?select=version_id,form_name,gekou_departures&order=id`)).forEach(f=>{ const k=String(f.version_id); const deps=Array.isArray(f.gekou_departures)?f.gekou_departures.map(_hm).filter(Boolean):[]; (FORMSBYVER[k]=FORMSBYVER[k]||[]).push({name:f.form_name, deps}); });
+  Object.keys(FORMSBYVER).forEach(k=>FORMSBYVER[k].sort(_cmpForm));
   TOUKBYVER={};
-  r = await fetch(`${REST_URL}/course_locations?select=version_id,toukou_time,gekou_only`, {headers:getH()});
-  if(r.ok){ (await r.json()).forEach(s=>{ if(s.gekou_only) return; const t=_hm(s.toukou_time); if(!t) return; const k=String(s.version_id); if(!TOUKBYVER[k]||t<TOUKBYVER[k]) TOUKBYVER[k]=t; }); }
+  (await _fetchAll(`course_locations?select=version_id,toukou_time,gekou_only&order=id`)).forEach(s=>{ if(s.gekou_only) return; const t=_hm(s.toukou_time); if(!t) return; const k=String(s.version_id); if(!TOUKBYVER[k]||t<TOUKBYVER[k]) TOUKBYVER[k]=t; });
 }
 function calBuildForms(){
   const end=_ym()+'-'+_p2(_dim(_ym()));
@@ -1497,8 +1508,7 @@ function calBuildForms(){
 async function calLoadMonth(){
   const ym=_ym(); const start=ym+'-01', end=ym+'-'+_p2(_dim(ym));
   CDATA={};
-  const r = await fetch(`${REST_URL}/course_schedule_calendar?cal_date=gte.${start}&cal_date=lte.${end}&select=course_id,cal_date,form_name,note,kekkin`, {headers:getH()});
-  if(r.ok){ (await r.json()).forEach(x=>{ const k=String(x.course_id); (CDATA[k]=CDATA[k]||{})[x.cal_date]={form_name:x.form_name||'', note:x.note||'', kekkin:x.kekkin||''}; }); }
+  (await _fetchAll(`course_schedule_calendar?cal_date=gte.${start}&cal_date=lte.${end}&select=course_id,cal_date,form_name,note,kekkin&order=course_id,cal_date`)).forEach(x=>{ const k=String(x.course_id); (CDATA[k]=CDATA[k]||{})[x.cal_date]={form_name:x.form_name||'', note:x.note||'', kekkin:x.kekkin||''}; });
 }
 // 月次予定で選べる「その他」選択肢（日課ではない・登下校のない日の送迎等）。一番下に表示。
 const CAL_EXTRA=['プール','その他送迎','研修','試走'];
