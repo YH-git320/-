@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>営業許可マスタ — 高尾輸送サービス</title>
+<title>配置管理（添乗員・運転手） — 高尾輸送サービス</title>
 <style>
 :root{--g:#4d7a5e;--g2:#2d4a38;--bg:#f5f8f4;--line:#e0e6e0;}
 *{box-sizing:border-box;}
@@ -11,105 +11,93 @@ body{margin:0;font-family:'Noto Sans JP','Hiragino Kaku Gothic Pro','Meiryo',san
 header{background:#fff;border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
 header .brand{font-size:16px;font-weight:700;color:var(--g2);}
 header nav a{color:var(--g);text-decoration:none;font-size:13px;margin-right:12px;}
-main{max-width:960px;margin:0 auto;padding:16px;}
+main{max-width:840px;margin:0 auto;padding:16px;}
+/* 配置グリッドだけ画面幅いっぱい（transform不使用＝sticky維持） */
+#hArea{width:96vw;margin-left:calc(50% - 48vw);}
 h1{font-size:19px;color:var(--g2);margin:0 0 4px;}
 .sub{font-size:13px;color:#6b7d72;margin:0 0 16px;line-height:1.6;}
 .panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px;}
 label.fld{display:block;font-size:13px;color:#6b7d72;margin-bottom:5px;}
-select,input,textarea{font-family:inherit;font-size:15px;padding:9px 10px;border:1px solid #c9d3cc;border-radius:8px;background:#fff;color:#2d3b35;}
-select,input[type=text],input[type=date],textarea{width:100%;}
-textarea{min-height:60px;resize:vertical;}
+select,input{font-family:inherit;font-size:15px;padding:9px 10px;border:1px solid #c9d3cc;border-radius:8px;background:#fff;color:#2d3b35;}
+select,input[type=text]{width:100%;}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-@media(max-width:640px){.grid{grid-template-columns:1fr;}}
 button{font-family:inherit;font-size:14px;padding:9px 14px;border:1px solid var(--g);background:#fff;color:var(--g);border-radius:8px;cursor:pointer;}
 button.primary{background:var(--g);color:#fff;}
 button.mini{font-size:12px;padding:6px 10px;}
-button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
-.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
-.toolbar .sp{flex:1;}
-.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
-.chip{font-size:13px;padding:7px 12px;border:1px solid #c9d3cc;border-radius:999px;background:#fff;color:#6b7d72;cursor:pointer;}
-.chip.active{border:2px solid var(--g);color:var(--g2);background:#eef4ef;font-weight:700;}
-.chip .n{color:#9bb0a3;font-size:12px;margin-left:4px;}
-.pcard{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:#fff;}
-.pcard .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
-.pcard .title{font-size:16px;font-weight:700;color:var(--g2);}
-.pcard .no{font-size:13px;color:var(--g);font-weight:700;margin-bottom:2px;}
-.pcard .meta{font-size:13px;color:#5c7066;line-height:1.8;margin-top:6px;}
-.pcard .meta b{color:#2d3b35;font-weight:600;}
-.badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;margin-left:6px;vertical-align:middle;}
-.badge.tokutei{background:#eef4ef;color:#2d4a38;border:1px solid #cfe0d4;}
-.badge.other{background:#fff4e6;color:#8a5a1a;border:1px solid #f0d9b5;}
-.badge.off{background:#f1f1f1;color:#999;border:1px solid #ddd;}
-.note2{font-size:12px;color:#8a7a4a;background:#fdfaef;border:1px solid #efe6c8;border-radius:8px;padding:6px 9px;margin-top:8px;}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
+.tab{font-size:14px;padding:8px 16px;border:1px solid #c9d3cc;border-radius:8px;background:#fff;color:#6b7d72;cursor:pointer;}
+.tab.active{border:2px solid var(--g);color:var(--g2);background:#eef4ef;font-weight:700;}
+.muted{color:#9bb0a3;font-size:12px;}
 #status{font-size:13px;padding:9px 12px;border-radius:8px;margin-bottom:12px;display:none;}
 #status.ok{display:block;background:#eef7ef;color:#2f7d32;border:1px solid #bfe3c0;}
 #status.err{display:block;background:#fdeceb;color:#b5453a;border:1px solid #f3c3bf;}
-.modal-bg{position:fixed;inset:0;background:rgba(20,30,24,.45);display:none;align-items:flex-start;justify-content:center;padding:20px;overflow:auto;z-index:50;}
-.modal-bg.show{display:flex;}
-.modal{background:#fff;border-radius:14px;max-width:640px;width:100%;padding:18px;}
-.modal h2{font-size:17px;color:var(--g2);margin:0 0 12px;}
-.mrow{margin-bottom:10px;}
-.count{font-size:12px;color:#9bb0a3;margin-left:auto;}
+/* 割り当てモーダル */
+#asgWrap{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:9998;}
+#asgBox{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:12px;
+  width:min(680px,94vw);max-height:88vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,0.25);}
+#asgBox .hd{position:sticky;top:0;background:#eef4ef;border-bottom:1px solid var(--line);padding:12px 16px;font-weight:700;color:var(--g2);}
+#asgBox .bd{padding:14px 16px;}
+#asgBox .ft{position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);padding:12px 16px;display:flex;gap:8px;justify-content:flex-end;}
+.duty{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fbfdfb;}
+.duty .dh{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
+.duty .seg{font-weight:700;color:var(--g2);font-size:14px;}
+.duty .tm{font-size:12px;color:#6b7d72;}
+.crewline{display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap;}
+.crewline .lb{font-size:12px;color:#6b7d72;min-width:64px;}
+.crewline select{font-size:13px;padding:6px 8px;flex:1;min-width:150px;}
 </style>
 </head>
 <body>
 <header>
-  <div class="brand">📜 営業許可マスタ</div>
+  <div class="brand">👥 配置管理</div>
   <nav>
     <a href="index.html">ホーム</a>
-    <a href="keiro.html">通勤経路</a>
-    <a href="tenjo.html">配置</a>
     <a href="yotei.html">月間予定</a>
-    <a href="haichi.html">配置管理</a>
+    <a href="master.html">マスタ</a>
+    <a href="unkou.html">運行時程</a>
+    <a href="tenjo.html">配置(旧)</a>
   </nav>
 </header>
 <main>
-  <h1>営業許可マスタ</h1>
-  <p class="sub">関東運輸局の事業許可を一覧管理します。特定旅客（学校ごと）・一般乗用・一般貸切・一般貨物。許可証原本をもとに登録します。ここは記録用のマスタで、配置や日報とは自動連携していません。</p>
+  <h1>配置管理（添乗員・運転手）</h1>
+  <p class="sub">月間予定の<b>日課から自動で作られた便</b>に、担当者と車両を割り当てます。上部に<b>その日の必要人数・配置済・不足</b>が出ます。セルをクリックすると、その日そのコースの便ごとに割り当てできます。</p>
 
   <div id="status"></div>
 
-  <div class="chips" id="chips"></div>
-
-  <div class="toolbar">
-    <input type="text" id="q" placeholder="学校名・許可番号・区域で検索" style="max-width:320px;" oninput="render()">
-    <label class="row" style="font-size:13px;color:#6b7d72;gap:5px;"><input type="checkbox" id="showInactive" style="width:auto;" onchange="render()">失効も表示</label>
-    <span class="sp"></span>
-    <button class="primary" onclick="openEditor(null)">＋ 許可を追加</button>
+  <div class="tabs">
+    <div class="tab active" id="tabA" onclick="hSetTab('添乗員')">🧑‍🤝‍🧑 添乗員配置</div>
+    <div class="tab" id="tabD" onclick="hSetTab('運転手')">🚌 運転手配置</div>
   </div>
 
-  <div id="list"></div>
+  <div class="panel">
+    <div class="row" style="align-items:center;">
+      <label class="fld" style="margin:0;">対象月</label>
+      <input type="month" id="hMonth" style="width:auto;">
+      <input id="hFilter" type="text" placeholder="学校名・コース名でしぼり込み" style="flex:1;min-width:140px;">
+      <select id="hPref" style="width:auto;"><option value="">全都県</option><option value="東京都">東京都</option><option value="神奈川県">神奈川県</option></select>
+      <button class="primary" onclick="hSave()">💾 変更を保存</button>
+      <span id="hDirty" class="muted" style="font-size:12px;"></span>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <button class="mini" onclick="hGenerate()">🔄 この月の便を作成／更新</button>
+      <span class="muted" style="font-size:11px;">月間予定の日課をもとに便を作ります。既にある便はそのまま（担当者は消えません）。</span>
+    </div>
+    <div class="muted" style="font-size:11px;margin-top:6px;">
+      上部3行＝<b>必要</b>（コースごとの必要人数×便数）／<b>配置</b>（割り当て済み）／<b>不足</b>（赤は要対応）。<br>
+      セル内は便ごとの担当者。<b>登</b>=登校便／<b>①②</b>=下校便。未割り当ては「—」。土＝青／日祝＝赤。
+    </div>
+  </div>
+
+  <div id="hArea" style="overflow:auto;max-height:76vh;border:1px solid var(--line);border-radius:8px;background:#fff;"></div>
 </main>
 
-<div class="modal-bg" id="modalBg">
-  <div class="modal">
-    <h2 id="modalTitle">許可を追加</h2>
-    <div class="grid">
-      <div class="mrow"><label class="fld">種別</label>
-        <select id="f_category">
-          <option>特定旅客</option><option>一般乗用旅客</option><option>一般貸切旅客</option><option>一般貨物</option>
-        </select></div>
-      <div class="mrow"><label class="fld">許可番号</label><input type="text" id="f_permit_no" placeholder="例：関自旅一第1352号"></div>
-      <div class="mrow"><label class="fld">事業者番号</label><input type="text" id="f_operator_no" placeholder="例：4700000091"></div>
-      <div class="mrow"><label class="fld">代表取締役（許可時）</label><input type="text" id="f_representative" placeholder="例：八重樫弘道"></div>
-      <div class="mrow"><label class="fld">車体明記名称・対象</label><input type="text" id="f_target_name" placeholder="例：都立府中けやきの森学園"></div>
-      <div class="mrow"><label class="fld">学校名（コース突合用）</label><input type="text" id="f_school_name" placeholder="例：府中けやきの森学園"></div>
-      <div class="mrow"><label class="fld">運送の需要者</label><input type="text" id="f_demander" placeholder="例：東京都学校経営支援センター"></div>
-      <div class="mrow"><label class="fld">営業区域</label><input type="text" id="f_area" placeholder="例：東京都府中市"></div>
-      <div class="mrow"><label class="fld">申請日</label><input type="date" id="f_applied_on"></div>
-      <div class="mrow"><label class="fld">許可日</label><input type="date" id="f_granted_on"></div>
-      <div class="mrow"><label class="fld">限定条件</label><input type="text" id="f_restriction" placeholder="例：霊きゅう限定"></div>
-      <div class="mrow"><label class="fld">状態</label><select id="f_active"><option value="true">有効</option><option value="false">失効</option></select></div>
-    </div>
-    <div class="mrow"><label class="fld">メモ</label><textarea id="f_note" placeholder="補足・条件など"></textarea></div>
-    <div class="row" style="justify-content:space-between;margin-top:6px;">
-      <button class="link" id="delBtn" onclick="delPermit()" style="color:#b5453a;">この許可を削除</button>
-      <div class="row">
-        <button onclick="closeEditor()">キャンセル</button>
-        <button class="primary" onclick="savePermit()">保存</button>
-      </div>
+<div id="asgWrap" onclick="if(event.target===this) hCloseAsg()">
+  <div id="asgBox">
+    <div class="hd" id="asgTitle">割り当て</div>
+    <div class="bd" id="asgBody"></div>
+    <div class="ft">
+      <button onclick="hCloseAsg()">閉じる</button>
+      <button class="primary" onclick="hApplyAsg()">この日の割り当てを反映</button>
     </div>
   </div>
 </div>
@@ -144,18 +132,22 @@ function _getSession() {
   catch { return null; }
 }
 
-// --- ログイン自動更新（期限切れ防止）: 45分ごと＋タブ復帰時に更新。未ログイン時は何もしない ---
+function _clearSession() {
+  sessionStorage.removeItem('takao_session');
+  sessionStorage.removeItem('takao_role');
+  sessionStorage.removeItem('takao_name');
+  sessionStorage.removeItem('takao_permissions');
+  sessionStorage.removeItem('takao_mfa_enforced');
+}
+
+// refresh_token でアクセストークンを更新する（成功=true）。長時間開いても保存が切れないように使う
 async function refreshSession() {
   const s = _getSession();
   if (!s || !s.refresh_token) return false;
-  const _authBase = (typeof AUTH_URL !== 'undefined') ? AUTH_URL
-                  : ((typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : 'https://wxdyqkyqtizhtkwtpvru.supabase.co') + '/auth/v1');
-  const _apiKey = (typeof ANON_KEY !== 'undefined') ? ANON_KEY
-                : (typeof SUPABASE_KEY !== 'undefined' ? SUPABASE_KEY : '');
   try {
-    const res = await fetch(`${_authBase}/token?grant_type=refresh_token`, {
+    const res = await fetch(`${AUTH_URL}/token?grant_type=refresh_token`, {
       method: 'POST',
-      headers: { 'apikey': _apiKey, 'Content-Type': 'application/json' },
+      headers: { 'apikey': ANON_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh_token: s.refresh_token })
     });
     if (!res.ok) return false;
@@ -165,21 +157,12 @@ async function refreshSession() {
     return true;
   } catch { return false; }
 }
+// 期限が近い/切れていれば先に更新
 async function ensureFreshToken() {
   const s = _getSession();
   if (s && s.expires_at && (s.expires_at - 60) < Math.floor(Date.now() / 1000)) {
     await refreshSession();
   }
-}
-setInterval(() => { refreshSession(); }, 45 * 60 * 1000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureFreshToken(); });
-
-function _clearSession() {
-  sessionStorage.removeItem('takao_session');
-  sessionStorage.removeItem('takao_role');
-  sessionStorage.removeItem('takao_name');
-  sessionStorage.removeItem('takao_permissions');
-  sessionStorage.removeItem('takao_mfa_enforced');
 }
 
 function getPermissions() {
@@ -904,176 +887,348 @@ function _loadQRLib(cb) {
 
 </script>
 <script>
-/* ===== 営業許可マスタ ページロジック（元データ = permits テーブル） ===== */
-const CATS = ['特定旅客','一般乗用旅客','一般貸切旅客','一般貨物'];
-let PERMITS = [];
-let filterCat = 'すべて';
-let editingId = null;
-
+/* ===== 運行時程マスタ ページロジック ===== */
 function getH(){
   const s = _getSession();
   const tok = (s && s.access_token) || ANON_KEY;
   return { 'apikey': ANON_KEY, 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
 }
+// 保存等でトークン期限切れ(401)が起きたら、自動更新して1回だけ再送
+(function(){
+  var _origFetch = window.fetch.bind(window);
+  var _reauth = null;
+  function _reauthOnce(){ if(!_reauth){ _reauth = Promise.resolve(refreshSession()).finally(function(){ _reauth=null; }); } return _reauth; }
+  window.fetch = async function(input, init){
+    var res = await _origFetch(input, init);
+    try{
+      var u = (typeof input==='string') ? input : ((input && input.url) || '');
+      if(res.status===401 && u.indexOf('wxdyqkyqtizhtkwtpvru.supabase.co')!==-1 && u.indexOf('/auth/')===-1 && init){
+        var s=_getSession();
+        if(s && s.refresh_token && await _reauthOnce()){
+          var ns=_getSession(); var h=Object.assign({}, init.headers||{});
+          if(ns && ns.access_token) h['Authorization']='Bearer '+ns.access_token;
+          res = await _origFetch(input, Object.assign({}, init, {headers:h}));
+        }
+      }
+    }catch(e){}
+    return res;
+  };
+})();
+
+function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 function status(msg, ok){
   const el = document.getElementById('status');
   el.textContent = msg; el.className = ok ? 'ok' : 'err';
-  if (ok) setTimeout(() => { if (el.textContent === msg) el.className = ''; }, 4000);
+  if (ok) setTimeout(()=>{ if(el.textContent===msg) el.className=''; }, 4000);
 }
-function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function escA(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
-// 西暦ISO(YYYY-MM-DD) → 和暦表記
-const ERAS = [['令和',2018],['平成',1988],['昭和',1925]];
-function wareki(iso){
-  if(!iso) return '—';
-  const [y,m,d] = iso.split('-').map(Number);
-  for(const [name,base] of ERAS){
-    if(y - base >= 1){ const yy = y - base; return `${name}${yy===1?'元':yy}年${m}月${d}日`; }
+/* ===== 配置管理 ページロジック ===== */
+const WD = ['日','月','火','水','木','金','土'];
+let TAB = '添乗員';          // '添乗員' | '運転手'
+let CRS = [];                // コース一覧
+let DUTIES = {};             // 'cid|YYYY-MM-DD' -> [duty...]
+let CREW = {};               // duty_id -> [{id, staff_id, role}]
+let PEOPLE = { '添乗員': [], '運転手': [] };
+let DIRTY = {};              // 'duty_id|role|index' -> {duty_id, role, staff_id, orig_id}
+let CUR = null;              // 開いているセル {cid, date}
+
+function _p2(n){ return String(n).padStart(2,'0'); }
+function _ym(){ return document.getElementById('hMonth').value; }
+function _dim(ym){ const [y,m]=ym.split('-').map(Number); return new Date(y,m,0).getDate(); }
+function _hm(t){ if(!t) return ''; const m=/^(\d{1,2}):(\d{2})/.exec(String(t)); return m? (_p2(+m[1])+':'+m[2]) : String(t); }
+function _key(cid,date){ return cid+'|'+date; }
+
+// PostgREST は1回1000行までのため、1000件ずつ全件取得する
+async function _fetchAll(pathWithQuery){
+  const out=[]; let from=0; const step=1000;
+  for(;;){
+    const sep = pathWithQuery.indexOf('?')>=0?'&':'?';
+    const r = await fetch(`${REST_URL}/${pathWithQuery}${sep}limit=${step}&offset=${from}`, {headers:getH()});
+    if(!r.ok) break;
+    const rows = await r.json();
+    out.push(...rows);
+    if(rows.length<step) break;
+    from += step;
   }
-  return `${y}年${m}月${d}日`;
+  return out;
 }
 
-async function loadPermits(){
-  const res = await fetch(`${REST_URL}/permits?select=*&order=permit_type.asc,issue_date.desc,permit_number.asc`, { headers: getH() });
-  if(!res.ok){ status('許可の読み込みに失敗しました（'+res.status+'）', false); return; }
-  PERMITS = await res.json();
-}
-
-function catCounts(){
-  const c = { 'すべて': PERMITS.length };
-  CATS.forEach(k => c[k] = PERMITS.filter(p => p.permit_type === k).length);
-  return c;
-}
-function renderChips(){
-  const counts = catCounts();
-  const keys = ['すべて', ...CATS];
-  document.getElementById('chips').innerHTML = keys.map(k =>
-    `<button class="chip${filterCat===k?' active':''}" onclick="setCat('${k}')">${esc(k)}<span class="n">${counts[k]||0}</span></button>`
-  ).join('');
-}
-function setCat(k){ filterCat = k; renderChips(); render(); }
-
-function render(){
-  renderChips();
-  const q = (document.getElementById('q').value || '').trim().toLowerCase();
-  const showInactive = document.getElementById('showInactive').checked;
-  let rows = PERMITS.slice();
-  if(filterCat !== 'すべて') rows = rows.filter(p => p.permit_type === filterCat);
-  if(!showInactive) rows = rows.filter(p => p.active);
-  if(q){
-    rows = rows.filter(p => [p.permit_number,p.target_name,p.school_name,p.demander,p.area,p.restriction,p.note]
-      .some(v => (v||'').toLowerCase().includes(q)));
+// 日本の国民の祝日（固定日・ハッピーマンデー・春分/秋分・振替休日・国民の休日）
+function _jpHolidays(year){
+  const H={}; const set=(mm,dd,name)=>{ if(dd>=1&&dd<=31) H[`${year}-${_p2(mm)}-${_p2(dd)}`]=name; };
+  const nthMon=(mo,n)=>{ const first=new Date(year,mo-1,1).getDay(); return 1+((8-first)%7)+(n-1)*7; };
+  set(1,1,'元日'); set(1,nthMon(1,2),'成人の日'); set(2,11,'建国記念の日');
+  if(year>=2020) set(2,23,'天皇誕生日');
+  set(3, Math.floor(20.8431+0.242194*(year-1980)-Math.floor((year-1980)/4)),'春分の日');
+  set(4,29,'昭和の日'); set(5,3,'憲法記念日'); set(5,4,'みどりの日'); set(5,5,'こどもの日');
+  set(7, nthMon(7,3),'海の日');
+  if(year>=2016) set(8,11,'山の日');
+  set(9, nthMon(9,3),'敬老の日');
+  set(9, Math.floor(23.2488+0.242194*(year-1980)-Math.floor((year-1980)/4)),'秋分の日');
+  set(10, nthMon(10,2), year>=2020?'スポーツの日':'体育の日');
+  set(11,3,'文化の日'); set(11,23,'勤労感謝の日');
+  const base=Object.assign({},H); const DAY=86400000;
+  const kf=dt=>`${dt.getFullYear()}-${_p2(dt.getMonth()+1)}-${_p2(dt.getDate())}`;
+  for(let dt=new Date(year,0,1); dt.getFullYear()===year; dt=new Date(dt.getTime()+DAY)){
+    const k=kf(dt); if(base[k]) continue;
+    if(base[kf(new Date(dt.getTime()-DAY))] && base[kf(new Date(dt.getTime()+DAY))]) H[k]='国民の休日';
   }
-  const list = document.getElementById('list');
-  if(!rows.length){ list.innerHTML = '<p class="muted" style="padding:8px;">該当する許可がありません。</p>'; return; }
-  list.innerHTML = rows.map(pcard).join('');
+  Object.keys(base).forEach(k=>{ const a=k.split('-').map(Number); const dt=new Date(a[0],a[1]-1,a[2]);
+    if(dt.getDay()===0){ let n=new Date(dt.getTime()+DAY); while(H[kf(n)]) n=new Date(n.getTime()+DAY); H[kf(n)]='振替休日'; } });
+  return H;
 }
 
-function pcard(p){
-  const badge = p.permit_type==='特定旅客'
-    ? '<span class="badge tokutei">特定旅客</span>'
-    : `<span class="badge other">${esc(p.permit_type||'')}</span>`;
-  const off = p.active ? '' : '<span class="badge off">失効</span>';
-  const title = p.target_name || p.permit_type || '（無題）';
-  const meta = [];
-  if(p.area) meta.push(`<b>営業区域</b> ${esc(p.area)}`);
-  if(p.demander) meta.push(`<b>需要者</b> ${esc(p.demander)}`);
-  if(p.restriction) meta.push(`<b>限定</b> ${esc(p.restriction)}`);
-  meta.push(`<b>許可日</b> ${wareki(p.issue_date)}`);
-  if(p.applied_on) meta.push(`<b>申請日</b> ${wareki(p.applied_on)}`);
-  if(p.expiry_date) meta.push(`<b>有効期限</b> ${wareki(p.expiry_date)}`);
-  if(p.operator_no) meta.push(`<b>事業者番号</b> ${esc(p.operator_no)}`);
-  if(p.representative) meta.push(`<b>代表</b> ${esc(p.representative)}`);
-  const note = p.note ? `<div class="note2">📝 ${esc(p.note)}</div>` : '';
-  return `<div class="pcard">
-    <div class="top">
-      <div>
-        <div class="no">${esc(p.permit_number)}</div>
-        <div class="title">${esc(title)}${badge}${off}</div>
-      </div>
-      <button class="mini" onclick="openEditor(${p.id})">編集</button>
-    </div>
-    <div class="meta">${meta.join('　／　')}</div>
-    ${note}
-  </div>`;
+/* ---------- 読み込み ---------- */
+async function hLoadBase(){
+  CRS = await _fetchAll('courses?select=id,prefecture,school_name,course_name,active,driver_count,attendant_count&order=prefecture,school_name,course_name');
+  // 従業員（業務種別で添乗員／運転手を振り分け）
+  const staff = await _fetchAll('staff?select=id,name,active&active=eq.true&order=name');
+  const jt    = await _fetchAll('job_types?select=id,name');
+  const ejt   = await _fetchAll('employee_job_types?select=employee_id,job_type_id');
+  const attId = new Set(jt.filter(j=>String(j.name).indexOf('添乗員')>=0).map(j=>j.id));
+  const drvId = new Set(jt.filter(j=>String(j.name).indexOf('運転手')>=0).map(j=>j.id));
+  const byId  = {}; staff.forEach(s=>byId[s.id]=s);
+  const att=new Set(), drv=new Set();
+  ejt.forEach(e=>{ if(attId.has(e.job_type_id)) att.add(e.employee_id); if(drvId.has(e.job_type_id)) drv.add(e.employee_id); });
+  PEOPLE['添乗員'] = staff.filter(s=>att.has(s.id));
+  PEOPLE['運転手'] = staff.filter(s=>drv.has(s.id));
 }
 
-/* ---- 追加・編集モーダル ---- */
-function setVal(id,v){ document.getElementById(id).value = (v==null?'':v); }
-function openEditor(id){
-  editingId = id;
-  const p = id ? PERMITS.find(x => x.id === id) : null;
-  document.getElementById('modalTitle').textContent = p ? '許可を編集' : '許可を追加';
-  document.getElementById('delBtn').style.display = p ? 'inline-block' : 'none';
-  setVal('f_category', p ? p.permit_type : '特定旅客');
-  setVal('f_permit_no', p && p.permit_number);
-  setVal('f_operator_no', p ? p.operator_no : '4700000091');
-  setVal('f_representative', p ? p.representative : '八重樫弘道');
-  setVal('f_target_name', p && p.target_name);
-  setVal('f_school_name', p && p.school_name);
-  setVal('f_demander', p && p.demander);
-  setVal('f_area', p && p.area);
-  setVal('f_applied_on', p && p.applied_on);
-  setVal('f_granted_on', p && p.issue_date);
-  setVal('f_restriction', p && p.restriction);
-  setVal('f_note', p && p.note);
-  document.getElementById('f_active').value = (p && p.active===false) ? 'false' : 'true';
-  document.getElementById('modalBg').classList.add('show');
+async function hLoadMonth(){
+  const ym=_ym(); if(!ym) return;
+  const start=ym+'-01', end=ym+'-'+_p2(_dim(ym));
+  DUTIES={}; CREW={}; DIRTY={};
+  // 乗務は埋め込みで一緒に取る（IDをURLに並べると長さ上限を超えるため）
+  const ds = await _fetchAll(`duties?work_date=gte.${start}&work_date=lte.${end}&select=id,work_date,course_id,segment,seq,start_time,driver_need,attendant_need,duty_crew(id,staff_id,role)&order=course_id,work_date,seq`);
+  ds.forEach(d=>{
+    (DUTIES[_key(d.course_id,d.work_date)] = DUTIES[_key(d.course_id,d.work_date)]||[]).push(d);
+    const cw = Array.isArray(d.duty_crew) ? d.duty_crew : [];
+    if(cw.length) CREW[d.id] = cw.map(c=>({ id:c.id, duty_id:d.id, staff_id:c.staff_id, role:c.role }));
+  });
+  _dirtyView();
 }
-function closeEditor(){ document.getElementById('modalBg').classList.remove('show'); editingId = null; }
 
-function collect(){
-  const g = id => { const v = document.getElementById(id).value.trim(); return v===''?null:v; };
-  return {
-    permit_type: document.getElementById('f_category').value,
-    permit_number: g('f_permit_no'),
-    operator_no: g('f_operator_no'),
-    representative: g('f_representative'),
-    target_name: g('f_target_name'),
-    school_name: g('f_school_name'),
-    demander: g('f_demander'),
-    area: g('f_area'),
-    applied_on: g('f_applied_on'),
-    issue_date: g('f_granted_on'),
-    restriction: g('f_restriction'),
-    note: g('f_note'),
-    active: document.getElementById('f_active').value === 'true'
-  };
+/* ---------- 集計 ---------- */
+function _needOf(d){ return TAB==='添乗員' ? (d.attendant_need||0) : (d.driver_need||0); }
+function _crewOf(d){ return (CREW[d.id]||[]).filter(c=>c.role===TAB); }
+function _dayTotals(list, date){
+  let need=0, got=0; const persons=new Set();
+  list.forEach(c=>{
+    (DUTIES[_key(c.id,date)]||[]).forEach(d=>{
+      need += _needOf(d);
+      const cw=_crewOf(d); got += cw.length;
+      cw.forEach(x=>persons.add(x.staff_id));
+    });
+  });
+  return { need, got, lack: need-got, persons: persons.size };
 }
-async function savePermit(){
-  const body = collect();
-  if(!body.permit_number){ status('許可番号は必須です', false); return; }
-  try{
-    let res;
-    if(editingId){
-      res = await fetch(`${REST_URL}/permits?id=eq.${editingId}`, { method:'PATCH', headers: getH(), body: JSON.stringify(body) });
-    }else{
-      res = await fetch(`${REST_URL}/permits`, { method:'POST', headers: getH(), body: JSON.stringify(body) });
+
+/* ---------- 表示 ---------- */
+function _nameOf(sid){
+  const p = PEOPLE[TAB].find(x=>x.id===sid);
+  if(p) return p.name;
+  const q = PEOPLE[TAB==='添乗員'?'運転手':'添乗員'].find(x=>x.id===sid);
+  return q ? q.name : ('ID'+sid);
+}
+function _segShort(seg){
+  if(seg==='登校') return '登';
+  if(seg && seg.indexOf('下校')===0) return seg.replace('下校','');
+  return seg||'';
+}
+function _cellHtml(cid,date){
+  const ds = DUTIES[_key(cid,date)]||[];
+  if(!ds.length) return '<span style="color:#c3cec7;">—</span>';
+  const parts = ds.filter(d=>_needOf(d)>0).map(d=>{
+    const need=_needOf(d), cw=_crewOf(d);
+    const names = cw.length ? cw.map(c=>escHtml(_nameOf(c.staff_id))).join('・') : '—';
+    const col = cw.length ? (cw.length<need ? '#e0821a' : '#2d4a38') : '#c0392b';
+    return `<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${col};">`
+         + `<b style="font-size:10px;color:#5a7a65;">${escHtml(_segShort(d.segment))}</b> ${names}</div>`;
+  });
+  // 運行はあるがこの役割は不要（例：神奈川の登校専用マイクロは添乗員0名）
+  if(!parts.length) return '<span style="color:#c3cec7;font-size:10px;">不要</span>';
+  return parts.join('');
+}
+
+function hRender(){
+  const ym=_ym(); if(!ym) return;
+  const [y,m]=ym.split('-').map(Number); const dim=_dim(ym); const HOL=_jpHolidays(y);
+  const q=(document.getElementById('hFilter').value||'').trim();
+  const pref=document.getElementById('hPref').value;
+  const list=CRS.filter(c=>c.active&&(!pref||c.prefecture===pref)&&(!q||((c.school_name||'')+(c.course_name||'')).indexOf(q)!==-1));
+
+  const hcell=(txt,bg,col,extra)=>`<th style="position:sticky;top:0;z-index:3;background:${bg};border:1px solid #d7e2da;padding:2px 3px;font-size:11px;color:${col};min-width:76px;${extra||''}">${txt}</th>`;
+  let head=`<tr><th style="position:sticky;left:0;top:0;z-index:5;background:#eef4ef;border:1px solid #d7e2da;padding:4px 8px;font-size:12px;min-width:190px;text-align:left;">学校 ／ コース</th>`;
+  for(let d=1; d<=dim; d++){
+    const date=`${ym}-${_p2(d)}`; const wd=new Date(y,m-1,d).getDay(); const hol=HOL[date];
+    const col=(wd===0||hol)?'#c0392b': wd===6?'#2673c0':'#2d4a38';
+    const bg=(wd===0||wd===6||hol)?'#f0f3f0':'#eef4ef';
+    head+=hcell(`${d}<br>${WD[wd]}${hol?'<br><span style="font-size:8px;font-weight:700;">祝</span>':''}`, bg, col);
+  }
+  head+='</tr>';
+
+  // サマリー3行（必要／配置／不足）
+  const sumRow=(label,fn,base)=>{
+    let r=`<td style="position:sticky;left:0;z-index:2;background:${base};border:1px solid #d7e2da;padding:3px 8px;font-size:12px;font-weight:700;color:#2d4a38;">${label}</td>`;
+    for(let d=1; d<=dim; d++){
+      const date=`${ym}-${_p2(d)}`; const t=_dayTotals(list,date);
+      r+=fn(t,date);
     }
-    if(!res.ok){ const t = await res.text(); status('保存に失敗しました：'+t.slice(0,140), false); return; }
-    closeEditor(); await loadPermits(); render(); status('保存しました', true);
-  }catch(e){ status('保存エラー：'+e.message, false); }
-}
-async function delPermit(){
-  if(!editingId) return;
-  const p = PERMITS.find(x => x.id === editingId);
-  if(!confirm(`この許可を削除します。よろしいですか？\n\n${p?p.permit_number:''}　${p?(p.target_name||p.permit_type):''}`)) return;
-  try{
-    const res = await fetch(`${REST_URL}/permits?id=eq.${editingId}`, { method:'DELETE', headers: getH() });
-    if(!res.ok){ status('削除に失敗しました', false); return; }
-    closeEditor(); await loadPermits(); render(); status('削除しました', true);
-  }catch(e){ status('削除エラー：'+e.message, false); }
+    return `<tr>${r}</tr>`;
+  };
+  const rowNeed = sumRow('必要人数', t=>`<td style="border:1px solid #d7e2da;background:#f7faf8;text-align:center;font-size:12px;padding:2px;">${t.need||''}</td>`, '#f7faf8');
+  const rowGot  = sumRow('配置済',   t=>`<td style="border:1px solid #d7e2da;background:#f7faf8;text-align:center;font-size:12px;padding:2px;">${t.need?t.got:''}</td>`, '#f7faf8');
+  const rowLack = sumRow('不足',     t=>{
+      if(!t.need) return `<td style="border:1px solid #d7e2da;background:#f7faf8;padding:2px;"></td>`;
+      const v=t.lack;
+      const st = v>0 ? 'background:#fdeceb;color:#c0392b;font-weight:700;' : 'background:#eef7ef;color:#2f7d32;';
+      return `<td style="border:1px solid #d7e2da;text-align:center;font-size:12px;padding:2px;${st}">${v>0?('▲'+v):'0'}</td>`;
+    }, '#f7faf8');
+
+  const rows=list.map(c=>{
+    let tds=`<td style="position:sticky;left:0;z-index:2;background:#fff;border:1px solid #e2ede6;padding:4px 8px;font-size:12px;min-width:190px;">${escHtml((c.school_name||'')+' ／ '+(c.course_name||''))}</td>`;
+    for(let d=1; d<=dim; d++){
+      const date=`${ym}-${_p2(d)}`; const wd=new Date(y,m-1,d).getDay(); const isHol=!!HOL[date];
+      const has=(DUTIES[_key(c.id,date)]||[]).length>0;
+      tds+=`<td onclick="${has?`hOpenAsg(${c.id},'${date}')`:''}" style="border:1px solid #e2ede6;padding:2px 3px;min-width:76px;vertical-align:top;font-size:11px;`
+         + `background:${(wd===0||wd===6||isHol)?'#fafbfa':'#fff'};${has?'cursor:pointer;':''}">${_cellHtml(c.id,date)}</td>`;
+    }
+    return `<tr>${tds}</tr>`;
+  }).join('');
+
+  document.getElementById('hArea').innerHTML = list.length
+    ? `<table style="border-collapse:separate;border-spacing:0;"><thead>${head}${rowNeed}${rowGot}${rowLack}</thead><tbody>${rows}</tbody></table>`
+    : '<p class="muted" style="padding:16px;">該当コースなし</p>';
 }
 
+/* ---------- タブ ---------- */
+function hSetTab(t){
+  TAB=t;
+  document.getElementById('tabA').className = 'tab'+(t==='添乗員'?' active':'');
+  document.getElementById('tabD').className = 'tab'+(t==='運転手'?' active':'');
+  hRender();
+}
+
+/* ---------- 割り当てモーダル ---------- */
+function hOpenAsg(cid,date){
+  const ds=(DUTIES[_key(cid,date)]||[]).filter(d=>_needOf(d)>0);
+  if(!ds.length){ status('この日は'+TAB+'の必要がありません', true); return; }
+  CUR={cid,date};
+  const c=CRS.find(x=>x.id===cid)||{};
+  const [y,m,dd]=date.split('-').map(Number);
+  document.getElementById('asgTitle').textContent =
+    `${m}月${dd}日(${WD[new Date(y,m-1,dd).getDay()]})　${c.school_name||''} ／ ${c.course_name||''}　［${TAB}］`;
+
+  const opts = PEOPLE[TAB].map(p=>`<option value="${p.id}">${escHtml(p.name)}</option>`).join('');
+  let h='';
+  ds.forEach(d=>{
+    const need=_needOf(d); const cw=_crewOf(d);
+    h+=`<div class="duty"><div class="dh"><span class="seg">${escHtml(d.segment)}</span>`
+      +`<span class="tm">${d.start_time?escHtml(_hm(d.start_time))+' 発':''}</span>`
+      +`<span class="muted">必要 ${need}名</span></div>`;
+    for(let i=0;i<need;i++){
+      const cur = cw[i] ? cw[i].staff_id : '';
+      h+=`<div class="crewline"><span class="lb">${TAB}${need>1?(i+1):''}</span>`
+        +`<select id="asg_${d.id}_${i}" data-duty="${d.id}" data-idx="${i}">`
+        +`<option value="">（未割り当て）</option>${opts}</select></div>`;
+    }
+    h+='</div>';
+  });
+  document.getElementById('asgBody').innerHTML=h;
+  // 現在値を反映（optionを組んだ後に設定）
+  ds.forEach(d=>{
+    const cw=_crewOf(d); const need=_needOf(d);
+    for(let i=0;i<need;i++){
+      const el=document.getElementById(`asg_${d.id}_${i}`);
+      if(el && cw[i]) el.value=String(cw[i].staff_id);
+    }
+  });
+  document.getElementById('asgWrap').style.display='block';
+}
+function hCloseAsg(){ document.getElementById('asgWrap').style.display='none'; CUR=null; }
+
+// モーダルの内容を画面上のデータへ反映（保存は「変更を保存」で）
+function hApplyAsg(){
+  if(!CUR) return;
+  const ds=(DUTIES[_key(CUR.cid,CUR.date)]||[]).filter(d=>_needOf(d)>0);
+  ds.forEach(d=>{
+    const need=_needOf(d);
+    const before=_crewOf(d);
+    const after=[];
+    for(let i=0;i<need;i++){
+      const el=document.getElementById(`asg_${d.id}_${i}`);
+      const v=el&&el.value?parseInt(el.value,10):null;
+      if(v) after.push(v);
+    }
+    // 同じ人の重複は1人だけ残す
+    const uniq=[...new Set(after)];
+    const others=(CREW[d.id]||[]).filter(c=>c.role!==TAB);
+    CREW[d.id]= others.concat(uniq.map((sid,i)=>{
+      const old=before[i];
+      return { id: (old&&old.staff_id===sid)?old.id:null, duty_id:d.id, staff_id:sid, role:TAB };
+    }));
+    DIRTY['d'+d.id+'|'+TAB] = { duty_id:d.id, role:TAB };
+  });
+  hCloseAsg(); hRender(); _dirtyView();
+}
+function _dirtyView(){
+  const n=Object.keys(DIRTY).length;
+  const el=document.getElementById('hDirty');
+  if(el) el.textContent = n? `未保存 ${n}件`:'';
+}
+
+/* ---------- 保存 ---------- */
+async function hSave(){
+  const keys=Object.keys(DIRTY);
+  if(!keys.length){ status('変更はありません', true); return; }
+  try{
+    for(const k of keys){
+      const {duty_id, role} = DIRTY[k];
+      // その便・その役割の行を入れ替える（削除→挿入）
+      const del = await fetch(`${REST_URL}/duty_crew?duty_id=eq.${duty_id}&role=eq.${encodeURIComponent(role)}`, { method:'DELETE', headers:getH() });
+      if(!del.ok){ status('保存に失敗しました：'+(await del.text()).slice(0,120), false); return; }
+      const rows=(CREW[duty_id]||[]).filter(c=>c.role===role).map(c=>({duty_id:duty_id, staff_id:c.staff_id, role:role}));
+      if(rows.length){
+        const ins = await fetch(`${REST_URL}/duty_crew`, { method:'POST', headers:getH(), body:JSON.stringify(rows) });
+        if(!ins.ok){ status('保存に失敗しました：'+(await ins.text()).slice(0,120), false); return; }
+      }
+    }
+    DIRTY={}; _dirtyView();
+    await hLoadMonth(); hRender();
+    status('保存しました', true);
+  }catch(e){ status('保存に失敗しました：'+e.message, false); }
+}
+
+/* ---------- 便の生成 ---------- */
+async function hGenerate(){
+  const ym=_ym(); if(!ym){ status('対象月を選んでください', false); return; }
+  const start=ym+'-01', end=ym+'-'+_p2(_dim(ym));
+  if(!confirm(`${ym} の便を月間予定から作成します。\n既にある便はそのまま（担当者は消えません）。よろしいですか？`)) return;
+  try{
+    const r = await fetch(`${REST_URL}/rpc/generate_duties`, { method:'POST', headers:getH(), body:JSON.stringify({p_start:start, p_end:end}) });
+    const t = await r.text();
+    if(!r.ok){ status('作成に失敗しました：'+t.slice(0,150), false); return; }
+    let j={}; try{ j=JSON.parse(t); }catch(e){}
+    await hLoadMonth(); hRender();
+    status(`便を作成しました（新規 ${j.created??'?'}件／この月の合計 ${j.total_now??'?'}件）`, true);
+  }catch(e){ status('作成に失敗しました：'+e.message, false); }
+}
+
+/* ---------- 起動 ---------- */
 document.addEventListener('DOMContentLoaded', async () => {
   const ok = await initAuth(['super_admin','admin','operator','staff']);
-  if(!ok) return;
+  if (!ok) return;
+  const now=new Date();
+  document.getElementById('hMonth').value = `${now.getFullYear()}-${_p2(now.getMonth()+1)}`;
+  document.getElementById('hMonth').addEventListener('change', async ()=>{ await hLoadMonth(); hRender(); });
+  document.getElementById('hFilter').addEventListener('input', hRender);
+  document.getElementById('hPref').addEventListener('change', hRender);
   try{
-    await loadPermits();
-    render();
-    status('準備ができました。', true);
-  }catch(e){ status('データ読み込みエラー：'+e.message, false); }
+    await hLoadBase();
+    await hLoadMonth();
+    hRender();
+  }catch(e){ status('読み込みに失敗しました：'+e.message, false); }
 });
 </script>
 </body>
