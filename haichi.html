@@ -95,9 +95,20 @@ button.mini{font-size:12px;padding:6px 10px;}
   <div id="asgBox">
     <div class="hd" id="asgTitle">割り当て</div>
     <div class="bd" id="asgBody"></div>
-    <div class="ft">
-      <button onclick="hCloseAsg()">閉じる</button>
-      <button class="primary" onclick="hApplyAsg()">この日の割り当てを反映</button>
+    <div class="ft" style="flex-wrap:wrap;justify-content:space-between;">
+      <div class="row" style="gap:6px;">
+        <span class="muted" style="font-size:12px;">反映先</span>
+        <select id="asgScope" style="width:auto;font-size:13px;padding:6px 8px;">
+          <option value="day">この日だけ</option>
+          <option value="dow">今月の同じ曜日すべて</option>
+          <option value="rest">今月のこの日以降すべて</option>
+          <option value="all">今月すべて</option>
+        </select>
+      </div>
+      <div class="row" style="gap:6px;">
+        <button onclick="hCloseAsg()">閉じる</button>
+        <button class="primary" onclick="hApplyAsg()">反映する</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1121,16 +1132,18 @@ function hOpenAsg(cid,date){
     `${m}月${dd}日(${WD[new Date(y,m-1,dd).getDay()]})　${c.school_name||''} ／ ${c.course_name||''}　［${TAB}］`;
 
   const opts = PEOPLE[TAB].map(p=>`<option value="${p.id}">${escHtml(p.name)}</option>`).join('');
-  let h='';
+  let h=`<div class="row" style="gap:6px;margin-bottom:10px;">`
+      + `<button class="mini" onclick="hCopyPrev()">📋 前の運行日と同じにする</button>`
+      + `<button class="mini" onclick="hClearAsg()">✖ この日をすべて空に</button>`
+      + `<span class="muted" style="font-size:11px;">登校便で選ぶと、空いている下校便にも自動で入ります</span></div>`;
   ds.forEach(d=>{
     const need=_needOf(d); const cw=_crewOf(d);
     h+=`<div class="duty"><div class="dh"><span class="seg">${escHtml(d.segment)}</span>`
       +`<span class="tm">${d.start_time?escHtml(_hm(d.start_time))+' 発':''}</span>`
       +`<span class="muted">必要 ${need}名</span></div>`;
     for(let i=0;i<need;i++){
-      const cur = cw[i] ? cw[i].staff_id : '';
       h+=`<div class="crewline"><span class="lb">${TAB}${need>1?(i+1):''}</span>`
-        +`<select id="asg_${d.id}_${i}" data-duty="${d.id}" data-idx="${i}">`
+        +`<select id="asg_${d.id}_${i}" data-duty="${d.id}" data-idx="${i}" onchange="hAutoFill(${d.id},${i})">`
         +`<option value="">（未割り当て）</option>${opts}</select></div>`;
     }
     h+='</div>';
@@ -1148,29 +1161,116 @@ function hOpenAsg(cid,date){
 }
 function hCloseAsg(){ document.getElementById('asgWrap').style.display='none'; CUR=null; }
 
-// モーダルの内容を画面上のデータへ反映（保存は「変更を保存」で）
-function hApplyAsg(){
+// 登校便で選んだ人を、空いている他の便の同じ枠へ自動で入れる（手数を減らす）
+function hAutoFill(dutyId, idx){
   if(!CUR) return;
   const ds=(DUTIES[_key(CUR.cid,CUR.date)]||[]).filter(d=>_needOf(d)>0);
+  const src=ds.find(d=>d.id===dutyId);
+  if(!src || src.segment!=='登校') return;
+  const el=document.getElementById(`asg_${dutyId}_${idx}`);
+  const v=el?el.value:'';
+  if(!v) return;
   ds.forEach(d=>{
-    const need=_needOf(d);
-    const before=_crewOf(d);
-    const after=[];
-    for(let i=0;i<need;i++){
+    if(d.id===dutyId) return;
+    const t=document.getElementById(`asg_${d.id}_${idx}`);
+    if(t && !t.value) t.value=v;      // 既に入っている欄は上書きしない
+  });
+}
+
+// モーダルの選択内容を { 便区分: [staff_id...] } で取り出す
+function _collectFromModal(){
+  const ds=(DUTIES[_key(CUR.cid,CUR.date)]||[]).filter(d=>_needOf(d)>0);
+  const map={};
+  ds.forEach(d=>{
+    const arr=[];
+    for(let i=0;i<_needOf(d);i++){
       const el=document.getElementById(`asg_${d.id}_${i}`);
       const v=el&&el.value?parseInt(el.value,10):null;
-      if(v) after.push(v);
+      if(v) arr.push(v);
     }
-    // 同じ人の重複は1人だけ残す
-    const uniq=[...new Set(after)];
+    map[d.segment]=[...new Set(arr)];   // 同じ人の重複は1人だけ
+  });
+  return map;
+}
+
+// 割り当てを1日ぶん適用（便区分でつき合わせるので、日課が違う日でも安全）
+function _applyMapToDate(cid,date,map){
+  const ds=(DUTIES[_key(cid,date)]||[]).filter(d=>_needOf(d)>0);
+  ds.forEach(d=>{
+    if(!(d.segment in map)) return;    // その日に無い便は触らない
+    const sids=(map[d.segment]||[]).slice(0,_needOf(d));
+    const before=_crewOf(d);
     const others=(CREW[d.id]||[]).filter(c=>c.role!==TAB);
-    CREW[d.id]= others.concat(uniq.map((sid,i)=>{
-      const old=before[i];
-      return { id: (old&&old.staff_id===sid)?old.id:null, duty_id:d.id, staff_id:sid, role:TAB };
+    CREW[d.id]= others.concat(sids.map(sid=>{
+      const old=before.find(o=>o.staff_id===sid);
+      return { id: old?old.id:null, duty_id:d.id, staff_id:sid, role:TAB };
     }));
     DIRTY['d'+d.id+'|'+TAB] = { duty_id:d.id, role:TAB };
   });
+}
+
+// 反映先の日付一覧
+function _targetDates(scope){
+  const ym=_ym(); const dim=_dim(ym); const [y,m]=ym.split('-').map(Number);
+  const curD=parseInt(CUR.date.slice(8),10);
+  const curDow=new Date(y,m-1,curD).getDay();
+  const out=[];
+  for(let d=1; d<=dim; d++){
+    const date=`${ym}-${_p2(d)}`;
+    if(scope==='day'  && d!==curD) continue;
+    if(scope==='dow'  && new Date(y,m-1,d).getDay()!==curDow) continue;
+    if(scope==='rest' && d<curD) continue;
+    if(!(DUTIES[_key(CUR.cid,date)]||[]).length) continue;   // 運行のない日は対象外
+    out.push(date);
+  }
+  return out;
+}
+
+// モーダルの内容を画面上のデータへ反映（保存は「変更を保存」で）
+function hApplyAsg(){
+  if(!CUR) return;
+  const scope=(document.getElementById('asgScope')||{}).value || 'day';
+  const map=_collectFromModal();
+  const dates=_targetDates(scope);
+  dates.forEach(dt=>_applyMapToDate(CUR.cid,dt,map));
+  const n=dates.length;
   hCloseAsg(); hRender(); _dirtyView();
+  status(n>1 ? `${n}日ぶんに反映しました（まだ保存していません）` : '反映しました（まだ保存していません）', true);
+}
+
+// 前の運行日と同じ割り当てをモーダルに読み込む
+function hCopyPrev(){
+  if(!CUR) return;
+  const ym=_ym(); const curD=parseInt(CUR.date.slice(8),10);
+  let src=null;
+  for(let d=curD-1; d>=1; d--){
+    const date=`${ym}-${_p2(d)}`;
+    const ds=(DUTIES[_key(CUR.cid,date)]||[]).filter(x=>_needOf(x)>0);
+    if(ds.length && ds.some(x=>_crewOf(x).length)){ src=date; break; }
+  }
+  if(!src){ status('この月に、コピーできる前の運行日がありません', false); return; }
+  const map={};
+  (DUTIES[_key(CUR.cid,src)]||[]).forEach(d=>{ map[d.segment]=_crewOf(d).map(c=>c.staff_id); });
+  const ds=(DUTIES[_key(CUR.cid,CUR.date)]||[]).filter(d=>_needOf(d)>0);
+  ds.forEach(d=>{
+    const sids=map[d.segment]||[];
+    for(let i=0;i<_needOf(d);i++){
+      const el=document.getElementById(`asg_${d.id}_${i}`);
+      if(el) el.value = sids[i]?String(sids[i]):'';
+    }
+  });
+  status(src.slice(5)+' の割り当てを読み込みました。内容を確かめて「反映する」を押してください', true);
+}
+
+// この日の選択をすべて空にする（モーダル上のみ。反映するまで確定しない）
+function hClearAsg(){
+  if(!CUR) return;
+  (DUTIES[_key(CUR.cid,CUR.date)]||[]).filter(d=>_needOf(d)>0).forEach(d=>{
+    for(let i=0;i<_needOf(d);i++){
+      const el=document.getElementById(`asg_${d.id}_${i}`);
+      if(el) el.value='';
+    }
+  });
 }
 function _dirtyView(){
   const n=Object.keys(DIRTY).length;
