@@ -1154,7 +1154,9 @@ function hOpenAsg(cid,date){
     const cw=_crewOf(d); const need=_needOf(d);
     for(let i=0;i<need;i++){
       const el=document.getElementById(`asg_${d.id}_${i}`);
-      if(el && cw[i]) el.value=String(cw[i].staff_id);
+      if(!el) continue;
+      if(cw[i]) el.value=String(cw[i].staff_id);
+      el.dataset.prev=el.value;      // 連動判定のため、開いた時点の値を覚えておく
     }
   });
   document.getElementById('asgWrap').style.display='block';
@@ -1168,12 +1170,18 @@ function hAutoFill(dutyId, idx){
   const src=ds.find(d=>d.id===dutyId);
   if(!src || src.segment!=='登校') return;
   const el=document.getElementById(`asg_${dutyId}_${idx}`);
-  const v=el?el.value:'';
-  if(!v) return;
+  if(!el) return;
+  const v=el.value;
+  const prev=el.dataset.prev||'';   // 選び直す前の登校便の担当者
+  el.dataset.prev=v;
+  if(!v) return;                    // 登校便を空に戻したときは他を触らない
   ds.forEach(d=>{
     if(d.id===dutyId) return;
     const t=document.getElementById(`asg_${d.id}_${idx}`);
-    if(t && !t.value) t.value=v;      // 既に入っている欄は上書きしない
+    if(!t) return;
+    // 空欄、または「さっきまで登校便と同じだった欄」だけ追従させる。
+    // 個別に別の人へ変えてある下校便はそのまま残す。
+    if(!t.value || (prev && t.value===prev)){ t.value=v; t.dataset.prev=v; }
   });
 }
 
@@ -1256,7 +1264,7 @@ function hCopyPrev(){
     const sids=map[d.segment]||[];
     for(let i=0;i<_needOf(d);i++){
       const el=document.getElementById(`asg_${d.id}_${i}`);
-      if(el) el.value = sids[i]?String(sids[i]):'';
+      if(el){ el.value = sids[i]?String(sids[i]):''; el.dataset.prev=el.value; }
     }
   });
   status(src.slice(5)+' の割り当てを読み込みました。内容を確かめて「反映する」を押してください', true);
@@ -1268,7 +1276,7 @@ function hClearAsg(){
   (DUTIES[_key(CUR.cid,CUR.date)]||[]).filter(d=>_needOf(d)>0).forEach(d=>{
     for(let i=0;i<_needOf(d);i++){
       const el=document.getElementById(`asg_${d.id}_${i}`);
-      if(el) el.value='';
+      if(el){ el.value=''; el.dataset.prev=''; }
     }
   });
 }
