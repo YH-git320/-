@@ -941,6 +941,7 @@ let CRS = [];                // コース一覧
 let DUTIES = {};             // 'cid|YYYY-MM-DD' -> [duty...]
 let CREW = {};               // duty_id -> [{id, staff_id, role}]
 let PEOPLE = { '添乗員': [], '運転手': [] };
+let HIST = {};               // 'course_id|役割|便区分' -> [{staff_id,cnt,last_date}]（回数の多い順）
 let DIRTY = {};              // 'duty_id|role|index' -> {duty_id, role, staff_id, orig_id}
 let CUR = null;              // 開いているセル {cid, date}
 
@@ -1004,6 +1005,49 @@ async function hLoadBase(){
   ejt.forEach(e=>{ if(attId.has(e.job_type_id)) att.add(e.employee_id); if(drvId.has(e.job_type_id)) drv.add(e.employee_id); });
   PEOPLE['添乗員'] = staff.filter(s=>att.has(s.id));
   PEOPLE['運転手'] = staff.filter(s=>drv.has(s.id));
+  await hLoadHist();
+}
+
+// コースごとの乗務実績（誰が何回乗ったか）。候補の並び順に使う
+async function hLoadHist(){
+  HIST={};
+  try{
+    const r = await fetch(`${REST_URL}/rpc/get_crew_history`, { method:'POST', headers:getH(), body:JSON.stringify({}) });
+    if(!r.ok) return;
+    (await r.json()).forEach(x=>{
+      const k = x.course_id+'|'+x.role+'|'+(x.seg_group||'');
+      (HIST[k]=HIST[k]||[]).push({ staff_id:x.staff_id, cnt:x.cnt, last_date:x.last_date });
+    });
+  }catch(e){ /* 履歴が取れなくても配置はできる */ }
+}
+
+// 便区分（下校①②はまとめて「下校」）
+function _segGroup(seg){
+  if(seg==='登校') return '登校';
+  if(seg && seg.indexOf('下校')===0) return '下校';
+  return seg||'';
+}
+
+// 選択肢：このコースの「その便」で過去に乗った人を先頭に、その後ろに全員（名前順）
+function _optsFor(cid, segment){
+  const sg = _segGroup(segment);
+  const all = PEOPLE[TAB] || [];
+  const byId = {}; all.forEach(p=>byId[p.id]=p);
+  const hist = (HIST[cid+'|'+TAB+'|'+sg]||[]).filter(x=>byId[x.staff_id]);
+  let h = '<option value="">（未割り当て）</option>';
+  if(hist.length){
+    h += `<optgroup label="このコースの${sg}便で過去に乗った人">`;
+    hist.forEach(x=>{
+      const p = byId[x.staff_id];
+      const d = x.last_date ? String(x.last_date).slice(5).replace('-','/') : '';
+      h += `<option value="${p.id}">${escHtml(p.name)}　（${x.cnt}回${d?'・直近'+d:''}）</option>`;
+    });
+    h += '</optgroup>';
+  }
+  h += '<optgroup label="すべて（名前順）">'
+     + all.map(p=>`<option value="${p.id}">${escHtml(p.name)}</option>`).join('')
+     + '</optgroup>';
+  return h;
 }
 
 async function hLoadMonth(){
@@ -1131,20 +1175,20 @@ function hOpenAsg(cid,date){
   document.getElementById('asgTitle').textContent =
     `${m}月${dd}日(${WD[new Date(y,m-1,dd).getDay()]})　${c.school_name||''} ／ ${c.course_name||''}　［${TAB}］`;
 
-  const opts = PEOPLE[TAB].map(p=>`<option value="${p.id}">${escHtml(p.name)}</option>`).join('');
   let h=`<div class="row" style="gap:6px;margin-bottom:10px;">`
       + `<button class="mini" onclick="hCopyPrev()">📋 前の運行日と同じにする</button>`
       + `<button class="mini" onclick="hClearAsg()">✖ この日をすべて空に</button>`
       + `<span class="muted" style="font-size:11px;">登校便で選ぶと、空いている下校便にも自動で入ります</span></div>`;
   ds.forEach(d=>{
     const need=_needOf(d); const cw=_crewOf(d);
+    const opts=_optsFor(cid, d.segment);   // 便ごとに候補を組む（登校便／下校便で実績が違うため）
     h+=`<div class="duty"><div class="dh"><span class="seg">${escHtml(d.segment)}</span>`
       +`<span class="tm">${d.start_time?escHtml(_hm(d.start_time))+' 発':''}</span>`
       +`<span class="muted">必要 ${need}名</span></div>`;
     for(let i=0;i<need;i++){
       h+=`<div class="crewline"><span class="lb">${TAB}${need>1?(i+1):''}</span>`
         +`<select id="asg_${d.id}_${i}" data-duty="${d.id}" data-idx="${i}" onchange="hAutoFill(${d.id},${i})">`
-        +`<option value="">（未割り当て）</option>${opts}</select></div>`;
+        +`${opts}</select></div>`;
     }
     h+='</div>';
   });
@@ -1303,7 +1347,7 @@ async function hSave(){
       }
     }
     DIRTY={}; _dirtyView();
-    await hLoadMonth(); hRender();
+    await hLoadMonth(); await hLoadHist(); hRender();
     status('保存しました', true);
   }catch(e){ status('保存に失敗しました：'+e.message, false); }
 }
