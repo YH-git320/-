@@ -1010,27 +1010,44 @@ async function hLoadBase(){
   PEOPLE['添乗員'] = staff.filter(s=>att.has(s.id));
   PEOPLE['運転手'] = staff.filter(s=>drv.has(s.id));
   // 車両
-  VEH = await _fetchAll('vehicles?select=id,vehicle_number,vehicle_model,capacity,active&active=eq.true&order=vehicle_number');
+  VEH = await _fetchAll('vehicles_with_office?select=id,vehicle_number,vehicle_model,permit_type,capacity,current_office_name,active&active=eq.true&order=vehicle_number');
   VEHBY = {}; VEH.forEach(v=>VEHBY[v.id]=v);
   await hLoadHist();
 }
 
-function _vehLabel(id){
+// 車両の表示名。full=true で 車種名・許可・車庫・定員まで出す
+function _vehLabel(id, full){
   const v = VEHBY[id];
   if(!v) return '';
-  return (v.vehicle_number||('車両'+id)) + (v.vehicle_model? '　'+v.vehicle_model : '');
+  const num = v.vehicle_number || ('車両'+id);
+  if(!full) return num + (v.vehicle_model ? '　'+v.vehicle_model : '');
+  const p = [];
+  if(v.vehicle_model)        p.push(v.vehicle_model);
+  if(v.permit_type)          p.push(v.permit_type);
+  if(v.current_office_name)  p.push(v.current_office_name);
+  if(v.capacity)             p.push(v.capacity+'人');
+  return num + (p.length ? '　'+p.join('・') : '');
 }
-// 車両の選択肢：そのコースのいつもの車両を先頭に、その後ろに全車両
+// 車両の選択肢：いつもの車両を先頭に、その後ろは許可種別ごとにまとめる
 function _vehOptsFor(cid){
   const c = CRS.find(x=>x.id===cid) || {};
   const def = c.vehicle_id;
   let h = '<option value="">（未設定）</option>';
   if(def && VEHBY[def]){
-    h += `<optgroup label="このコースのいつもの車両"><option value="${def}">${escHtml(_vehLabel(def))}</option></optgroup>`;
+    h += `<optgroup label="このコースのいつもの車両"><option value="${def}">${escHtml(_vehLabel(def,true))}</option></optgroup>`;
   }
-  h += '<optgroup label="すべての車両">'
-     + VEH.map(v=>`<option value="${v.id}">${escHtml(_vehLabel(v.id))}${v.capacity?('（'+v.capacity+'人）'):''}</option>`).join('')
-     + '</optgroup>';
+  const groups = {};
+  VEH.forEach(v=>{ const k = v.permit_type || '（許可未設定）'; (groups[k]=groups[k]||[]).push(v); });
+  const order = ['特定','貸切','請負','介護','自家用'];
+  const keys = Object.keys(groups).sort((a,b)=>{
+    const ia=order.indexOf(a), ib=order.indexOf(b);
+    return (ia<0?99:ia)-(ib<0?99:ib) || a.localeCompare(b,'ja');
+  });
+  keys.forEach(k=>{
+    h += `<optgroup label="${escAttr(k)}（${groups[k].length}台）">`
+       + groups[k].map(v=>`<option value="${v.id}">${escHtml(_vehLabel(v.id,true))}</option>`).join('')
+       + '</optgroup>';
+  });
   return h;
 }
 
