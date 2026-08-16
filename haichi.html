@@ -67,6 +67,8 @@ button.mini{font-size:12px;padding:6px 10px;}
   <div class="tabs">
     <div class="tab active" id="tabA" onclick="hSetTab('添乗員')">🧑‍🤝‍🧑 添乗員配置</div>
     <div class="tab" id="tabD" onclick="hSetTab('運転手')">🚌 運転手配置</div>
+    <div class="tab" id="tabP" onclick="hSetTab('人別')">👤 人別</div>
+    <div class="tab" id="tabV" onclick="hSetTab('車両別')">🚍 車両別</div>
   </div>
 
   <div class="panel">
@@ -85,7 +87,8 @@ button.mini{font-size:12px;padding:6px 10px;}
     <div class="muted" style="font-size:11px;margin-top:6px;">
       上部3行＝<b>必要</b>（コースごとの必要人数×便数）／<b>配置</b>（割り当て済み）／<b>不足</b>（赤は要対応）。<br>
       セル内は便ごとの担当者。<b>登</b>=登校便／<b>①②</b>=下校便。未割り当ては「—」。土＝青／日祝＝赤。<br>
-      車両は各コースの<b>いつもの車両</b>が自動で入ります。代車など違う車両にした便があると、セルに <b style="color:#8a5a1a;">🚌 車両番号</b> が出ます（車両の変更はその日その便だけに反映されます）。
+      車両は各コースの<b>いつもの車両</b>が自動で入ります。代車など違う車両にした便があると、セルに <b style="color:#8a5a1a;">🚌 車両番号</b> が出ます（車両の変更はその日その便だけに反映されます）。<br>
+      <b>👤人別</b>＝その人の1か月（🚌運転手／🧑添乗員のアイコンつき。横断業務もまとめて見えます）。<b>🚍車両別</b>＝その車の1か月（<span style="color:#8a5a1a;">茶色</span>＝いつものコース以外＝代車で入っている日）。どちらも閲覧用で、割り当ての編集は配置タブから行います。
     </div>
   </div>
 
@@ -1158,7 +1161,32 @@ function _cellHtml(cid,date){
   return parts.join('') + subHtml;
 }
 
+// コース名を短く（例：中野特別支援学校/富士見コース → 中野/富士見）
+function _courseShort(cid){
+  const c=CRS.find(x=>x.id===cid); if(!c) return '';
+  const sch=(c.school_name||'').replace(/特別支援学校|支援学校|ろう学校|学園/g,'');
+  const crs=(c.course_name||'').replace(/コース$/,'');
+  return sch+'/'+crs;
+}
+function _courseFull(cid){
+  const c=CRS.find(x=>x.id===cid); if(!c) return '';
+  return (c.school_name||'')+' / '+(c.course_name||'');
+}
+// 日付ヘッダ（3つの表示で共通）
+function _headHtml(ym,y,m,dim,HOL,firstLabel){
+  let head=`<tr><th style="position:sticky;left:0;top:0;z-index:5;background:#eef4ef;border:1px solid #d7e2da;padding:4px 8px;font-size:12px;min-width:190px;text-align:left;">${firstLabel}</th>`;
+  for(let d=1; d<=dim; d++){
+    const date=`${ym}-${_p2(d)}`; const wd=new Date(y,m-1,d).getDay(); const hol=HOL[date];
+    const col=(wd===0||hol)?'#c0392b': wd===6?'#2673c0':'#2d4a38';
+    const bg=(wd===0||wd===6||hol)?'#f0f3f0':'#eef4ef';
+    head+=`<th title="${hol?escAttr(hol):''}" style="position:sticky;top:0;z-index:3;background:${bg};border:1px solid #d7e2da;padding:2px 3px;font-size:11px;color:${col};min-width:76px;">${d}<br>${WD[wd]}${hol?'<br><span style="font-size:8px;font-weight:700;">祝</span>':''}</th>`;
+  }
+  return head+'</tr>';
+}
+
 function hRender(){
+  if(TAB==='人別'){ hRenderPerson(); return; }
+  if(TAB==='車両別'){ hRenderVehicle(); return; }
   const ym=_ym(); if(!ym) return;
   const [y,m]=ym.split('-').map(Number); const dim=_dim(ym); const HOL=_jpHolidays(y);
   const q=(document.getElementById('hFilter').value||'').trim();
@@ -1209,11 +1237,123 @@ function hRender(){
     : '<p class="muted" style="padding:16px;">該当コースなし</p>';
 }
 
+/* ---------- 人別（誰が・いつ・どこに乗るか） ---------- */
+function _buildPersonIndex(){
+  const idx={};   // staff_id -> { 'YYYY-MM-DD': [{cid,segment,role}] }
+  Object.keys(DUTIES).forEach(k=>{
+    DUTIES[k].forEach(d=>{
+      (CREW[d.id]||[]).forEach(c=>{
+        const p = idx[c.staff_id] = idx[c.staff_id] || {};
+        (p[d.work_date] = p[d.work_date] || []).push({cid:d.course_id, segment:d.segment, role:c.role});
+      });
+    });
+  });
+  return idx;
+}
+function _jobCellHtml(items){
+  if(!items || !items.length) return '';
+  // 同じコース・同じ役割はまとめて「登①②」のように便をつなげる
+  const g={};
+  items.forEach(it=>{ const k=it.cid+'|'+it.role; (g[k]=g[k]||{cid:it.cid, role:it.role, segs:[]}).segs.push(_segShort(it.segment)); });
+  return Object.keys(g).map(k=>{
+    const x=g[k];
+    const icon = x.role==='運転手' ? '🚌' : x.role==='添乗員' ? '🧑' : '📘';
+    return `<div title="${escAttr(_courseFull(x.cid)+'　'+x.role)}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px;color:#2d4a38;">`
+         + `${icon}${escHtml(_courseShort(x.cid))} <b>${escHtml(x.segs.join(''))}</b></div>`;
+  }).join('');
+}
+function hRenderPerson(){
+  const ym=_ym(); if(!ym) return;
+  const [y,m]=ym.split('-').map(Number); const dim=_dim(ym); const HOL=_jpHolidays(y);
+  const q=(document.getElementById('hFilter').value||'').trim();
+  const idx=_buildPersonIndex();
+  const all=[...(PEOPLE['添乗員']||[]), ...(PEOPLE['運転手']||[])];
+  const byId={}; all.forEach(p=>byId[p.id]=p);
+  let list=Object.keys(idx).map(id=>byId[id]||{id:Number(id), name:'ID'+id}).filter(p=>!q||(p.name||'').indexOf(q)!==-1);
+  list.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ja'));
+
+  const head=_headHtml(ym,y,m,dim,HOL,'従業員（この月に乗務あり）');
+  let sum=`<td style="position:sticky;left:0;z-index:2;background:#f7faf8;border:1px solid #d7e2da;padding:3px 8px;font-size:12px;font-weight:700;color:#2d4a38;">稼働人数</td>`;
+  for(let d=1; d<=dim; d++){
+    const date=`${ym}-${_p2(d)}`;
+    let n=0; Object.keys(idx).forEach(sid=>{ if((idx[sid][date]||[]).length) n++; });
+    sum+=`<td style="border:1px solid #d7e2da;background:#f7faf8;text-align:center;font-size:12px;padding:2px;">${n||''}</td>`;
+  }
+  const rows=list.map(p=>{
+    let tds=`<td style="position:sticky;left:0;z-index:2;background:#fff;border:1px solid #e2ede6;padding:4px 8px;font-size:12px;min-width:190px;">${escHtml(p.name||'')}</td>`;
+    for(let d=1; d<=dim; d++){
+      const date=`${ym}-${_p2(d)}`; const wd=new Date(y,m-1,d).getDay(); const isHol=!!HOL[date];
+      const items=(idx[p.id]||{})[date]||[];
+      tds+=`<td style="border:1px solid #e2ede6;padding:2px 3px;min-width:76px;vertical-align:top;background:${(wd===0||wd===6||isHol)?'#fafbfa':'#fff'};">`
+         + (items.length? _jobCellHtml(items) : '<span style="color:#e6ebe8;font-size:10px;">—</span>') + '</td>';
+    }
+    return `<tr>${tds}</tr>`;
+  }).join('');
+  document.getElementById('hArea').innerHTML = list.length
+    ? `<table style="border-collapse:separate;border-spacing:0;"><thead>${head}<tr>${sum}</tr></thead><tbody>${rows}</tbody></table>`
+    : '<p class="muted" style="padding:16px;">この月に乗務のある従業員はまだいません（配置を保存すると出てきます）</p>';
+  _dirtyView();
+}
+
+/* ---------- 車両別（どの車が・いつ・どこを走るか） ---------- */
+function hRenderVehicle(){
+  const ym=_ym(); if(!ym) return;
+  const [y,m]=ym.split('-').map(Number); const dim=_dim(ym); const HOL=_jpHolidays(y);
+  const q=(document.getElementById('hFilter').value||'').trim();
+  const idx={};   // vehicle_id -> { date: [duty...] }
+  Object.keys(DUTIES).forEach(k=>{
+    DUTIES[k].forEach(d=>{
+      if(!d.vehicle_id) return;
+      const v = idx[d.vehicle_id] = idx[d.vehicle_id] || {};
+      (v[d.work_date] = v[d.work_date] || []).push(d);
+    });
+  });
+  let list=Object.keys(idx).map(id=>VEHBY[id]||{id:Number(id), vehicle_number:'車両'+id})
+    .filter(v=>!q||((v.vehicle_number||'')+(v.current_office_name||'')).indexOf(q)!==-1);
+  list.sort((a,b)=>String(a.vehicle_number||'').localeCompare(String(b.vehicle_number||''),'ja'));
+
+  const head=_headHtml(ym,y,m,dim,HOL,'車両（この月に運行あり）');
+  let sum=`<td style="position:sticky;left:0;z-index:2;background:#f7faf8;border:1px solid #d7e2da;padding:3px 8px;font-size:12px;font-weight:700;color:#2d4a38;">稼働台数</td>`;
+  for(let d=1; d<=dim; d++){
+    const date=`${ym}-${_p2(d)}`;
+    let n=0; Object.keys(idx).forEach(vid=>{ if((idx[vid][date]||[]).length) n++; });
+    sum+=`<td style="border:1px solid #d7e2da;background:#f7faf8;text-align:center;font-size:12px;padding:2px;">${n||''}</td>`;
+  }
+  const rows=list.map(v=>{
+    const sub=`${escHtml(v.vehicle_number||'')}<span class="muted" style="font-size:10px;">　${escHtml([v.permit_type,v.current_office_name].filter(Boolean).join('・'))}</span>`;
+    let tds=`<td style="position:sticky;left:0;z-index:2;background:#fff;border:1px solid #e2ede6;padding:4px 8px;font-size:12px;min-width:190px;">${sub}</td>`;
+    for(let d=1; d<=dim; d++){
+      const date=`${ym}-${_p2(d)}`; const wd=new Date(y,m-1,d).getDay(); const isHol=!!HOL[date];
+      const ds=(idx[v.id]||{})[date]||[];
+      const g={}; ds.forEach(x=>{ (g[x.course_id]=g[x.course_id]||[]).push(_segShort(x.segment)); });
+      const inner=Object.keys(g).map(cid=>{
+        const c=CRS.find(x=>x.id===Number(cid))||{};
+        const other = c.vehicle_id && c.vehicle_id!==v.id;   // このコースのいつもの車ではない＝代車で入っている
+        return `<div title="${escAttr(_courseFull(Number(cid)))}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px;color:${other?'#8a5a1a':'#2d4a38'};">`
+             + `${escHtml(_courseShort(Number(cid)))} <b>${escHtml(g[cid].join(''))}</b></div>`;
+      }).join('');
+      tds+=`<td style="border:1px solid #e2ede6;padding:2px 3px;min-width:76px;vertical-align:top;background:${(wd===0||wd===6||isHol)?'#fafbfa':'#fff'};">`
+         + (inner || '<span style="color:#e6ebe8;font-size:10px;">—</span>') + '</td>';
+    }
+    return `<tr>${tds}</tr>`;
+  }).join('');
+  document.getElementById('hArea').innerHTML = list.length
+    ? `<table style="border-collapse:separate;border-spacing:0;"><thead>${head}<tr>${sum}</tr></thead><tbody>${rows}</tbody></table>`
+    : '<p class="muted" style="padding:16px;">この月に運行のある車両がありません</p>';
+  _dirtyView();
+}
+
 /* ---------- タブ ---------- */
 function hSetTab(t){
   TAB=t;
   document.getElementById('tabA').className = 'tab'+(t==='添乗員'?' active':'');
   document.getElementById('tabD').className = 'tab'+(t==='運転手'?' active':'');
+  document.getElementById('tabP').className = 'tab'+(t==='人別'?' active':'');
+  document.getElementById('tabV').className = 'tab'+(t==='車両別'?' active':'');
+  const f=document.getElementById('hFilter');
+  if(f) f.placeholder = (t==='人別') ? '氏名でしぼり込み'
+                      : (t==='車両別') ? '車番・車庫でしぼり込み'
+                      : '学校名・コース名でしぼり込み';
   hRender();
 }
 
