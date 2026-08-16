@@ -84,7 +84,8 @@ button.mini{font-size:12px;padding:6px 10px;}
     </div>
     <div class="muted" style="font-size:11px;margin-top:6px;">
       上部3行＝<b>必要</b>（コースごとの必要人数×便数）／<b>配置</b>（割り当て済み）／<b>不足</b>（赤は要対応）。<br>
-      セル内は便ごとの担当者。<b>登</b>=登校便／<b>①②</b>=下校便。未割り当ては「—」。土＝青／日祝＝赤。
+      セル内は便ごとの担当者。<b>登</b>=登校便／<b>①②</b>=下校便。未割り当ては「—」。土＝青／日祝＝赤。<br>
+      車両は各コースの<b>いつもの車両</b>が自動で入ります。代車など違う車両にした便があると、セルに <b style="color:#8a5a1a;">🚌 車両番号</b> が出ます（車両の変更はその日その便だけに反映されます）。
     </div>
   </div>
 
@@ -942,6 +943,9 @@ let DUTIES = {};             // 'cid|YYYY-MM-DD' -> [duty...]
 let CREW = {};               // duty_id -> [{id, staff_id, role}]
 let PEOPLE = { '添乗員': [], '運転手': [] };
 let HIST = {};               // 'course_id|役割|便区分' -> [{staff_id,cnt,last_date}]（回数の多い順）
+let VEH = [];                // 車両一覧
+let VEHBY = {};              // vehicle_id -> 車両
+let DIRTYV = {};             // duty_id -> vehicle_id（車両の変更ぶん）
 let DIRTY = {};              // 'duty_id|role|index' -> {duty_id, role, staff_id, orig_id}
 let CUR = null;              // 開いているセル {cid, date}
 
@@ -993,7 +997,7 @@ function _jpHolidays(year){
 
 /* ---------- 読み込み ---------- */
 async function hLoadBase(){
-  CRS = await _fetchAll('courses?select=id,prefecture,school_name,course_name,active,driver_count,attendant_count&order=prefecture,school_name,course_name');
+  CRS = await _fetchAll('courses?select=id,prefecture,school_name,course_name,active,driver_count,attendant_count,vehicle_id&order=prefecture,school_name,course_name');
   // 従業員（業務種別で添乗員／運転手を振り分け）
   const staff = await _fetchAll('staff?select=id,name,active&active=eq.true&order=name');
   const jt    = await _fetchAll('job_types?select=id,name');
@@ -1005,7 +1009,29 @@ async function hLoadBase(){
   ejt.forEach(e=>{ if(attId.has(e.job_type_id)) att.add(e.employee_id); if(drvId.has(e.job_type_id)) drv.add(e.employee_id); });
   PEOPLE['添乗員'] = staff.filter(s=>att.has(s.id));
   PEOPLE['運転手'] = staff.filter(s=>drv.has(s.id));
+  // 車両
+  VEH = await _fetchAll('vehicles?select=id,vehicle_number,vehicle_model,capacity,active&active=eq.true&order=vehicle_number');
+  VEHBY = {}; VEH.forEach(v=>VEHBY[v.id]=v);
   await hLoadHist();
+}
+
+function _vehLabel(id){
+  const v = VEHBY[id];
+  if(!v) return '';
+  return (v.vehicle_number||('車両'+id)) + (v.vehicle_model? '　'+v.vehicle_model : '');
+}
+// 車両の選択肢：そのコースのいつもの車両を先頭に、その後ろに全車両
+function _vehOptsFor(cid){
+  const c = CRS.find(x=>x.id===cid) || {};
+  const def = c.vehicle_id;
+  let h = '<option value="">（未設定）</option>';
+  if(def && VEHBY[def]){
+    h += `<optgroup label="このコースのいつもの車両"><option value="${def}">${escHtml(_vehLabel(def))}</option></optgroup>`;
+  }
+  h += '<optgroup label="すべての車両">'
+     + VEH.map(v=>`<option value="${v.id}">${escHtml(_vehLabel(v.id))}${v.capacity?('（'+v.capacity+'人）'):''}</option>`).join('')
+     + '</optgroup>';
+  return h;
 }
 
 // コースごとの乗務実績（誰が何回乗ったか）。候補の並び順に使う
@@ -1053,9 +1079,9 @@ function _optsFor(cid, segment){
 async function hLoadMonth(){
   const ym=_ym(); if(!ym) return;
   const start=ym+'-01', end=ym+'-'+_p2(_dim(ym));
-  DUTIES={}; CREW={}; DIRTY={};
+  DUTIES={}; CREW={}; DIRTY={}; DIRTYV={};
   // 乗務は埋め込みで一緒に取る（IDをURLに並べると長さ上限を超えるため）
-  const ds = await _fetchAll(`duties?work_date=gte.${start}&work_date=lte.${end}&select=id,work_date,course_id,segment,seq,start_time,driver_need,attendant_need,duty_crew(id,staff_id,role)&order=course_id,work_date,seq`);
+  const ds = await _fetchAll(`duties?work_date=gte.${start}&work_date=lte.${end}&select=id,work_date,course_id,segment,seq,start_time,driver_need,attendant_need,vehicle_id,duty_crew(id,staff_id,role)&order=course_id,work_date,seq`);
   ds.forEach(d=>{
     (DUTIES[_key(d.course_id,d.work_date)] = DUTIES[_key(d.course_id,d.work_date)]||[]).push(d);
     const cw = Array.isArray(d.duty_crew) ? d.duty_crew : [];
@@ -1101,9 +1127,18 @@ function _cellHtml(cid,date){
     return `<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${col};">`
          + `<b style="font-size:10px;color:#5a7a65;">${escHtml(_segShort(d.segment))}</b> ${names}</div>`;
   });
+  // いつもと違う車両（代車）の便があれば、その旨をセルに出す
+  const c = CRS.find(x=>x.id===cid) || {};
+  const sub = ds.filter(d=>d.vehicle_id && c.vehicle_id && d.vehicle_id!==c.vehicle_id);
+  let subHtml='';
+  if(sub.length){
+    const names=[...new Set(sub.map(d=>_vehLabel(d.vehicle_id).split('　')[0]))].join('・');
+    const segs=sub.map(d=>_segShort(d.segment)).join('');
+    subHtml=`<div title="いつもと違う車両（${escAttr(segs)}）" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#8a5a1a;font-size:9px;">🚌 ${escHtml(names)}</div>`;
+  }
   // 運行はあるがこの役割は不要（例：神奈川の登校専用マイクロは添乗員0名）
-  if(!parts.length) return '<span style="color:#c3cec7;font-size:10px;">不要</span>';
-  return parts.join('');
+  if(!parts.length) return '<span style="color:#c3cec7;font-size:10px;">不要</span>' + subHtml;
+  return parts.join('') + subHtml;
 }
 
 function hRender(){
@@ -1185,6 +1220,9 @@ function hOpenAsg(cid,date){
     h+=`<div class="duty"><div class="dh"><span class="seg">${escHtml(d.segment)}</span>`
       +`<span class="tm">${d.start_time?escHtml(_hm(d.start_time))+' 発':''}</span>`
       +`<span class="muted">必要 ${need}名</span></div>`;
+    // 車両（便ごと。代車の日はここだけ変える）
+    h+=`<div class="crewline"><span class="lb">🚌 車両</span>`
+      +`<select id="veh_${d.id}">${_vehOptsFor(cid)}</select></div>`;
     for(let i=0;i<need;i++){
       h+=`<div class="crewline"><span class="lb">${TAB}${need>1?(i+1):''}</span>`
         +`<select id="asg_${d.id}_${i}" data-duty="${d.id}" data-idx="${i}" onchange="hAutoFill(${d.id},${i})">`
@@ -1202,6 +1240,8 @@ function hOpenAsg(cid,date){
       if(cw[i]) el.value=String(cw[i].staff_id);
       el.dataset.prev=el.value;      // 連動判定のため、開いた時点の値を覚えておく
     }
+    const ve=document.getElementById(`veh_${d.id}`);
+    if(ve) ve.value = d.vehicle_id ? String(d.vehicle_id) : '';
   });
   document.getElementById('asgWrap').style.display='block';
 }
@@ -1285,6 +1325,13 @@ function hApplyAsg(){
   const map=_collectFromModal();
   const dates=_targetDates(scope);
   dates.forEach(dt=>_applyMapToDate(CUR.cid,dt,map));
+  // 車両は「その日のその便だけ」に適用する（代車が他の日に広がらないように）
+  (DUTIES[_key(CUR.cid,CUR.date)]||[]).filter(d=>_needOf(d)>0).forEach(d=>{
+    const ve=document.getElementById(`veh_${d.id}`);
+    if(!ve) return;
+    const v = ve.value ? parseInt(ve.value,10) : null;
+    if(v !== (d.vehicle_id||null)){ d.vehicle_id = v; DIRTYV[d.id]=v; }
+  });
   const n=dates.length;
   hCloseAsg(); hRender(); _dirtyView();
   status(n>1 ? `${n}日ぶんに反映しました（まだ保存していません）` : '反映しました（まだ保存していません）', true);
@@ -1325,7 +1372,7 @@ function hClearAsg(){
   });
 }
 function _dirtyView(){
-  const n=Object.keys(DIRTY).length;
+  const n=Object.keys(DIRTY).length + Object.keys(DIRTYV).length;
   const el=document.getElementById('hDirty');
   if(el) el.textContent = n? `未保存 ${n}件`:'';
 }
@@ -1333,8 +1380,17 @@ function _dirtyView(){
 /* ---------- 保存 ---------- */
 async function hSave(){
   const keys=Object.keys(DIRTY);
-  if(!keys.length){ status('変更はありません', true); return; }
+  const vkeys=Object.keys(DIRTYV);
+  if(!keys.length && !vkeys.length){ status('変更はありません', true); return; }
   try{
+    // 車両（duties 側の更新）
+    for(const id of vkeys){
+      const r = await fetch(`${REST_URL}/duties?id=eq.${id}`, {
+        method:'PATCH', headers:getH(),
+        body: JSON.stringify({ vehicle_id: DIRTYV[id], updated_at: new Date().toISOString() })
+      });
+      if(!r.ok){ status('車両の保存に失敗しました：'+(await r.text()).slice(0,120), false); return; }
+    }
     for(const k of keys){
       const {duty_id, role} = DIRTY[k];
       // その便・その役割の行を入れ替える（削除→挿入）
@@ -1346,7 +1402,7 @@ async function hSave(){
         if(!ins.ok){ status('保存に失敗しました：'+(await ins.text()).slice(0,120), false); return; }
       }
     }
-    DIRTY={}; _dirtyView();
+    DIRTY={}; DIRTYV={}; _dirtyView();
     await hLoadMonth(); await hLoadHist(); hRender();
     status('保存しました', true);
   }catch(e){ status('保存に失敗しました：'+e.message, false); }
