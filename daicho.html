@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>通勤経路マスタ — 高尾輸送サービス</title>
+<title>車両管理台帳 — 高尾輸送サービス</title>
 <style>
 :root{--g:#4d7a5e;--g2:#2d4a38;--bg:#f5f8f4;--line:#e0e6e0;}
 *{box-sizing:border-box;}
@@ -11,76 +11,137 @@ body{margin:0;font-family:'Noto Sans JP','Hiragino Kaku Gothic Pro','Meiryo',san
 header{background:#fff;border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
 header .brand{font-size:16px;font-weight:700;color:var(--g2);}
 header nav a{color:var(--g);text-decoration:none;font-size:13px;margin-right:12px;}
-main{max-width:840px;margin:0 auto;padding:16px;}
+main{max-width:1180px;margin:0 auto;padding:16px;}
 h1{font-size:19px;color:var(--g2);margin:0 0 4px;}
 .sub{font-size:13px;color:#6b7d72;margin:0 0 16px;line-height:1.6;}
 .panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px;}
-label.fld{display:block;font-size:13px;color:#6b7d72;margin-bottom:5px;}
-select,input{font-family:inherit;font-size:15px;padding:9px 10px;border:1px solid #c9d3cc;border-radius:8px;background:#fff;color:#2d3b35;}
+select,input,textarea{font-family:inherit;font-size:15px;padding:9px 10px;border:1px solid #c9d3cc;border-radius:8px;background:#fff;color:#2d3b35;}
 select,input[type=text]{width:100%;}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
 button{font-family:inherit;font-size:14px;padding:9px 14px;border:1px solid var(--g);background:#fff;color:var(--g);border-radius:8px;cursor:pointer;}
 button.primary{background:var(--g);color:#fff;}
 button.mini{font-size:12px;padding:6px 10px;}
-button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
-.courseCard{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px;background:#fff;}
-.courseHead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;}
-.courseTitle{font-size:16px;font-weight:700;color:var(--g2);}
-.tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
-.tab{font-size:13px;padding:7px 11px;border:1px solid #c9d3cc;border-radius:8px;background:#fff;color:#6b7d72;cursor:pointer;}
-.tab.active{border:2px solid var(--g);color:var(--g2);background:#eef4ef;font-weight:700;}
-.seg{border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;background:#fbfdfb;}
-.seg .line{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;}
-.seg .mode{min-width:100px;width:auto;}
-.seg .st{flex:1;min-width:110px;}
-.arrow{color:#9bb0a3;font-size:16px;}
-.total{display:flex;justify-content:space-between;align-items:center;padding-top:10px;margin-top:4px;border-top:1px solid var(--line);}
-.total .amt{font-size:18px;font-weight:700;color:var(--g2);}
+button.danger{border-color:#c0392b;color:#c0392b;}
 .muted{color:#9bb0a3;font-size:12px;}
 #status{font-size:13px;padding:9px 12px;border-radius:8px;margin-bottom:12px;display:none;}
 #status.ok{display:block;background:#eef7ef;color:#2f7d32;border:1px solid #bfe3c0;}
 #status.err{display:block;background:#fdeceb;color:#b5453a;border:1px solid #f3c3bf;}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
+.tab{font-size:14px;padding:8px 16px;border:1px solid #c9d3cc;border-radius:8px;background:#fff;color:#6b7d72;cursor:pointer;}
+.tab.active{border:2px solid var(--g);color:var(--g2);background:#eef4ef;font-weight:700;}
+table.list{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;}
+table.list th{position:sticky;top:0;z-index:2;background:#eef4ef;border:1px solid #d7e2da;padding:6px 8px;font-size:12px;color:#2d4a38;text-align:left;white-space:nowrap;}
+table.list td{border:1px solid #e2ede6;padding:6px 8px;vertical-align:top;}
+table.list tr:hover td{background:#f7faf8;}
+.tag{display:inline-block;font-size:10px;font-weight:700;padding:1px 7px;border-radius:5px;white-space:nowrap;}
+.t-shaken{background:#e8eefc;color:#2b4c9b;}
+.t-3m{background:#eef7ef;color:#2f7d32;}
+.t-12m{background:#e3f3e8;color:#1f7a43;}
+.t-repair{background:#fdeceb;color:#b5453a;}
+.t-seibi{background:#fef3e2;color:#b7770a;}
+.t-jiko{background:#fbe2e2;color:#c0392b;}
+.t-other{background:#eceff0;color:#5a6b62;}
+.warn{background:#fdeceb;color:#c0392b;font-weight:700;}
+.soon{background:#fef3e2;color:#b7770a;font-weight:700;}
+.okbg{background:#eef7ef;color:#2f7d32;}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.kpi{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+.kpi .box{flex:1;min-width:140px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px;}
+.kpi .box .lb{font-size:11px;color:#6b7d72;}
+.kpi .box .vl{font-size:18px;font-weight:700;color:var(--g2);margin-top:2px;}
+/* 入力モーダル */
+#mdWrap{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:9998;}
+#mdBox{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:12px;
+  width:min(760px,95vw);max-height:90vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,0.25);}
+#mdBox .hd{position:sticky;top:0;background:#eef4ef;border-bottom:1px solid var(--line);padding:12px 16px;font-weight:700;color:var(--g2);}
+#mdBox .bd{padding:14px 16px;}
+#mdBox .ft{position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);padding:12px 16px;display:flex;gap:8px;justify-content:space-between;}
+.fld{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;}
+.fld label{font-size:12px;color:#6b7d72;min-width:92px;}
+.fld input,.fld select,.fld textarea{flex:1;min-width:120px;font-size:13px;padding:7px 9px;}
+.fld .s{flex:0 0 130px;min-width:110px;}
+.grp{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fbfdfb;}
+.grp .gt{font-size:12px;font-weight:700;color:var(--g2);margin-bottom:8px;}
 </style>
 </head>
 <body>
 <header>
-  <div class="brand">🚌 通勤経路マスタ</div>
+  <div class="brand">🔧 車両管理台帳</div>
   <nav>
     <a href="index.html">ホーム</a>
-    <a href="master.html">マスタ</a>
-    <a href="tenjo.html">配置</a>
-    <a href="yotei.html">月間予定</a>
     <a href="haichi.html">配置管理</a>
-    <a href="daicho.html">車両台帳</a>
+    <a href="yotei.html">月間予定</a>
+    <a href="master.html">マスタ</a>
+    <a href="unkou.html">運行時程</a>
   </nav>
 </header>
 <main>
-  <h1>通勤経路マスタ</h1>
-  <p class="sub">添乗員ごとに、担当コースの通勤経路（登校便／下校便 × 出勤／帰宅）と運賃を登録します。ここに入れた内容が、日報の事前記入に使われます。当日の変更は日報側で上書きできます。</p>
+  <h1>車両管理台帳</h1>
+  <p class="sub">車両ごとの<b>整備・修理・車検の記録</b>と<b>保険</b>を管理します。車検・保険の期限が近い車両は色で警告します。紙の台帳（1台＝1綴り）と同じ形で、車両を選ぶとその車のすべてが揃います。</p>
 
   <div id="status"></div>
 
-  <div class="panel">
-    <label class="fld" for="staffSelect">① 添乗員をえらぶ</label>
-    <select id="staffSelect"><option value="">— 選択してください —</option></select>
+  <div class="tabs">
+    <div class="tab active" id="tabList" onclick="dSetTab('list')">🚍 車両一覧</div>
+    <div class="tab" id="tabDetail" onclick="dSetTab('detail')">📋 台帳（車両を選択）</div>
+    <div class="tab" id="tabCost" onclick="dSetTab('cost')">💰 費用集計</div>
   </div>
 
-  <div id="coursesArea"></div>
-
-  <div id="addCourseArea" class="panel" style="display:none;">
-    <label class="fld" for="courseSelect">② 担当コースを追加</label>
-    <div class="row">
-      <select id="courseSelect" style="flex:1;min-width:200px;"></select>
-      <button class="primary" onclick="addCourse()">＋ 追加</button>
+  <!-- 車両一覧 -->
+  <div id="viewList">
+    <div class="panel">
+      <div class="row">
+        <input id="dFilter" type="text" placeholder="車番・車種・車庫でしぼり込み" style="flex:1;min-width:160px;">
+        <select id="dPermit" style="width:auto;"><option value="">全ての許可</option></select>
+        <label style="font-size:13px;display:flex;align-items:center;gap:5px;white-space:nowrap;"><input type="checkbox" id="dActive" checked style="width:auto;"> 稼働中のみ</label>
+      </div>
+      <div class="muted" style="font-size:11px;margin-top:6px;">
+        車検満了日・保険期限は<b class="tag warn">期限切れ</b>／<b class="tag soon">60日以内</b>で警告します。車番をクリックすると台帳が開きます。
+      </div>
     </div>
+    <div id="dListArea" style="overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:8px;background:#fff;"></div>
   </div>
 
-  <div id="saveBar" style="display:none;margin:16px 0;">
-    <button class="primary" style="width:100%;font-size:16px;padding:13px;" onclick="saveAll()">保存する</button>
-    <div id="saveMsg" style="text-align:center;margin-top:8px;font-weight:600;min-height:20px;"></div>
-    <p class="muted" style="text-align:center;margin-top:4px;">この添乗員の全コースをまとめて保存します。</p>
+  <!-- 台帳（1台分） -->
+  <div id="viewDetail" style="display:none;">
+    <div class="panel">
+      <div class="row">
+        <label class="muted" style="min-width:auto;">車両</label>
+        <select id="dVehicle" style="flex:1;min-width:220px;"></select>
+        <button class="primary" onclick="dOpenMaint(null)">＋ 整備記録を追加</button>
+        <button onclick="dOpenIns(null)">＋ 保険を追加</button>
+      </div>
+    </div>
+    <div id="dHead"></div>
+    <div id="dDetailArea"></div>
+  </div>
+
+  <!-- 費用集計 -->
+  <div id="viewCost" style="display:none;">
+    <div class="panel">
+      <div class="row">
+        <label class="muted" style="min-width:auto;">対象年</label>
+        <select id="dYear" style="width:auto;"></select>
+        <span class="muted" style="font-size:11px;">整備料（税抜）と租税・保険を分けて集計します。請求書の内訳が未入力の記録は「総額のみ」に計上されます。</span>
+      </div>
+    </div>
+    <div id="dCostArea" style="overflow:auto;max-height:72vh;border:1px solid var(--line);border-radius:8px;background:#fff;"></div>
   </div>
 </main>
+
+<div id="mdWrap" onclick="if(event.target===this) dClose()">
+  <div id="mdBox">
+    <div class="hd" id="mdTitle">記録</div>
+    <div class="bd" id="mdBody"></div>
+    <div class="ft">
+      <button class="danger" id="mdDel" onclick="dDelete()" style="visibility:hidden;">🗑 削除</button>
+      <div class="row" style="gap:8px;">
+        <button onclick="dClose()">閉じる</button>
+        <button class="primary" onclick="dSave()">💾 保存</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
 // ===== 高尾輸送サービス 管理システム 共通認証モジュール =====
@@ -867,422 +928,464 @@ function _loadQRLib(cb) {
 
 </script>
 <script>
-/* ===== 通勤経路マスタ ページロジック ===== */
-const MODES = ['電車','バス','タクシー','徒歩','自転車','自家用車'];
-const LEGS = ['登校','下校'];
-const DIRS = ['出勤','帰宅'];
-let STAFF = [];
-let COURSES = [];
-let model = { staffId: null, courses: [] };
-let COURSE_LOCS = {};   // course_id(String) → [{id,name,address}]
-let STAFF_ADDR = {};    // staff_id(String) → 住所（権限スコープに応じた値）
-
-// 全角→半角（数字・各種ハイフン・空白）
-function toHalf(s){
-  return String(s==null?'':s)
-    .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
-    .replace(/[‐‑‒–—―ー－]/g, '-')
-    .replace(/　/g, ' ');
-}
-// 住所を「住居表示まで」に丸める（建物名・号室を落とす）。取れなければ元の住所を返す
-function jushoHyoji(addr){
-  let s = toHalf(addr).trim();
-  if (!s) return '';
-  s = s.split(' ')[0].trim();                    // 建物名がスペース区切りなら除去
-  const m = s.match(/^[^\d]*[\d\-丁目番地号]+/);   // 都道府県〜番地の数字ブロックまで
-  return (m ? m[0] : s).trim();
-}
-
+/* ===== 運行時程マスタ ページロジック ===== */
 function getH(){
   const s = _getSession();
   const tok = (s && s.access_token) || ANON_KEY;
   return { 'apikey': ANON_KEY, 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
 }
-
-function status(msg, ok){
-  const el = document.getElementById('status');
-  el.textContent = msg;
-  el.className = ok ? 'ok' : 'err';
-  if (ok) setTimeout(() => { if (el.textContent === msg) el.className = ''; }, 4000);
-}
+// 保存等でトークン期限切れ(401)が起きたら、自動更新して1回だけ再送
+(function(){
+  var _origFetch = window.fetch.bind(window);
+  var _reauth = null;
+  function _reauthOnce(){ if(!_reauth){ _reauth = Promise.resolve(refreshSession()).finally(function(){ _reauth=null; }); } return _reauth; }
+  window.fetch = async function(input, init){
+    var res = await _origFetch(input, init);
+    try{
+      var u = (typeof input==='string') ? input : ((input && input.url) || '');
+      if(res.status===401 && u.indexOf('wxdyqkyqtizhtkwtpvru.supabase.co')!==-1 && u.indexOf('/auth/')===-1 && init){
+        var s=_getSession();
+        if(s && s.refresh_token && await _reauthOnce()){
+          var ns=_getSession(); var h=Object.assign({}, init.headers||{});
+          if(ns && ns.access_token) h['Authorization']='Bearer '+ns.access_token;
+          res = await _origFetch(input, Object.assign({}, init, {headers:h}));
+        }
+      }
+    }catch(e){}
+    return res;
+  };
+})();
 
 function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function escAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function status(msg, ok){
+  const el = document.getElementById('status');
+  el.textContent = msg; el.className = ok ? 'ok' : 'err';
+  if (ok) setTimeout(()=>{ if(el.textContent===msg) el.className=''; }, 4000);
+}
 
-function emptySlot(){ return { '場所':'', '手段':'', '区間':[], '交通費':0, '移動時間':'' }; }
-function emptyRoutes(){ const r={}; LEGS.forEach(l=>{ r[l]={}; DIRS.forEach(d=>{ r[l][d]=emptySlot(); }); }); return r; }
-function normRoutes(routes){
-  const r = emptyRoutes();
-  if (routes && typeof routes === 'object'){
-    LEGS.forEach(l => DIRS.forEach(d => {
-      const s = routes[l] && routes[l][d];
-      if (s){
-        r[l][d]['場所'] = s['場所'] || '';
-        r[l][d]['手段'] = s['手段'] || '';
-        r[l][d]['交通費'] = Number(s['交通費']) || 0;
-        r[l][d]['移動時間'] = s['移動時間'] || '';
-        r[l][d]['区間'] = Array.isArray(s['区間']) ? s['区間'].map(x => ({
-          '手段': x['手段'] || '電車', '乗車': x['乗車'] || '', '下車': x['下車'] || '', '運賃': Number(x['運賃']) || 0
-        })) : [];
-      }
-    }));
+/* ===== 車両管理台帳 ページロジック ===== */
+const CATS = ['車検','3か月点検','12か月点検','修理','整備','事故','その他'];
+const CAT_CLASS = {'車検':'t-shaken','3か月点検':'t-3m','12か月点検':'t-12m','修理':'t-repair','整備':'t-seibi','事故':'t-jiko','その他':'t-other'};
+const KINDS = ['自賠責','任意'];
+let TAB='list';
+let VEH=[], VEHBY={}, MAINT=[], INS=[];
+let CURV=null;          // 台帳で選択中の車両id
+let EDIT=null;          // 編集中 {type:'maint'|'ins', id:null|number}
+
+function _p2(n){ return String(n).padStart(2,'0'); }
+function _num(v){ const n=parseInt(String(v==null?'':v).replace(/[^\d-]/g,''),10); return isNaN(n)?null:n; }
+function _yen(v){ return (v==null||v==='') ? '' : Number(v).toLocaleString('ja-JP'); }
+function _km(v){ return (v==null||v==='') ? '' : Number(v).toLocaleString('ja-JP')+'km'; }
+function _d(v){ return v ? String(v) : ''; }
+function _today(){ const t=new Date(); return `${t.getFullYear()}-${_p2(t.getMonth()+1)}-${_p2(t.getDate())}`; }
+function _daysTo(dstr){
+  if(!dstr) return null;
+  const a=String(dstr).split('-').map(Number); const d=new Date(a[0],a[1]-1,a[2]);
+  const t=new Date(); t.setHours(0,0,0,0);
+  return Math.round((d - t)/86400000);
+}
+function _limitCell(dstr){
+  if(!dstr) return '<span class="muted">未設定</span>';
+  const n=_daysTo(dstr);
+  const cls = n<0 ? 'warn' : n<=60 ? 'soon' : 'okbg';
+  const lb  = n<0 ? `期限切れ ${-n}日` : `あと${n}日`;
+  return `<span class="tag ${cls}">${escHtml(dstr)}　${lb}</span>`;
+}
+
+// PostgREST は1回1000行までのため分割して全件取得
+async function _fetchAll(path){
+  const out=[]; let from=0; const step=1000;
+  for(;;){
+    const sep = path.indexOf('?')>=0?'&':'?';
+    const r = await fetch(`${REST_URL}/${path}${sep}limit=${step}&offset=${from}`, {headers:getH()});
+    if(!r.ok) break;
+    const rows = await r.json();
+    out.push(...rows);
+    if(rows.length<step) break;
+    from += step;
   }
-  return r;
+  return out;
 }
 
-async function loadStaff(){
-  const res = await fetch(`${REST_URL}/staff?select=id,name,employee_code&order=name`, { headers: getH() });
-  if (!res.ok) throw new Error('staff ' + res.status);
-  STAFF = await res.json();
-  const sel = document.getElementById('staffSelect');
-  STAFF.forEach(s => {
-    const o = document.createElement('option');
-    o.value = s.id;
-    o.textContent = s.name + (s.employee_code ? ` (${s.employee_code})` : '');
-    sel.appendChild(o);
+/* ---------- 読み込み ---------- */
+async function dLoad(){
+  VEH = await _fetchAll('vehicles_with_office?select=id,vehicle_number,vehicle_model,permit_type,capacity,current_office_name,first_registration_date,inspection_expiry_date,owner,active,chassis_number&order=vehicle_number');
+  VEHBY={}; VEH.forEach(v=>VEHBY[v.id]=v);
+  MAINT = await _fetchAll('vehicle_maintenance?select=*&order=service_date.desc,id.desc');
+  INS   = await _fetchAll('vehicle_insurance?select=*&order=end_date.desc,id.desc');
+  // 許可の選択肢
+  const sel=document.getElementById('dPermit');
+  const kinds=[...new Set(VEH.map(v=>v.permit_type).filter(Boolean))].sort();
+  sel.innerHTML='<option value="">全ての許可</option>'+kinds.map(k=>`<option value="${escAttr(k)}">${escHtml(k)}</option>`).join('');
+  // 車両セレクト（台帳タブ）
+  const vs=document.getElementById('dVehicle');
+  vs.innerHTML=VEH.map(v=>`<option value="${v.id}">${escHtml(_vlabel(v))}</option>`).join('');
+  if(CURV==null && VEH.length) CURV=VEH[0].id;
+  if(CURV!=null) vs.value=String(CURV);
+  // 年の選択肢
+  const ys=[...new Set(MAINT.map(m=>m.service_date&&String(m.service_date).slice(0,4)).filter(Boolean))].sort().reverse();
+  const yy=document.getElementById('dYear');
+  yy.innerHTML=ys.map(y=>`<option value="${y}">${y}年</option>`).join('') || '<option value="">（記録なし）</option>';
+}
+function _vlabel(v){
+  if(!v) return '';
+  const p=[v.vehicle_model, v.permit_type, v.current_office_name].filter(Boolean).join('・');
+  return (v.vehicle_number||('車両'+v.id)) + (p?`　${p}`:'');
+}
+function _maintOf(vid){ return MAINT.filter(m=>m.vehicle_id===vid); }
+function _insOf(vid){ return INS.filter(x=>x.vehicle_id===vid); }
+// その車の最新の保険（種別ごと）
+function _latestIns(vid,kind){
+  const a=_insOf(vid).filter(x=>x.kind===kind);
+  return a.length? a[0] : null;   // end_date降順で取得済み
+}
+
+/* ---------- タブ ---------- */
+function dSetTab(t){
+  TAB=t;
+  document.getElementById('tabList').className   = 'tab'+(t==='list'?' active':'');
+  document.getElementById('tabDetail').className = 'tab'+(t==='detail'?' active':'');
+  document.getElementById('tabCost').className   = 'tab'+(t==='cost'?' active':'');
+  document.getElementById('viewList').style.display   = (t==='list')?'':'none';
+  document.getElementById('viewDetail').style.display = (t==='detail')?'':'none';
+  document.getElementById('viewCost').style.display   = (t==='cost')?'':'none';
+  dRender();
+}
+function dRender(){
+  if(TAB==='list') dRenderList();
+  else if(TAB==='detail') dRenderDetail();
+  else dRenderCost();
+}
+
+/* ---------- 車両一覧 ---------- */
+function dRenderList(){
+  const q=(document.getElementById('dFilter').value||'').trim();
+  const pm=document.getElementById('dPermit').value;
+  const onlyActive=document.getElementById('dActive').checked;
+  const list=VEH.filter(v=>(!onlyActive||v.active)&&(!pm||v.permit_type===pm)
+    &&(!q||((v.vehicle_number||'')+(v.vehicle_model||'')+(v.current_office_name||'')).indexOf(q)!==-1));
+
+  const rows=list.map(v=>{
+    const ms=_maintOf(v.id);
+    const last=ms.find(m=>m.service_date);
+    const jibai=_latestIns(v.id,'自賠責'), nini=_latestIns(v.id,'任意');
+    const sum=ms.reduce((a,m)=>a+(m.total_amount||0),0);
+    return `<tr>
+      <td><a href="#" onclick="dGo(${v.id});return false;" style="color:var(--g);font-weight:700;text-decoration:none;">${escHtml(v.vehicle_number||'')}</a>
+        <div class="muted">${escHtml([v.vehicle_model,v.permit_type,v.current_office_name].filter(Boolean).join('・'))}</div></td>
+      <td>${_limitCell(v.inspection_expiry_date)}</td>
+      <td>${jibai?_limitCell(jibai.end_date):'<span class="muted">未登録</span>'}</td>
+      <td>${nini?_limitCell(nini.end_date):'<span class="muted">未登録</span>'}</td>
+      <td class="num">${ms.length?ms.length+'件':'<span class="muted">—</span>'}</td>
+      <td>${last?escHtml(String(last.service_date)):'<span class="muted">—</span>'}<div class="muted">${last?escHtml(String(last.category)):''}</div></td>
+      <td class="num">${sum?_yen(sum)+'円':'<span class="muted">—</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('dListArea').innerHTML = list.length
+    ? `<table class="list"><thead><tr>
+        <th>車番 ／ 車種・許可・車庫</th><th>車検満了</th><th>自賠責</th><th>任意保険</th>
+        <th>記録</th><th>最終整備</th><th>費用累計</th></tr></thead><tbody>${rows}</tbody></table>`
+    : '<p class="muted" style="padding:16px;">該当車両なし</p>';
+}
+function dGo(vid){ CURV=vid; document.getElementById('dVehicle').value=String(vid); dSetTab('detail'); }
+
+/* ---------- 台帳（1台分） ---------- */
+function dRenderDetail(){
+  const v=VEHBY[CURV];
+  if(!v){ document.getElementById('dHead').innerHTML=''; document.getElementById('dDetailArea').innerHTML='<p class="muted" style="padding:16px;">車両を選んでください</p>'; return; }
+  const ms=_maintOf(v.id), ins=_insOf(v.id);
+  const sum=ms.reduce((a,m)=>a+(m.total_amount||0),0);
+  const net=ms.reduce((a,m)=>a+(m.net_cost||0),0);
+  const odo=ms.filter(m=>m.odometer_km).map(m=>m.odometer_km).sort((a,b)=>b-a)[0];
+
+  document.getElementById('dHead').innerHTML=`
+    <div class="kpi">
+      <div class="box"><div class="lb">車台番号</div><div class="vl" style="font-size:14px;">${escHtml(v.chassis_number||'—')}</div></div>
+      <div class="box"><div class="lb">初度登録</div><div class="vl" style="font-size:14px;">${escHtml(v.first_registration_date||'—')}</div></div>
+      <div class="box"><div class="lb">車検満了</div><div class="vl" style="font-size:14px;">${v.inspection_expiry_date?_limitCell(v.inspection_expiry_date):'<span class="muted">未設定</span>'}</div></div>
+      <div class="box"><div class="lb">最終走行距離</div><div class="vl">${odo?_km(odo):'—'}</div></div>
+      <div class="box"><div class="lb">記録件数</div><div class="vl">${ms.length}件</div></div>
+      <div class="box"><div class="lb">費用累計（総額）</div><div class="vl">${_yen(sum)}円</div></div>
+    </div>`;
+
+  const insRows=ins.map(x=>`<tr>
+      <td><span class="tag ${x.kind==='自賠責'?'t-12m':'t-shaken'}">${escHtml(x.kind)}</span></td>
+      <td>${escHtml(x.company||'')}<div class="muted">${escHtml(x.agency||'')}</div></td>
+      <td>${escHtml(x.policy_no||'')}</td>
+      <td>${x.end_date?_limitCell(x.end_date):''}<div class="muted">${escHtml(_d(x.start_date))} 〜</div></td>
+      <td class="num">${x.premium?_yen(x.premium)+'円':''}</td>
+      <td style="max-width:280px;"><div class="muted">${escHtml(x.coverage||'')}</div>${x.note?`<div class="muted">${escHtml(x.note)}</div>`:''}</td>
+      <td><button class="mini" onclick="dOpenIns(${x.id})">編集</button></td>
+    </tr>`).join('');
+
+  const mRows=ms.map(m=>{
+    const stop = m.unavailable ? '<span class="tag warn">入庫中</span>' : '';
+    const period = (m.in_date||m.out_date) ? `<div class="muted">入庫 ${escHtml(_d(m.in_date))} 〜 出庫 ${escHtml(_d(m.out_date))}</div>` : '';
+    const breakdown = (m.net_cost!=null||m.weight_tax!=null) ? `<div class="muted" style="font-size:10px;">`
+        + [m.net_cost!=null?`整備(税抜) ${_yen(m.net_cost)}`:null,
+           m.tax_amount!=null?`消費税 ${_yen(m.tax_amount)}`:null,
+           m.weight_tax!=null?`重量税 ${_yen(m.weight_tax)}`:null,
+           m.liability_insurance!=null?`自賠責 ${_yen(m.liability_insurance)}`:null,
+           m.stamp_fee!=null?`印紙 ${_yen(m.stamp_fee)}`:null].filter(Boolean).join('／') + `</div>` : '';
+    return `<tr>
+      <td style="white-space:nowrap;">${m.service_date?escHtml(String(m.service_date)):'<span class="muted">日付なし</span>'}${period}</td>
+      <td><span class="tag ${CAT_CLASS[m.category]||'t-other'}">${escHtml(m.category)}</span> ${stop}</td>
+      <td class="num">${m.odometer_km?_km(m.odometer_km):''}</td>
+      <td style="max-width:420px;">${escHtml(m.content||'')}${m.note?`<div class="muted">※${escHtml(m.note)}</div>`:''}</td>
+      <td>${escHtml(m.vendor||'')}${m.slip_no?`<div class="muted">伝票 ${escHtml(m.slip_no)}</div>`:''}</td>
+      <td class="num">${m.total_amount!=null?_yen(m.total_amount)+'円':'<span class="muted">—</span>'}${breakdown}</td>
+      <td><button class="mini" onclick="dOpenMaint(${m.id})">編集</button></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('dDetailArea').innerHTML=`
+    <div class="panel" style="padding:0;overflow:hidden;">
+      <div style="padding:10px 14px;font-weight:700;color:var(--g2);border-bottom:1px solid var(--line);background:#f7faf8;">保険</div>
+      ${ins.length?`<div style="overflow:auto;"><table class="list"><thead><tr>
+        <th>種別</th><th>保険会社 ／ 代理店</th><th>証券番号</th><th>期間</th><th>保険料</th><th>内容・備考</th><th></th>
+      </tr></thead><tbody>${insRows}</tbody></table></div>`
+      :'<p class="muted" style="padding:14px;">保険の登録がありません。「＋ 保険を追加」から登録できます。</p>'}
+    </div>
+    <div class="panel" style="padding:0;overflow:hidden;">
+      <div style="padding:10px 14px;font-weight:700;color:var(--g2);border-bottom:1px solid var(--line);background:#f7faf8;">整備記録（新しい順・${ms.length}件／税抜整備料の合計 ${_yen(net)}円）</div>
+      ${ms.length?`<div style="overflow:auto;max-height:60vh;"><table class="list"><thead><tr>
+        <th>実施日</th><th>区分</th><th>走行距離</th><th>内容</th><th>業者</th><th>費用</th><th></th>
+      </tr></thead><tbody>${mRows}</tbody></table></div>`
+      :'<p class="muted" style="padding:14px;">整備記録がありません。「＋ 整備記録を追加」から登録できます。</p>'}
+    </div>`;
+}
+
+/* ---------- 費用集計 ---------- */
+function dRenderCost(){
+  const y=document.getElementById('dYear').value;
+  if(!y){ document.getElementById('dCostArea').innerHTML='<p class="muted" style="padding:16px;">記録がありません</p>'; return; }
+  const rows=MAINT.filter(m=>m.service_date && String(m.service_date).slice(0,4)===y);
+  const by={};
+  rows.forEach(m=>{
+    const b = by[m.vehicle_id] = by[m.vehicle_id] || {cnt:0,total:0,net:0,tax:0,zei:0,hoken:0};
+    b.cnt++;
+    b.total += (m.total_amount||0);
+    b.net   += (m.net_cost||0);
+    b.tax   += (m.tax_amount||0);
+    b.zei   += (m.weight_tax||0)+(m.stamp_fee||0);
+    b.hoken += (m.liability_insurance||0);
   });
-}
-async function loadCourses(){
-  const res = await fetch(`${REST_URL}/courses?select=id,school_name,course_name&active=eq.true&order=school_name`, { headers: getH() });
-  if (!res.ok) throw new Error('courses ' + res.status);
-  COURSES = await res.json();
-}
-function courseLabel(cid){ const c = COURSES.find(x => String(x.id) === String(cid)); return c ? `${c.school_name} ／ ${c.course_name}` : `コースID ${cid}`; }
+  const ids=Object.keys(by).map(Number).sort((a,b)=>by[b].total-by[a].total);
+  const t={cnt:0,total:0,net:0,tax:0,zei:0,hoken:0};
+  ids.forEach(id=>{ const b=by[id]; t.cnt+=b.cnt; t.total+=b.total; t.net+=b.net; t.tax+=b.tax; t.zei+=b.zei; t.hoken+=b.hoken; });
 
-async function loadCourseLocations(){
-  COURSE_LOCS = {};
-  const res = await fetch(`${REST_URL}/course_locations?active=eq.true&select=id,course_id,name,address&order=name`, { headers: getH() });
-  if (!res.ok) return;
-  const rows = await res.json();
-  rows.forEach(r => {
-    const k = String(r.course_id);
-    (COURSE_LOCS[k] = COURSE_LOCS[k] || []).push({ id: r.id, name: r.name, address: r.address || '' });
-  });
-}
-async function loadStaffAddr(){
-  STAFF_ADDR = {};
-  const res = await fetch(`${REST_URL}/rpc/get_staff_directory`, {
-    method:'POST', headers: getH(), body: JSON.stringify({ p_filter: 'active' })
-  });
-  if (!res.ok) return;
-  const rows = await res.json();
-  rows.forEach(r => { if (r && r.id != null) STAFF_ADDR[String(r.id)] = r.address || ''; });
-}
+  const body=ids.map(id=>{
+    const v=VEHBY[id]||{}; const b=by[id];
+    return `<tr>
+      <td><a href="#" onclick="dGo(${id});return false;" style="color:var(--g);font-weight:700;text-decoration:none;">${escHtml(v.vehicle_number||('車両'+id))}</a>
+        <div class="muted">${escHtml([v.vehicle_model,v.current_office_name].filter(Boolean).join('・'))}</div></td>
+      <td class="num">${b.cnt}</td>
+      <td class="num">${b.net?_yen(b.net):'—'}</td>
+      <td class="num">${b.tax?_yen(b.tax):'—'}</td>
+      <td class="num">${b.zei?_yen(b.zei):'—'}</td>
+      <td class="num">${b.hoken?_yen(b.hoken):'—'}</td>
+      <td class="num" style="font-weight:700;">${_yen(b.total)}</td>
+    </tr>`;
+  }).join('');
 
-// 経路の両端（自宅側・コース側）の参照。区間が無ければ1本作る
-function ends(c, leg, dir){
-  const s = c.routes[leg][dir];
-  if (!s['区間'].length) s['区間'].push({ '手段':'電車', '乗車':'', '下車':'', '運賃':0 });
-  const segs = s['区間'];
-  const first = segs[0], last = segs[segs.length - 1];
-  return (dir === '出勤')
-    ? { home:{seg:first, key:'乗車'}, course:{seg:last, key:'下車'} }
-    : { home:{seg:last,  key:'下車'}, course:{seg:first, key:'乗車'} };
-}
-function fillHome(ci){
-  const c = model.courses[ci]; const {leg, dir} = c._slot;
-  if (!model.homeAddr){ status('この添乗員の住所が取得できませんでした（従業員マスタで住所を登録してください）', false); return; }
-  const e = ends(c, leg, dir);
-  e.home.seg[e.home.key] = model.homeAddr;
-  render();
-}
-function pickLoc(ci, locId){
-  if (!locId) return;
-  const c = model.courses[ci]; const {leg, dir} = c._slot;
-  const list = COURSE_LOCS[String(c.course_id)] || [];
-  const loc = list.find(x => String(x.id) === String(locId));
-  if (!loc) return;
-  const e = ends(c, leg, dir);
-  e.course.seg[e.course.key] = loc.address || loc.name;
-  c.routes[leg][dir]['場所'] = loc.name;
-  render();
-}
-function toggleLocMgr(ci){ const c = model.courses[ci]; c._editLocs = !c._editLocs; render(); }
-
-// 名称欄の文字でGoogleマップ検索を開く（住所の確認用）
-function mapSearch(inputId){
-  const el = document.getElementById(inputId);
-  const q = el ? (el.value || '').trim() : '';
-  if (!q){ status('先に名称（目印）を入れてください', false); return; }
-  window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q), '_blank');
+  document.getElementById('dCostArea').innerHTML=`
+    <table class="list"><thead><tr>
+      <th>車両</th><th>件数</th><th>整備料（税抜）</th><th>消費税</th><th>租税（重量税・印紙）</th><th>自賠責保険料</th><th>総額</th>
+    </tr></thead><tbody>${body}</tbody>
+    <tfoot><tr style="background:#eef4ef;font-weight:700;">
+      <td>合計（${ids.length}台）</td><td class="num">${t.cnt}</td><td class="num">${_yen(t.net)}</td>
+      <td class="num">${_yen(t.tax)}</td><td class="num">${_yen(t.zei)}</td><td class="num">${_yen(t.hoken)}</td>
+      <td class="num">${_yen(t.total)}</td>
+    </tr></tfoot></table>`;
 }
 
-async function addLocInline(ci){
-  const c = model.courses[ci];
-  const name = (document.getElementById('newlocname-'+ci).value || '').trim();
-  const address = (document.getElementById('newlocaddr-'+ci).value || '').trim();
-  if (!name && !address){ status('名称か住所を入れてください', false); return; }
-  try {
-    const res = await fetch(`${REST_URL}/course_locations`, {
-      method:'POST', headers: getH(),
-      body: JSON.stringify({ course_id: c.course_id, name: name || address, address })
-    });
-    if (!res.ok){ const t = await res.text(); status('追加に失敗：' + t.slice(0,120), false); return; }
-    await loadCourseLocations();
-    c._editLocs = true;
-    status('乗車場所を追加しました', true);
-    render();
-  } catch(e){ status('追加エラー：' + e.message, false); }
+/* ---------- 入力（整備） ---------- */
+function dOpenMaint(id){
+  const m = id!=null ? MAINT.find(x=>x.id===id) : null;
+  if(id!=null && !m){ status('記録が見つかりません', false); return; }
+  EDIT={type:'maint', id:id};
+  const vid = m ? m.vehicle_id : CURV;
+  const v=VEHBY[vid]||{};
+  document.getElementById('mdTitle').textContent = (id==null?'整備記録の追加':'整備記録の編集') + '　' + (v.vehicle_number||'');
+  document.getElementById('mdDel').style.visibility = (id==null?'hidden':'visible');
+  const vopts = VEH.map(x=>`<option value="${x.id}"${x.id===vid?' selected':''}>${escHtml(_vlabel(x))}</option>`).join('');
+  const copts = CATS.map(c=>`<option value="${escAttr(c)}"${m&&m.category===c?' selected':''}>${escHtml(c)}</option>`).join('');
+  document.getElementById('mdBody').innerHTML=`
+    <div class="grp"><div class="gt">基本</div>
+      <div class="fld"><label>車両</label><select id="f_vehicle">${vopts}</select></div>
+      <div class="fld"><label>区分</label><select id="f_category" class="s">${copts}</select>
+        <label style="min-width:auto;">実施日</label><input type="date" id="f_service_date" class="s" value="${escAttr(_d(m&&m.service_date))}">
+        <span class="muted" style="font-size:11px;">日付が台帳にない記録は空欄で構いません</span></div>
+      <div class="fld"><label>走行距離</label><input type="text" id="f_odometer_km" class="s" inputmode="numeric" placeholder="546404" value="${escAttr(m&&m.odometer_km!=null?m.odometer_km:'')}"><span class="muted">km</span>
+        <label style="min-width:auto;">業者</label><input type="text" id="f_vendor" placeholder="小林自工" value="${escAttr(m&&m.vendor||'')}"></div>
+      <div class="fld"><label>内容</label><textarea id="f_content" rows="2" placeholder="車検、ブレーキホース取替 ほか">${escHtml(m&&m.content||'')}</textarea></div>
+    </div>
+    <div class="grp"><div class="gt">入庫期間（運行に使えない日がある場合）</div>
+      <div class="fld"><label>入庫日</label><input type="date" id="f_in_date" class="s" value="${escAttr(_d(m&&m.in_date))}">
+        <label style="min-width:auto;">出庫日</label><input type="date" id="f_out_date" class="s" value="${escAttr(_d(m&&m.out_date))}">
+        <label style="min-width:auto;display:flex;align-items:center;gap:5px;"><input type="checkbox" id="f_unavailable" style="width:auto;"${m&&m.unavailable?' checked':''}> この期間は運行不可</label></div>
+    </div>
+    <div class="grp"><div class="gt">金額（請求書があれば内訳を、なければ請求総額だけでも可）</div>
+      <div class="fld"><label>技術料(税抜)</label><input type="text" id="f_labor_cost" class="s" inputmode="numeric" value="${escAttr(m&&m.labor_cost!=null?m.labor_cost:'')}">
+        <label style="min-width:auto;">部品代(税抜)</label><input type="text" id="f_parts_cost" class="s" inputmode="numeric" value="${escAttr(m&&m.parts_cost!=null?m.parts_cost:'')}"></div>
+      <div class="fld"><label>整備料計(税抜)</label><input type="text" id="f_net_cost" class="s" inputmode="numeric" value="${escAttr(m&&m.net_cost!=null?m.net_cost:'')}">
+        <label style="min-width:auto;">消費税</label><input type="text" id="f_tax_amount" class="s" inputmode="numeric" value="${escAttr(m&&m.tax_amount!=null?m.tax_amount:'')}">
+        <button class="mini" onclick="dCalc()">自動計算</button></div>
+      <div class="fld"><label>重量税</label><input type="text" id="f_weight_tax" class="s" inputmode="numeric" value="${escAttr(m&&m.weight_tax!=null?m.weight_tax:'')}">
+        <label style="min-width:auto;">自賠責保険料</label><input type="text" id="f_liability_insurance" class="s" inputmode="numeric" value="${escAttr(m&&m.liability_insurance!=null?m.liability_insurance:'')}"></div>
+      <div class="fld"><label>印紙代</label><input type="text" id="f_stamp_fee" class="s" inputmode="numeric" value="${escAttr(m&&m.stamp_fee!=null?m.stamp_fee:'')}">
+        <label style="min-width:auto;">その他(非課税)</label><input type="text" id="f_other_nontax" class="s" inputmode="numeric" value="${escAttr(m&&m.other_nontax!=null?m.other_nontax:'')}"></div>
+      <div class="fld"><label><b>請求総額</b></label><input type="text" id="f_total_amount" class="s" inputmode="numeric" value="${escAttr(m&&m.total_amount!=null?m.total_amount:'')}">
+        <span class="muted" style="font-size:11px;">台帳の「修理・点検費」はここに入れてください</span></div>
+    </div>
+    <div class="grp"><div class="gt">その他</div>
+      <div class="fld"><label>次回車検日</label><input type="date" id="f_next_inspection_date" class="s" value="${escAttr(_d(m&&m.next_inspection_date))}">
+        <label style="min-width:auto;">伝票番号</label><input type="text" id="f_slip_no" class="s" value="${escAttr(m&&m.slip_no||'')}"></div>
+      <div class="fld"><label>備考</label><textarea id="f_note" rows="2">${escHtml(m&&m.note||'')}</textarea></div>
+    </div>`;
+  document.getElementById('mdWrap').style.display='block';
 }
-async function saveLoc(ci, locId){
-  const name = (document.getElementById('locname-'+locId).value || '').trim();
-  const address = (document.getElementById('locaddr-'+locId).value || '').trim();
-  if (!name){ status('名称を入れてください', false); return; }
-  try {
-    const res = await fetch(`${REST_URL}/course_locations?id=eq.${locId}`, {
-      method:'PATCH', headers: getH(),
-      body: JSON.stringify({ name, address })
-    });
-    if (!res.ok){ const t = await res.text(); status('保存に失敗：' + t.slice(0,120), false); return; }
-    await loadCourseLocations();
-    model.courses[ci]._editLocs = true;
+// 技術料＋部品＝整備料計、消費税10%、非課税を足して総額を出す
+function dCalc(){
+  const g=id=>_num(document.getElementById(id).value);
+  const labor=g('f_labor_cost')||0, parts=g('f_parts_cost')||0;
+  let net=g('f_net_cost');
+  if(labor||parts){ net=labor+parts; document.getElementById('f_net_cost').value=net; }
+  if(net!=null){
+    const tax=Math.floor(net*0.1);
+    document.getElementById('f_tax_amount').value=tax;
+    const nontax=(g('f_weight_tax')||0)+(g('f_liability_insurance')||0)+(g('f_stamp_fee')||0)+(g('f_other_nontax')||0);
+    document.getElementById('f_total_amount').value=net+tax+nontax;
+  }
+}
+
+/* ---------- 入力（保険） ---------- */
+function dOpenIns(id){
+  const x = id!=null ? INS.find(a=>a.id===id) : null;
+  if(id!=null && !x){ status('記録が見つかりません', false); return; }
+  EDIT={type:'ins', id:id};
+  const vid = x ? x.vehicle_id : CURV;
+  const v=VEHBY[vid]||{};
+  document.getElementById('mdTitle').textContent = (id==null?'保険の追加':'保険の編集') + '　' + (v.vehicle_number||'');
+  document.getElementById('mdDel').style.visibility = (id==null?'hidden':'visible');
+  const vopts = VEH.map(a=>`<option value="${a.id}"${a.id===vid?' selected':''}>${escHtml(_vlabel(a))}</option>`).join('');
+  const kopts = KINDS.map(k=>`<option value="${escAttr(k)}"${x&&x.kind===k?' selected':''}>${escHtml(k)}</option>`).join('');
+  document.getElementById('mdBody').innerHTML=`
+    <div class="grp"><div class="gt">契約</div>
+      <div class="fld"><label>車両</label><select id="g_vehicle">${vopts}</select></div>
+      <div class="fld"><label>種別</label><select id="g_kind" class="s">${kopts}</select>
+        <label style="min-width:auto;">保険料</label><input type="text" id="g_premium" class="s" inputmode="numeric" value="${escAttr(x&&x.premium!=null?x.premium:'')}"><span class="muted">円</span></div>
+      <div class="fld"><label>保険会社</label><input type="text" id="g_company" value="${escAttr(x&&x.company||'')}"></div>
+      <div class="fld"><label>代理店</label><input type="text" id="g_agency" value="${escAttr(x&&x.agency||'')}"></div>
+      <div class="fld"><label>証券番号</label><input type="text" id="g_policy_no" value="${escAttr(x&&x.policy_no||'')}"></div>
+      <div class="fld"><label>期間</label><input type="date" id="g_start_date" class="s" value="${escAttr(_d(x&&x.start_date))}">
+        <span class="muted">〜</span><input type="date" id="g_end_date" class="s" value="${escAttr(_d(x&&x.end_date))}"></div>
+      <div class="fld"><label>契約者</label><input type="text" id="g_contractor" value="${escAttr(x&&x.contractor||'')}"></div>
+      <div class="fld"><label>補償内容</label><textarea id="g_coverage" rows="2">${escHtml(x&&x.coverage||'')}</textarea></div>
+      <div class="fld"><label>備考</label><textarea id="g_note" rows="2">${escHtml(x&&x.note||'')}</textarea></div>
+    </div>`;
+  document.getElementById('mdWrap').style.display='block';
+}
+
+function dClose(){ document.getElementById('mdWrap').style.display='none'; EDIT=null; }
+
+/* ---------- 保存・削除 ---------- */
+async function dSave(){
+  if(!EDIT) return;
+  try{
+    if(EDIT.type==='maint'){
+      const gv=id=>{ const e=document.getElementById(id); return e? e.value.trim() : ''; };
+      const body={
+        vehicle_id: parseInt(gv('f_vehicle'),10),
+        category:   gv('f_category'),
+        service_date: gv('f_service_date')||null,
+        in_date:  gv('f_in_date')||null,
+        out_date: gv('f_out_date')||null,
+        unavailable: document.getElementById('f_unavailable').checked,
+        odometer_km: _num(gv('f_odometer_km')),
+        content: gv('f_content')||null,
+        vendor:  gv('f_vendor')||null,
+        labor_cost: _num(gv('f_labor_cost')),
+        parts_cost: _num(gv('f_parts_cost')),
+        net_cost:   _num(gv('f_net_cost')),
+        tax_amount: _num(gv('f_tax_amount')),
+        weight_tax: _num(gv('f_weight_tax')),
+        liability_insurance: _num(gv('f_liability_insurance')),
+        stamp_fee:  _num(gv('f_stamp_fee')),
+        other_nontax: _num(gv('f_other_nontax')),
+        total_amount: _num(gv('f_total_amount')),
+        next_inspection_date: gv('f_next_inspection_date')||null,
+        slip_no: gv('f_slip_no')||null,
+        note: gv('f_note')||null,
+        updated_at: new Date().toISOString()
+      };
+      if(!body.category){ status('区分を選んでください', false); return; }
+      const ok = await _upsert('vehicle_maintenance', EDIT.id, body);
+      if(!ok) return;
+      // 次回車検日が入っていれば車両の車検満了日も更新する
+      if(body.next_inspection_date){
+        await fetch(`${REST_URL}/vehicles?id=eq.${body.vehicle_id}`, {
+          method:'PATCH', headers:getH(), body:JSON.stringify({inspection_expiry_date: body.next_inspection_date})
+        });
+      }
+    } else {
+      const gv=id=>{ const e=document.getElementById(id); return e? e.value.trim() : ''; };
+      const body={
+        vehicle_id: parseInt(gv('g_vehicle'),10),
+        kind: gv('g_kind'),
+        company: gv('g_company')||null,
+        agency:  gv('g_agency')||null,
+        policy_no: gv('g_policy_no')||null,
+        start_date: gv('g_start_date')||null,
+        end_date:   gv('g_end_date')||null,
+        premium: _num(gv('g_premium')),
+        coverage: gv('g_coverage')||null,
+        contractor: gv('g_contractor')||null,
+        note: gv('g_note')||null,
+        updated_at: new Date().toISOString()
+      };
+      if(!body.kind){ status('種別を選んでください', false); return; }
+      const ok = await _upsert('vehicle_insurance', EDIT.id, body);
+      if(!ok) return;
+    }
+    dClose();
+    await dLoad(); dRender();
     status('保存しました', true);
-    render();
-  } catch(e){ status('保存エラー：' + e.message, false); }
+  }catch(e){ status('保存に失敗しました：'+e.message, false); }
 }
-async function delLoc(ci, locId){
-  if (!confirm('この乗車場所を削除します。よろしいですか？（すでに組んだ経路の文字はそのまま残ります）')) return;
-  try {
-    const res = await fetch(`${REST_URL}/course_locations?id=eq.${locId}`, { method:'DELETE', headers: getH() });
-    if (!res.ok){ const t = await res.text(); status('削除に失敗：' + t.slice(0,120), false); return; }
-    await loadCourseLocations();
-    model.courses[ci]._editLocs = true;
+async function _upsert(table, id, body){
+  const url = id==null ? `${REST_URL}/${table}` : `${REST_URL}/${table}?id=eq.${id}`;
+  const r = await fetch(url, { method: id==null?'POST':'PATCH', headers:getH(), body:JSON.stringify(body) });
+  if(!r.ok){ status('保存に失敗しました：'+(await r.text()).slice(0,150), false); return false; }
+  return true;
+}
+async function dDelete(){
+  if(!EDIT || EDIT.id==null) return;
+  const table = EDIT.type==='maint' ? 'vehicle_maintenance' : 'vehicle_insurance';
+  const what  = EDIT.type==='maint' ? 'この整備記録' : 'この保険契約';
+  if(!confirm(`${what}を削除します。元に戻せません。よろしいですか？`)) return;
+  try{
+    const r = await fetch(`${REST_URL}/${table}?id=eq.${EDIT.id}`, { method:'DELETE', headers:getH() });
+    if(!r.ok){ status('削除に失敗しました：'+(await r.text()).slice(0,150), false); return; }
+    dClose(); await dLoad(); dRender();
     status('削除しました', true);
-    render();
-  } catch(e){ status('削除エラー：' + e.message, false); }
+  }catch(e){ status('削除に失敗しました：'+e.message, false); }
 }
 
-async function onStaffChange(){
-  const id = document.getElementById('staffSelect').value;
-  model = { staffId: id ? Number(id) : null, courses: [] };
-  if (!id){ render(); return; }
-  model.homeAddr = jushoHyoji(STAFF_ADDR[String(id)] || '');
-  const res = await fetch(`${REST_URL}/commute_routes?staff_id=eq.${id}&select=*`, { headers: getH() });
-  if (!res.ok){ status('経路の読み込みに失敗しました', false); render(); return; }
-  const rows = await res.json();
-  model.courses = rows.map(r => ({ id: r.id, course_id: r.course_id, active: r.active, routes: normRoutes(r.routes), _slot: { leg:'登校', dir:'出勤' } }));
-  render();
-}
-
-function render(){
-  const area = document.getElementById('coursesArea');
-  const addArea = document.getElementById('addCourseArea');
-  const saveBar = document.getElementById('saveBar');
-  if (!model.staffId){ area.innerHTML=''; addArea.style.display='none'; saveBar.style.display='none'; return; }
-  addArea.style.display='block'; saveBar.style.display='block';
-  const used = new Set(model.courses.map(c => String(c.course_id)));
-  const csel = document.getElementById('courseSelect'); csel.innerHTML='';
-  COURSES.filter(c => !used.has(String(c.id))).forEach(c => {
-    const o = document.createElement('option'); o.value = c.id; o.textContent = `${c.school_name} ／ ${c.course_name}`; csel.appendChild(o);
-  });
-  if (!model.courses.length){ area.innerHTML = '<p class="muted">担当コースがありません。下の「担当コースを追加」から登録してください。</p>'; return; }
-  area.innerHTML = model.courses.map((c, ci) => courseCardHtml(c, ci)).join('');
-}
-
-function courseCardHtml(c, ci){
-  const slot = c._slot; const s = c.routes[slot.leg][slot.dir];
-  // 初回表示時、区間が空なら1本作って自宅側を既定入力（住居表示まで）
-  if (!s._init){
-    s._init = true;
-    if (!s['区間'].length && model.homeAddr){
-      const e0 = ends(c, slot.leg, slot.dir);
-      if (!e0.home.seg[e0.home.key]) e0.home.seg[e0.home.key] = model.homeAddr;
-    }
-  }
-  const tabs = [];
-  LEGS.forEach(l => DIRS.forEach(d => {
-    const on = (l === slot.leg && d === slot.dir);
-    tabs.push(`<button class="tab${on?' active':''}" onclick="setSlot(${ci},'${l}','${d}')">${l}便 ${d}</button>`);
-  }));
-  const segs = s['区間'].map((seg, si) => segHtml(ci, slot.leg, slot.dir, seg, si)).join('');
-  const total = s['区間'].reduce((a, x) => a + (Number(x['運賃'])||0), 0);
-  const locs = COURSE_LOCS[String(c.course_id)] || [];
-  const locOpts = ['<option value="">コースの乗車場所を選ぶ…</option>']
-    .concat(locs.map(l => `<option value="${l.id}">${escHtml(l.name)}${l.address?`（${escHtml(l.address)}）`:''}</option>`)).join('');
-  const homeLbl   = (slot.dir === '出勤') ? '出発地（自宅）'                : '到着地（自宅）';
-  const courseLbl = (slot.dir === '出勤') ? '到着地（コースの乗車場所）'   : '出発地（コースの乗車場所）';
-  const locMgr = c._editLocs ? `
-    <div style="border:1px dashed #cbd8d0;border-radius:8px;padding:10px;margin:0 0 12px;background:#fff;">
-      <div style="font-size:13px;color:#4a5d52;margin-bottom:8px;">乗車場所の編集（このコース）— <b>名称</b>は人が分かる目印、<b>住所</b>は乗換案内の検索に使います</div>
-      ${locs.map(l => `
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;align-items:center;">
-          <input id="locname-${l.id}" value="${escAttr(l.name)}" placeholder="名称（例：みなみ野デニーズ前）" style="flex:1;min-width:150px;">
-          <input id="locaddr-${l.id}" value="${escAttr(l.address)}" placeholder="住所（検索用）" style="flex:2;min-width:190px;">
-          <button class="mini" onclick="mapSearch('locname-${l.id}')">🗺 地図</button>
-          <button class="mini" onclick="saveLoc(${ci},${l.id})">保存</button>
-          <button class="link" onclick="delLoc(${ci},${l.id})">削除</button>
-        </div>`).join('') || '<p class="muted" style="margin:0 0 6px;">まだ登録がありません。下の欄から追加してください。</p>'}
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;border-top:1px solid #eee;padding-top:8px;align-items:center;">
-        <input id="newlocname-${ci}" placeholder="＋ 名称" style="flex:1;min-width:150px;">
-        <input id="newlocaddr-${ci}" placeholder="＋ 住所（検索用）" style="flex:2;min-width:190px;">
-        <button class="mini" onclick="mapSearch('newlocname-${ci}')">🗺 地図</button>
-        <button class="mini" onclick="addLocInline(${ci})">追加</button>
-      </div>
-    </div>` : '';
-  return `<div class="courseCard">
-    <div class="courseHead">
-      <div class="courseTitle">${escHtml(courseLabel(c.course_id))}</div>
-      <button class="link" onclick="delCourse(${ci})">コース削除</button>
-    </div>
-    <div class="tabs">${tabs.join('')}</div>
-    <div style="background:#f6faf7;border:1px solid #e2ede6;border-radius:10px;padding:12px;margin:6px 0 12px;">
-      <div style="display:flex;flex-wrap:wrap;gap:14px;">
-        <div style="flex:1;min-width:230px;">
-          <div class="fld" style="margin:0 0 4px;">🏠 ${homeLbl}</div>
-          <button class="mini" onclick="fillHome(${ci})">住所を入れる</button>
-          <span class="muted" style="font-size:12px;margin-left:6px;">${model.homeAddr ? escHtml(model.homeAddr) : '住所未登録'}</span>
-        </div>
-        <div style="flex:1;min-width:230px;">
-          <div class="fld" style="margin:0 0 4px;">📍 ${courseLbl}</div>
-          <div style="display:flex;gap:6px;">
-            <select onchange="pickLoc(${ci},this.value)" style="flex:1;">${locOpts}</select>
-            <button class="mini" onclick="toggleLocMgr(${ci})">✏️ 編集・追加</button>
-          </div>
-        </div>
-      </div>
-    </div>
-    ${locMgr}
-    <label class="fld">集合場所の名称（表示用・任意／上で選ぶと自動で入ります）</label>
-    <input type="text" value="${escAttr(s['場所'])}" placeholder="例：みなみ野デニーズ前 ／ 車庫" oninput="upd(${ci},'${slot.leg}','${slot.dir}','場所',null,this.value)">
-    <div style="margin:12px 0 6px;font-size:13px;color:#6b7d72;">行程（区間）— 自宅↔乗車場所。乗りかえや「自転車→駅」があれば区間を足してください</div>
-    ${segs || '<p class="muted" style="margin:0 0 8px;">区間がありません。上の「住所を入れる」「乗車場所を選ぶ」で自動作成、または「区間を追加」で足してください。</p>'}
-    <button class="mini" onclick="addSeg(${ci},'${slot.leg}','${slot.dir}')">＋ 区間を追加（乗りかえ）</button>
-    <div class="total"><span class="muted">この行程の運賃 合計</span><span class="amt" id="total-${ci}">¥${total}</span></div>
-    <label class="fld" style="margin-top:10px;">⏱ 移動時間（<b>時:分</b>・公共交通機関のみ）— ${slot.dir==='出勤'?'最寄り駅→乗車場所':'乗車場所→最寄り駅'}の標準所要時間（乗換案内）。<b>自宅↔駅は含めない</b>（勤怠の${slot.dir==='出勤'?'出勤前':'退勤後'}移動時間）</label>
-    <input type="text" inputmode="numeric" value="${escAttr(s['移動時間']||'')}" placeholder="例：1:10" oninput="updIdou(${ci},'${slot.leg}','${slot.dir}',this)">
-  </div>`;
-}
-
-function segHtml(ci, leg, dir, seg, si){
-  const opts = MODES.map(m => `<option ${seg['手段']===m?'selected':''}>${m}</option>`).join('');
-  return `<div class="seg">
-    <div class="line">
-      <select class="mode" onchange="upd(${ci},'${leg}','${dir}','区間',${si},this.value,'手段')">${opts}</select>
-      <input class="st" type="text" value="${escAttr(seg['乗車'])}" placeholder="乗車地" oninput="upd(${ci},'${leg}','${dir}','区間',${si},this.value,'乗車')">
-      <span class="arrow">→</span>
-      <input class="st" type="text" value="${escAttr(seg['下車'])}" placeholder="下車地" oninput="upd(${ci},'${leg}','${dir}','区間',${si},this.value,'下車')">
-    </div>
-    <div class="line">
-      <span>運賃 ¥<input type="number" min="0" step="10" style="width:96px;" value="${Number(seg['運賃'])||0}" oninput="updFare(${ci},'${leg}','${dir}',${si},this.value)"></span>
-      <button class="mini" onclick="yahoo(${ci},'${leg}','${dir}',${si})">乗換案内で調べる</button>
-      <button class="link" onclick="delSeg(${ci},'${leg}','${dir}',${si})">× 削除</button>
-    </div>
-  </div>`;
-}
-
-function setSlot(ci, leg, dir){ model.courses[ci]._slot = { leg, dir }; render(); }
-function upd(ci, leg, dir, field, si, val, subfield){
-  const s = model.courses[ci].routes[leg][dir];
-  if (field === '場所'){ s['場所'] = val; }
-  else if (field === '移動時間'){ s['移動時間'] = val; }
-  else if (field === '区間'){ s['区間'][si][subfield] = val; }
-}
-function updFare(ci, leg, dir, si, val){
-  const s = model.courses[ci].routes[leg][dir];
-  s['区間'][si]['運賃'] = Number(val) || 0;
-  const total = s['区間'].reduce((a, x) => a + (Number(x['運賃'])||0), 0);
-  const el = document.getElementById('total-' + ci); if (el) el.textContent = '¥' + total;
-}
-// 移動時間を「時:分」に統一。「1時間26分」等を貼っても 1:26 に変換し、数字とコロンだけに限定
-function updIdou(ci, leg, dir, el){
-  let v = (el.value || '')
-    .replace(/時間|時/g, ':')   // 1時間26分 → 1:26分
-    .replace(/分/g, '')          // 分 を除去
-    .replace(/[^\d:]/g, '');     // 数字とコロン以外を除去
-  const p = v.split(':');
-  if (p.length > 2) v = p[0] + ':' + p.slice(1).join('');  // コロンは1つまで
-  el.value = v;
-  upd(ci, leg, dir, '移動時間', null, v);
-}
-function addSeg(ci, leg, dir){ model.courses[ci].routes[leg][dir]['区間'].push({ '手段':'電車', '乗車':'', '下車':'', '運賃':0 }); render(); }
-function delSeg(ci, leg, dir, si){ model.courses[ci].routes[leg][dir]['区間'].splice(si, 1); render(); }
-function addCourse(){
-  const cid = Number(document.getElementById('courseSelect').value);
-  if (!cid) return;
-  model.courses.push({ course_id: cid, active: true, routes: emptyRoutes(), _slot: { leg:'登校', dir:'出勤' } });
-  render();
-}
-async function delCourse(ci){
-  const c = model.courses[ci];
-  if (!confirm('このコースの経路を削除します。よろしいですか？')) return;
-  if (c.id){
-    const res = await fetch(`${REST_URL}/commute_routes?id=eq.${c.id}`, { method:'DELETE', headers: getH() });
-    if (!res.ok){ status('削除に失敗しました', false); return; }
-  }
-  model.courses.splice(ci, 1); render(); status('コースを削除しました', true);
-}
-function yahoo(ci, leg, dir, si){
-  const seg = model.courses[ci].routes[leg][dir]['区間'][si];
-  if (!seg['乗車'] || !seg['下車']){ status('乗車地と下車地を入れてから調べてください', false); return; }
-  const url = 'https://transit.yahoo.co.jp/search/result?from=' + encodeURIComponent(seg['乗車']) + '&to=' + encodeURIComponent(seg['下車']) + '&ticket=normal';
-  window.open(url, '_blank');
-}
-function saveStatus(msg, ok){
-  const el = document.getElementById('saveMsg');
-  if (!el) return;
-  el.textContent = msg;
-  el.style.color = ok ? '#2e7d46' : '#c0392b';
-  if (ok) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 5000);
-}
-async function saveAll(){
-  if (!model.staffId) return;
-  const rows = model.courses.map(c => {
-    const routes = JSON.parse(JSON.stringify(c.routes));
-    LEGS.forEach(l => DIRS.forEach(d => {
-      const s = routes[l][d];
-      delete s._init;
-      s['交通費'] = s['区間'].reduce((a, x) => a + (Number(x['運賃'])||0), 0);
-      s['手段'] = [...new Set(s['区間'].map(x => x['手段']).filter(Boolean))].join('・');
-    }));
-    const row = { staff_id: model.staffId, course_id: c.course_id, routes };
-    if (c.id) row.id = c.id;
-    return row;
-  });
-  if (!rows.length){ status('保存する経路がありません', false); saveStatus('保存する経路がありません', false); return; }
-  try {
-    const url = `${REST_URL}/commute_routes?on_conflict=staff_id,course_id`;
-    const doPost = () => fetch(url, {
-      method: 'POST',
-      headers: { ...getH(), 'Prefer': 'resolution=merge-duplicates,return=representation' },
-      body: JSON.stringify(rows)
-    });
-    await ensureFreshToken();          // 期限が近ければ先に更新
-    let res = await doPost();
-    if (res.status === 401){           // 期限切れ → 自動更新して1回だけ再試行（入力は保持）
-      saveStatus('ログインを更新して再保存します…', true);
-      if (await refreshSession()) res = await doPost();
-    }
-    if (!res.ok){
-      const t = await res.text();
-      if (res.status === 401 || t.includes('JWT')){
-        status('ログインの有効期限が切れました。再読み込み→ログイン後にもう一度保存してください（入力はこのまま残っています）', false);
-        saveStatus('ログイン切れ：再読み込み→ログインしてください', false);
-      } else {
-        status('保存に失敗しました：' + t.slice(0,140), false);
-        saveStatus('保存に失敗しました', false);
-      }
-      return;
-    }
-    status('保存しました', true);
-    saveStatus('✅ 保存しました', true);
-    onStaffChange();
-  } catch(e){ status('保存エラー：' + e.message, false); saveStatus('保存エラー：' + e.message, false); }
-}
-
+/* ---------- 起動 ---------- */
 document.addEventListener('DOMContentLoaded', async () => {
   const ok = await initAuth(['super_admin','admin','operator','staff']);
   if (!ok) return;
-  setInterval(() => { refreshSession(); }, 45 * 60 * 1000);  // 開いている間、定期的にトークンを更新して期限切れを防ぐ
-  document.getElementById('staffSelect').addEventListener('change', onStaffChange);
-  try {
-    await loadStaff();
-    await loadCourses();
-    await loadCourseLocations();
-    await loadStaffAddr();
-    status('準備ができました。添乗員をえらんでください。', true);
-  } catch(e){ status('データ読み込みエラー：' + e.message, false); }
+  document.getElementById('dFilter').addEventListener('input', dRender);
+  document.getElementById('dPermit').addEventListener('change', dRender);
+  document.getElementById('dActive').addEventListener('change', dRender);
+  document.getElementById('dVehicle').addEventListener('change', e=>{ CURV=parseInt(e.target.value,10); dRender(); });
+  document.getElementById('dYear').addEventListener('change', dRender);
+  try{ await dLoad(); dRender(); }
+  catch(e){ status('読み込みに失敗しました：'+e.message, false); }
 });
-
 </script>
 </body>
 </html>
