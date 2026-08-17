@@ -86,6 +86,7 @@ table.list tr:hover td{background:#f7faf8;}
     <div class="tab active" id="tabList" onclick="dSetTab('list')">🚍 車両一覧</div>
     <div class="tab" id="tabDetail" onclick="dSetTab('detail')">📋 台帳（車両を選択）</div>
     <div class="tab" id="tabCost" onclick="dSetTab('cost')">💰 費用集計</div>
+    <div class="tab" id="tabPermit" onclick="dSetTab('permit')">📑 許可別集計</div>
   </div>
 
   <!-- 車両一覧 -->
@@ -111,7 +112,7 @@ table.list tr:hover td{background:#f7faf8;}
         <select id="dVehicle" style="flex:1;min-width:220px;"></select>
         <button class="primary" onclick="dOpenMaint(null)">＋ 整備記録を追加</button>
         <button onclick="dOpenIns(null)">＋ 保険を追加</button>
-        <a href="master.html#vehicles" class="muted" style="font-size:12px;color:var(--g);text-decoration:none;white-space:nowrap;">✎ 車番・車種などはマスタで編集</a>
+        <a href="master.html#vehicles" id="dMasterLink" onclick="dToMaster()" class="muted" style="font-size:12px;color:var(--g);text-decoration:none;white-space:nowrap;">✎ この車両をマスタで編集</a>
       </div>
     </div>
     <div id="dHead"></div>
@@ -128,6 +129,24 @@ table.list tr:hover td{background:#f7faf8;}
       </div>
     </div>
     <div id="dCostArea" style="overflow:auto;max-height:72vh;border:1px solid var(--line);border-radius:8px;background:#fff;"></div>
+  </div>
+
+  <!-- 許可別集計（行政報告用） -->
+  <div id="viewPermit" style="display:none;">
+    <div class="panel">
+      <div class="row">
+        <label class="muted" style="min-width:auto;">対象期間</label>
+        <input type="date" id="dPStart" style="width:auto;">
+        <span class="muted">〜</span>
+        <input type="date" id="dPEnd" style="width:auto;">
+        <button class="mini" onclick="dSetFY(0)">今年度</button>
+        <button class="mini" onclick="dSetFY(-1)">前年度</button>
+      </div>
+      <div class="muted" style="font-size:11px;margin-top:6px;">
+        許可の履歴（期間）から集計します。期間の途中で許可が変わった車両は、<b>実際にその許可だった日数</b>で計上されます。行政当局への許可別報告にそのまま使えます。
+      </div>
+    </div>
+    <div id="dPermitArea" style="overflow:auto;max-height:72vh;border:1px solid var(--line);border-radius:8px;background:#fff;"></div>
   </div>
 </main>
 
@@ -971,7 +990,7 @@ const CATS = ['車検','3か月点検','12か月点検','修理','整備','事�
 const CAT_CLASS = {'車検':'t-shaken','3か月点検':'t-3m','12か月点検':'t-12m','修理':'t-repair','整備':'t-seibi','事故':'t-jiko','その他':'t-other'};
 const KINDS = ['自賠責','任意'];
 let TAB='list';
-let VEH=[], VEHBY={}, MAINT=[], INS=[];
+let VEH=[], VEHBY={}, MAINT=[], INS=[], PERM=[];
 let CURV=null;          // 台帳で選択中の車両id
 let EDIT=null;          // 編集中 {type:'maint'|'ins', id:null|number}
 
@@ -1016,6 +1035,7 @@ async function dLoad(){
   VEHBY={}; VEH.forEach(v=>VEHBY[v.id]=v);
   MAINT = await _fetchAll('vehicle_maintenance?select=*&order=service_date.desc,id.desc');
   INS   = await _fetchAll('vehicle_insurance?select=*&order=end_date.desc,id.desc');
+  PERM  = await _fetchAll('vehicle_permit_history?select=*&order=start_date.desc,id.desc');
   // 許可の選択肢
   const sel=document.getElementById('dPermit');
   const kinds=[...new Set(VEH.map(v=>v.permit_type).filter(Boolean))].sort();
@@ -1037,6 +1057,31 @@ function _vlabel(v){
 }
 function _maintOf(vid){ return MAINT.filter(m=>m.vehicle_id===vid); }
 function _insOf(vid){ return INS.filter(x=>x.vehicle_id===vid); }
+function _permOf(vid){ return PERM.filter(x=>x.vehicle_id===vid); }
+
+// 許可を変更する（履歴はDB側で自動的に切り替わる）
+async function dChangePermit(){
+  const v=VEHBY[CURV]; if(!v) return;
+  const list=['特定','貸切','請負','介護','自家用'];
+  const cur=v.permit_type||'';
+  const inp=prompt(
+    `${v.vehicle_number} の許可を変更します。\n現在：${cur||'（未設定）'}\n\n`
+    + `次のいずれかを入力してください：\n${list.join(' ／ ')}\n\n`
+    + `※変更すると、前の許可は本日の前日で終了、新しい許可は本日から開始として履歴に残ります。`, cur);
+  if(inp===null) return;
+  const s=inp.trim();
+  if(!s){ status('許可が入力されていません', false); return; }
+  if(list.indexOf(s)<0){ status('許可は '+list.join('／')+' のいずれかを入力してください', false); return; }
+  if(s===cur){ status('現在と同じ許可です（変更ありません）', true); return; }
+  try{
+    const r=await fetch(`${REST_URL}/vehicles?id=eq.${CURV}`, {
+      method:'PATCH', headers:getH(), body:JSON.stringify({permit_type:s})
+    });
+    if(!r.ok){ status('変更に失敗しました：'+(await r.text()).slice(0,150), false); return; }
+    await dLoad(); dRender();
+    status(`許可を「${cur||'未設定'}」→「${s}」に変更しました（履歴に自動記録されます）`, true);
+  }catch(e){ status('変更に失敗しました：'+e.message, false); }
+}
 // その車の最新の保険（種別ごと）
 function _latestIns(vid,kind){
   const a=_insOf(vid).filter(x=>x.kind===kind);
@@ -1049,15 +1094,77 @@ function dSetTab(t){
   document.getElementById('tabList').className   = 'tab'+(t==='list'?' active':'');
   document.getElementById('tabDetail').className = 'tab'+(t==='detail'?' active':'');
   document.getElementById('tabCost').className   = 'tab'+(t==='cost'?' active':'');
+  document.getElementById('tabPermit').className = 'tab'+(t==='permit'?' active':'');
   document.getElementById('viewList').style.display   = (t==='list')?'':'none';
   document.getElementById('viewDetail').style.display = (t==='detail')?'':'none';
   document.getElementById('viewCost').style.display   = (t==='cost')?'':'none';
+  document.getElementById('viewPermit').style.display = (t==='permit')?'':'none';
   dRender();
 }
 function dRender(){
   if(TAB==='list') dRenderList();
   else if(TAB==='detail') dRenderDetail();
+  else if(TAB==='permit') dRenderPermit();
   else dRenderCost();
+}
+
+/* ---------- 許可別集計（行政報告用） ---------- */
+// 年度（4/1〜翌3/31）を入れる。offset=0で今年度、-1で前年度
+function dSetFY(offset){
+  const t=new Date();
+  const fy=(t.getMonth()+1>=4 ? t.getFullYear() : t.getFullYear()-1) + (offset||0);
+  document.getElementById('dPStart').value = `${fy}-04-01`;
+  document.getElementById('dPEnd').value   = `${fy+1}-03-31`;
+  dRenderPermit();
+}
+function _ymd(s){ const a=String(s).split('-').map(Number); return new Date(a[0],a[1]-1,a[2]); }
+function _days(a,b){ return Math.round((b-a)/86400000)+1; }   // 両端を含む日数
+function dRenderPermit(){
+  const s=document.getElementById('dPStart').value, e=document.getElementById('dPEnd').value;
+  if(!s||!e){ document.getElementById('dPermitArea').innerHTML='<p class="muted" style="padding:16px;">期間を指定してください</p>'; return; }
+  const ps=_ymd(s), pe=_ymd(e);
+  if(pe<ps){ document.getElementById('dPermitArea').innerHTML='<p class="muted" style="padding:16px;">期間の指定が逆になっています</p>'; return; }
+
+  const by={};
+  PERM.forEach(p=>{
+    const hs=_ymd(p.start_date);
+    const he=p.end_date? _ymd(p.end_date) : pe;      // 継続中は期間末まで
+    // 指定期間と重なる部分だけを数える
+    const a = hs>ps?hs:ps, b = he<pe?he:pe;
+    if(b<a) return;
+    const k=p.permit_type||'（未設定）';
+    const o = by[k] = by[k] || {days:0, vids:new Set()};
+    o.days += _days(a,b);
+    o.vids.add(p.vehicle_id);
+  });
+  const keys=Object.keys(by).sort((a,b)=>by[b].days-by[a].days);
+  if(!keys.length){ document.getElementById('dPermitArea').innerHTML='<p class="muted" style="padding:16px;">この期間に該当する記録がありません</p>'; return; }
+  const totalDays=keys.reduce((a,k)=>a+by[k].days,0);
+  const spanDays=_days(ps,pe);
+
+  const rows=keys.map(k=>{
+    const o=by[k];
+    return `<tr>
+      <td><span class="tag t-shaken">${escHtml(k)}</span></td>
+      <td class="num">${o.vids.size}</td>
+      <td class="num">${o.days.toLocaleString('ja-JP')}</td>
+      <td class="num">${(o.days/spanDays).toFixed(1)}</td>
+      <td class="num">${(o.days/totalDays*100).toFixed(1)}%</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('dPermitArea').innerHTML=`
+    <table class="list"><thead><tr>
+      <th>許可</th><th>のべ台数（実車両数）</th><th>のべ日数</th><th>平均在籍台数</th><th>構成比</th>
+    </tr></thead><tbody>${rows}</tbody>
+    <tfoot><tr style="background:#eef4ef;font-weight:700;">
+      <td>合計</td><td class="num">—</td><td class="num">${totalDays.toLocaleString('ja-JP')}</td>
+      <td class="num">${(totalDays/spanDays).toFixed(1)}</td><td class="num">100.0%</td>
+    </tr></tfoot></table>
+    <p class="muted" style="padding:10px 14px;font-size:11px;">
+      対象期間 ${escHtml(s)} 〜 ${escHtml(e)}（${spanDays}日間）。<br>
+      「平均在籍台数」＝のべ日数 ÷ 期間日数。期間の途中で許可が変わった車両も、実際の日数で正しく按分されます。
+    </p>`;
 }
 
 /* ---------- 車両一覧 ---------- */
@@ -1112,8 +1219,15 @@ async function dEditInsp(){
 }
 
 /* ---------- 台帳（1台分） ---------- */
+// マスタへ渡す（URLの指定が転送で落ちても届くよう sessionStorage も使う）
+function dToMaster(){
+  try{ if(CURV!=null) sessionStorage.setItem('master_vehicle', String(CURV)); }catch(e){}
+  return true;
+}
 function dRenderDetail(){
   const v=VEHBY[CURV];
+  const ml=document.getElementById('dMasterLink');
+  if(ml) ml.href = (CURV!=null) ? `master.html?v=${CURV}#vehicles&v=${CURV}` : 'master.html#vehicles';
   if(!v){ document.getElementById('dHead').innerHTML=''; document.getElementById('dDetailArea').innerHTML='<p class="muted" style="padding:16px;">車両を選んでください</p>'; return; }
   const ms=_maintOf(v.id), ins=_insOf(v.id);
   const sum=ms.reduce((a,m)=>a+(m.total_amount||0),0);
@@ -1130,6 +1244,13 @@ function dRenderDetail(){
       <div class="box"><div class="lb">記録件数</div><div class="vl">${ms.length}件</div></div>
       <div class="box"><div class="lb">費用累計（総額）</div><div class="vl">${_yen(sum)}円</div></div>
     </div>`;
+
+  const perms=_permOf(v.id);
+  const permRows=perms.map(p=>`<tr>
+      <td><span class="tag ${p.end_date?'t-other':'t-shaken'}">${escHtml(p.permit_type)}</span>${p.end_date?'':' <span class="tag okbg">現在</span>'}</td>
+      <td style="white-space:nowrap;">${escHtml(String(p.start_date))} 〜 ${p.end_date?escHtml(String(p.end_date)):'<span class="muted">継続中</span>'}</td>
+      <td class="muted">${escHtml(p.note||'')}</td>
+    </tr>`).join('');
 
   const insRows=ins.map(x=>`<tr>
       <td><span class="tag ${x.kind==='自賠責'?'t-12m':'t-shaken'}">${escHtml(x.kind)}</span></td>
@@ -1162,6 +1283,16 @@ function dRenderDetail(){
   }).join('');
 
   document.getElementById('dDetailArea').innerHTML=`
+    <div class="panel" style="padding:0;overflow:hidden;">
+      <div style="padding:10px 14px;font-weight:700;color:var(--g2);border-bottom:1px solid var(--line);background:#f7faf8;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>許可の履歴　<span class="muted" style="font-weight:400;font-size:11px;">行政報告を許可別に集計するための記録です（期間で管理）</span></span>
+        <button class="mini" onclick="dChangePermit()">許可を変更</button>
+      </div>
+      ${perms.length?`<div style="overflow:auto;"><table class="list"><thead><tr>
+        <th>許可</th><th>期間</th><th>備考</th>
+      </tr></thead><tbody>${permRows}</tbody></table></div>`
+      :'<p class="muted" style="padding:14px;">履歴がありません。</p>'}
+    </div>
     <div class="panel" style="padding:0;overflow:hidden;">
       <div style="padding:10px 14px;font-weight:700;color:var(--g2);border-bottom:1px solid var(--line);background:#f7faf8;">保険</div>
       ${ins.length?`<div style="overflow:auto;"><table class="list"><thead><tr>
@@ -1400,12 +1531,27 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('dActive').addEventListener('change', dRender);
   document.getElementById('dVehicle').addEventListener('change', e=>{ CURV=parseInt(e.target.value,10); dRender(); });
   document.getElementById('dYear').addEventListener('change', dRender);
+  document.getElementById('dPStart').addEventListener('change', dRenderPermit);
+  document.getElementById('dPEnd').addEventListener('change', dRenderPermit);
+  { // 許可別集計の初期値は今年度
+    const t=new Date();
+    const fy=(t.getMonth()+1>=4 ? t.getFullYear() : t.getFullYear()-1);
+    document.getElementById('dPStart').value=`${fy}-04-01`;
+    document.getElementById('dPEnd').value=`${fy+1}-03-31`;
+  }
   try{
-    // URLで車両が指定されていれば、その車の台帳を開く（マスタの「整備台帳を見る」から）
-    const hm=/[#&]v=(\d+)/.exec(location.hash||'');
-    if(hm) CURV=parseInt(hm[1],10);
+    // マスタの「整備台帳を見る」から来たら、その車の台帳を開く。
+    // 転送や認証を挟むとURLの #v= が落ちることがあるため、?v= と sessionStorage も見る。
+    let want=null;
+    const hm = /[#&]v=(\d+)/.exec(location.hash||'') || /[?&]v=(\d+)/.exec(location.search||'');
+    if(hm) want=parseInt(hm[1],10);
+    if(want==null){
+      try{ const s=sessionStorage.getItem('daicho_vehicle'); if(s) want=parseInt(s,10); }catch(e){}
+    }
+    try{ sessionStorage.removeItem('daicho_vehicle'); }catch(e){}   // 一度きりの受け渡し
+    if(want!=null && !isNaN(want)) CURV=want;
     await dLoad();
-    if(hm && VEHBY[CURV]) dSetTab('detail'); else dRender();
+    if(want!=null && VEHBY[want]) dSetTab('detail'); else dRender();
   }
   catch(e){ status('読み込みに失敗しました：'+e.message, false); }
 });

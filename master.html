@@ -616,6 +616,19 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
           <label><input type="radio" name="v-filter" value="active" checked onchange="loadVehicles()">現役のみ</label>
           <label><input type="radio" name="v-filter" value="retired" onchange="loadVehicles()">廃車のみ</label>
           <label><input type="radio" name="v-filter" value="all" onchange="loadVehicles()">全部</label>
+          <span class="col-toggle-sep"></span>
+          <span style="font-size:11px;color:#888;font-weight:bold;margin-right:2px;">並び順：</span>
+          <select id="v-sort-key" onchange="renderVehiclesTable()" style="font-size:11px;padding:2px 4px;">
+            <option value="vehicle_number">車番</option>
+            <option value="vehicle_model">車名</option>
+            <option value="permit_type">許可</option>
+            <option value="office">車庫</option>
+            <option value="capacity">定員</option>
+            <option value="first_registration_date">初年度登録</option>
+            <option value="inspection_expiry_date">車検満了日</option>
+            <option value="chassis_number">車台番号</option>
+          </select>
+          <button type="button" id="v-sort-dir-btn" class="btn btn-gray btn-small" onclick="toggleVehicleSortDir()">昇順 ▲</button>
         </div>
         <div style="overflow-x:auto;">
           <table class="data-table" style="font-size:12px;">
@@ -1047,6 +1060,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   const _hashSec = (location.hash || '').replace(/^#/, '').split('&')[0];
   let _savedSection = (SECTIONS.indexOf(_hashSec) >= 0 ? _hashSec : null)
                     || sessionStorage.getItem('master_section') || 'employees';
+  // 台帳から「この車両をマスタで編集」で来た場合は、車両セクションを開いてその車を展開する
+  {
+    const _m = /[#&]v=(\d+)/.exec(location.hash || '') || /[?&]v=(\d+)/.exec(location.search || '');
+    let _wantV = _m ? parseInt(_m[1], 10) : null;
+    if (_wantV === null) { try { const s = sessionStorage.getItem('master_vehicle'); if (s) _wantV = parseInt(s, 10); } catch (e) {} }
+    try { sessionStorage.removeItem('master_vehicle'); } catch (e) {}
+    if (_wantV !== null && !isNaN(_wantV)) { _pendingVehicleOpen = _wantV; _savedSection = 'vehicles'; }
+  }
   if (_savedSection === 'admins' && _role !== 'super_admin') _savedSection = 'employees';
   if (_role === 'operator') {
     const _perms = getPermissions();
@@ -2413,6 +2434,42 @@ async function loadVehicles() {
   } catch(e) { console.error('loadVehicles error:', e); }
 }
 
+// 台帳から指定された車両（一覧の描画後に詳細を開く）
+let _pendingVehicleOpen = null;
+// 車両一覧の並び替え
+let _vSortDir = 1; // 1=昇順, -1=降順
+function toggleVehicleSortDir() {
+  _vSortDir = -_vSortDir;
+  const b = document.getElementById('v-sort-dir-btn');
+  if (b) b.textContent = _vSortDir === 1 ? '昇順 ▲' : '降順 ▼';
+  renderVehiclesTable();
+}
+function _vSortValue(v, key) {
+  if (key === 'office') {
+    const cur = currentAssignments[v.id];
+    return v.current_office_name || (cur?.office_id ? (allOfficesMaster.find(o => o.id === cur.office_id)?.name || '') : '');
+  }
+  if (key === 'vehicle_number') {
+    const cur = currentAssignments[v.id];
+    return cur ? (cur.vehicle_number || '') : (v.vehicle_number || '');
+  }
+  return v[key];
+}
+// dir も受け取る。未入力(空欄)は昇順・降順どちらでも常に末尾に置きたいので、
+// 呼び出し側で dir を掛けるのではなく、この中で値の比較にだけ dir を適用する。
+function _vSortCompare(a, b, key, dir) {
+  const va = _vSortValue(a, key), vb = _vSortValue(b, key);
+  const ea = (va === null || va === undefined || va === '');
+  const eb = (vb === null || vb === undefined || vb === '');
+  if (ea && eb) return 0;
+  if (ea) return 1;   // 未入力は常に末尾
+  if (eb) return -1;
+  const r = (typeof va === 'number' && typeof vb === 'number')
+    ? (va - vb)
+    : String(va).localeCompare(String(vb), 'ja', { numeric: true });
+  return r * (dir || 1);
+}
+
 function renderVehiclesTable() {
   const tbody = document.getElementById('tbody-vehicles');
   if (!tbody) return;
@@ -2420,7 +2477,9 @@ function renderVehiclesTable() {
     tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:20px;">データがありません</td></tr>';
     return;
   }
-  tbody.innerHTML = allVehiclesData.map(v => {
+  const _sk = document.getElementById('v-sort-key')?.value || 'vehicle_number';
+  const _rows = allVehiclesData.slice().sort((a, b) => _vSortCompare(a, b, _sk, _vSortDir));
+  tbody.innerHTML = _rows.map(v => {
     const cur = currentAssignments[v.id];
     // ビューが current_office_name を持つ場合はそれを優先、なければ allOfficesMaster から検索
     const officeName = v.current_office_name || (cur?.office_id ? (allOfficesMaster.find(o => o.id === cur.office_id)?.name || '') : '');
@@ -2484,7 +2543,7 @@ function renderVehiclesTable() {
             </div>
             <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
               ${['super_admin','admin'].includes(sessionStorage.getItem('takao_role')) ? `<button class="btn btn-edit btn-small" onclick="startEditVehicleDetail(${v.id})">✏️ 詳細を編集</button>` : ''}
-              <a href="daicho.html#v=${v.id}" class="btn btn-small" style="text-decoration:none;border:1px solid #4d7a5e;color:#4d7a5e;background:#fff;padding:4px 10px;border-radius:6px;">🔧 整備台帳を見る</a>
+              <a href="daicho.html?v=${v.id}#v=${v.id}" onclick="try{sessionStorage.setItem('daicho_vehicle','${v.id}');}catch(e){}" class="btn btn-small" style="text-decoration:none;border:1px solid #4d7a5e;color:#4d7a5e;background:#fff;padding:4px 10px;border-radius:6px;">🔧 整備台帳を見る</a>
               <span style="font-size:11px;color:#999;">整備・修理・車検・保険の記録は台帳で管理します</span>
             </div>
           </div>
@@ -2532,6 +2591,23 @@ function renderVehiclesTable() {
   }).join('');
   // トグル状態を再適用
   applyVehicleColVisible();
+  // 台帳から車両を指定して来ていれば、その車の詳細を開いて画面内に表示する
+  if (_pendingVehicleOpen !== null) {
+    const _id = _pendingVehicleOpen;
+    _pendingVehicleOpen = null;
+    setTimeout(() => {
+      const row = document.getElementById('detail-' + _id);
+      if (!row) return;
+      row.style.display = 'table-row';
+      row.scrollIntoView({ block: 'center' });
+      const view = document.getElementById('vdetail-view-' + _id);
+      if (view) {
+        view.style.transition = 'background 1.2s';
+        view.style.background = '#fff9e0';
+        setTimeout(() => { view.style.background = ''; }, 1600);
+      }
+    }, 0);
+  }
 }
 
 function toggleVehicleDetail(id) {
