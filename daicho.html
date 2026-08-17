@@ -111,6 +111,7 @@ table.list tr:hover td{background:#f7faf8;}
         <select id="dVehicle" style="flex:1;min-width:220px;"></select>
         <button class="primary" onclick="dOpenMaint(null)">＋ 整備記録を追加</button>
         <button onclick="dOpenIns(null)">＋ 保険を追加</button>
+        <a href="master.html#vehicles" class="muted" style="font-size:12px;color:var(--g);text-decoration:none;white-space:nowrap;">✎ 車番・車種などはマスタで編集</a>
       </div>
     </div>
     <div id="dHead"></div>
@@ -1399,7 +1400,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('dActive').addEventListener('change', dRender);
   document.getElementById('dVehicle').addEventListener('change', e=>{ CURV=parseInt(e.target.value,10); dRender(); });
   document.getElementById('dYear').addEventListener('change', dRender);
-  try{ await dLoad(); dRender(); }
+  try{
+    // URLで車両が指定されていれば、その車の台帳を開く（マスタの「整備台帳を見る」から）
+    const hm=/[#&]v=(\d+)/.exec(location.hash||'');
+    if(hm) CURV=parseInt(hm[1],10);
+    await dLoad();
+    if(hm && VEHBY[CURV]) dSetTab('detail'); else dRender();
+  }
   catch(e){ status('読み込みに失敗しました：'+e.message, false); }
 });
 </script>

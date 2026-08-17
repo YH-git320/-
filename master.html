@@ -535,7 +535,8 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     <div id="sec-vehicles" class="section-content">
       <div class="panel">
         <h2>🚌 車両マスタ <span class="count-badge" id="cnt-vehicles">0</span></h2>
-        <p style="font-size:12px;color:#666;margin-bottom:12px;">車台番号が同一車両の不変識別子です。車番・車庫・担当業務は「配置変更」で年度ごとに記録されます。</p>
+        <p style="font-size:12px;color:#666;margin-bottom:12px;">車台番号が同一車両の不変識別子です。車番・車庫・担当業務は「配置変更」で年度ごとに記録されます。<br>
+        ここは<b>車両の登録・変更</b>（買った・売った・車番が変わった等）を扱います。<b>整備・修理・車検・保険の記録</b>は <a href="daicho.html" style="color:#4d7a5e;">🔧 車両管理台帳</a> で管理します（車両データは共通で、どちらから直しても両方に反映されます）。</p>
 
         <details class="add-form-details" id="details-vehicles-form">
           <summary>＋ 新規登録（車両追加）</summary>
@@ -1041,8 +1042,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadJobTypes();   // 業務マスタを先に読む（従業員表示で使う）
 
   // 前回開いていたセクションに復元（権限がないセクションは先頭の許可セクションへ）
+  // ※ URLに #vehicles のような指定があればそちらを優先（台帳など他ページからのリンク用）
   const _role = sessionStorage.getItem('takao_role');
-  let _savedSection = sessionStorage.getItem('master_section') || 'employees';
+  const _hashSec = (location.hash || '').replace(/^#/, '').split('&')[0];
+  let _savedSection = (SECTIONS.indexOf(_hashSec) >= 0 ? _hashSec : null)
+                    || sessionStorage.getItem('master_section') || 'employees';
   if (_savedSection === 'admins' && _role !== 'super_admin') _savedSection = 'employees';
   if (_role === 'operator') {
     const _perms = getPermissions();
@@ -2478,9 +2482,11 @@ function renderVehiclesTable() {
               ${v.retired_date ? `<div><span style="color:#666;">廃車日:</span> ${esc(v.retired_date)}</div>` : ''}
               ${v.note ? `<div style="grid-column:1/-1;"><span style="color:#666;">備考:</span> ${esc(v.note)}</div>` : ''}
             </div>
-            ${['super_admin','admin'].includes(sessionStorage.getItem('takao_role')) ? `<div style="margin-bottom:10px;">
-              <button class="btn btn-edit btn-small" onclick="startEditVehicleDetail(${v.id})">✏️ 詳細を編集</button>
-            </div>` : ''}
+            <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              ${['super_admin','admin'].includes(sessionStorage.getItem('takao_role')) ? `<button class="btn btn-edit btn-small" onclick="startEditVehicleDetail(${v.id})">✏️ 詳細を編集</button>` : ''}
+              <a href="daicho.html#v=${v.id}" class="btn btn-small" style="text-decoration:none;border:1px solid #4d7a5e;color:#4d7a5e;background:#fff;padding:4px 10px;border-radius:6px;">🔧 整備台帳を見る</a>
+              <span style="font-size:11px;color:#999;">整備・修理・車検・保険の記録は台帳で管理します</span>
+            </div>
           </div>
           <div id="vdetail-edit-${v.id}" style="display:none;"></div>
           ${hist.length > 0 ? `
