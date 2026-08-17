@@ -1073,13 +1073,22 @@ async function dChangePermit(){
   if(!s){ status('許可が入力されていません', false); return; }
   if(list.indexOf(s)<0){ status('許可は '+list.join('／')+' のいずれかを入力してください', false); return; }
   if(s===cur){ status('現在と同じ許可です（変更ありません）', true); return; }
+  // 変更日（既定は今日。年度切替などで遡る場合はここで指定）
+  const today=_today();
+  const dinp=prompt(`いつからこの許可になりますか？（YYYY-MM-DD）\n年度切替なら 4月1日 を指定してください。`, today);
+  if(dinp===null) return;
+  const d=dinp.trim()||today;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(d)){ status('日付は 2026-04-01 の形式で入力してください', false); return; }
   try{
-    const r=await fetch(`${REST_URL}/vehicles?id=eq.${CURV}`, {
-      method:'PATCH', headers:getH(), body:JSON.stringify({permit_type:s})
+    // 一括変更と同じ処理を使う（履歴の切り替え方を揃えるため）
+    const r=await fetch(`${REST_URL}/rpc/change_vehicle_permit`, {
+      method:'POST', headers:getH(),
+      body: JSON.stringify({p_vehicle_ids:[CURV], p_permit:s, p_date:d})
     });
-    if(!r.ok){ status('変更に失敗しました：'+(await r.text()).slice(0,150), false); return; }
+    const t=await r.text();
+    if(!r.ok){ status('変更に失敗しました：'+t.slice(0,180), false); return; }
     await dLoad(); dRender();
-    status(`許可を「${cur||'未設定'}」→「${s}」に変更しました（履歴に自動記録されます）`, true);
+    status(`許可を「${cur||'未設定'}」→「${s}」に変更しました（${d}から・履歴に記録済み）`, true);
   }catch(e){ status('変更に失敗しました：'+e.message, false); }
 }
 // その車の最新の保険（種別ごと）

@@ -630,10 +630,35 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
           </select>
           <button type="button" id="v-sort-dir-btn" class="btn btn-gray btn-small" onclick="toggleVehicleSortDir()">昇順 ▲</button>
         </div>
+
+        <!-- 年度切替などの一括変更 -->
+        <div id="bulk-bar" style="display:none;margin-bottom:10px;padding:10px 12px;background:#f0f8f0;border:1px solid #cfe0d5;border-radius:8px;">
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <b style="font-size:13px;color:#2d4a38;"><span id="bulk-count">0</span>台を選択中</b>
+            <span style="color:#ccc;">｜</span>
+            <label style="font-size:12px;color:#666;">許可を一括変更：</label>
+            <select id="bulk-permit" style="font-size:12px;padding:4px 6px;">
+              <option value="">（選択してください）</option>
+              <option value="特定">特定</option>
+              <option value="貸切">貸切</option>
+              <option value="請負">請負</option>
+              <option value="介護">介護</option>
+              <option value="自家用">自家用</option>
+            </select>
+            <label style="font-size:12px;color:#666;">変更日：</label>
+            <input type="date" id="bulk-date" style="font-size:12px;padding:4px 6px;">
+            <button type="button" class="btn btn-edit btn-small" onclick="applyBulkPermit()">この内容で変更</button>
+            <button type="button" class="btn btn-gray btn-small" onclick="clearBulkSelection()">選択を解除</button>
+          </div>
+          <div style="font-size:11px;color:#888;margin-top:6px;">
+            変更日より前は元の許可、変更日からは新しい許可として<b>履歴に自動で記録</b>されます（行政報告の集計に反映されます）。年度切替なら 4月1日 を指定してください。
+          </div>
+        </div>
         <div style="overflow-x:auto;">
           <table class="data-table" style="font-size:12px;">
             <thead>
               <tr>
+                <th class="vcol-bulk" style="width:28px;text-align:center;"><input type="checkbox" id="v-check-all" onchange="toggleAllVehicleCheck(this.checked)" title="表示中をすべて選択"></th>
                 <th>車台番号</th>
                 <th class="vcol-model">車名</th>
                 <th class="vcol-permit">許可</th>
@@ -2434,6 +2459,67 @@ async function loadVehicles() {
   } catch(e) { console.error('loadVehicles error:', e); }
 }
 
+/* ===== 車両の一括変更（年度切替用） ===== */
+function _checkedVehicleIds() {
+  return Array.from(document.querySelectorAll('.v-check:checked')).map(el => parseInt(el.value, 10));
+}
+function updateBulkCount() {
+  const ids = _checkedVehicleIds();
+  const bar = document.getElementById('bulk-bar');
+  const cnt = document.getElementById('bulk-count');
+  if (cnt) cnt.textContent = ids.length;
+  if (bar) bar.style.display = ids.length ? '' : 'none';
+  const all = document.getElementById('v-check-all');
+  const boxes = document.querySelectorAll('.v-check');
+  if (all) all.checked = (boxes.length > 0 && ids.length === boxes.length);
+}
+function toggleAllVehicleCheck(on) {
+  document.querySelectorAll('.v-check').forEach(el => { el.checked = on; });
+  updateBulkCount();
+}
+function clearBulkSelection() {
+  document.querySelectorAll('.v-check').forEach(el => { el.checked = false; });
+  const all = document.getElementById('v-check-all');
+  if (all) all.checked = false;
+  updateBulkCount();
+}
+async function applyBulkPermit() {
+  const ids = _checkedVehicleIds();
+  if (!ids.length) { showStatus('status-vehicles', 'error', '車両が選択されていません'); return; }
+  const permit = document.getElementById('bulk-permit').value;
+  if (!permit) { showStatus('status-vehicles', 'error', '変更後の許可を選んでください'); return; }
+  const date = document.getElementById('bulk-date').value;
+  if (!date) { showStatus('status-vehicles', 'error', '変更日を入れてください（年度切替なら4月1日）'); return; }
+
+  const names = ids.map(id => {
+    const v = allVehiclesData.find(x => x.id === id);
+    const cur = currentAssignments[id];
+    return (cur ? cur.vehicle_number : (v?.vehicle_number || '')) + '（' + (v?.permit_type || '未設定') + '）';
+  });
+  const msg = `次の ${ids.length}台 の許可を「${permit}」に変更します。\n変更日：${date}\n\n`
+            + names.slice(0, 12).join('\n') + (names.length > 12 ? `\n…ほか${names.length - 12}台` : '')
+            + `\n\n変更日より前は元の許可、変更日からは「${permit}」として履歴に記録されます。よろしいですか？`;
+  if (!confirm(msg)) return;
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/change_vehicle_permit`, {
+      method: 'POST', headers: getH(),
+      body: JSON.stringify({ p_vehicle_ids: ids, p_permit: permit, p_date: date })
+    });
+    const txt = await res.text();
+    if (!res.ok) { showStatus('status-vehicles', 'error', '変更に失敗しました：' + txt.slice(0, 200)); return; }
+    let j = {}; try { j = JSON.parse(txt); } catch (e) {}
+    clearBulkSelection();
+    document.getElementById('bulk-permit').value = '';
+    await loadVehicles();
+    showStatus('status-vehicles', 'success',
+      `${j.changed ?? '?'}台の許可を「${permit}」に変更しました（${date}から）`
+      + ((j.skipped) ? `／既に同じ許可だった ${j.skipped}台は変更していません` : ''));
+  } catch (e) {
+    showStatus('status-vehicles', 'error', '変更に失敗しました：' + e.message);
+  }
+}
+
 // 台帳から指定された車両（一覧の描画後に詳細を開く）
 let _pendingVehicleOpen = null;
 // 車両一覧の並び替え
@@ -2474,7 +2560,7 @@ function renderVehiclesTable() {
   const tbody = document.getElementById('tbody-vehicles');
   if (!tbody) return;
   if (!allVehiclesData.length) {
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:20px;">データがありません</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#999;padding:20px;">データがありません</td></tr>';
     return;
   }
   const _sk = document.getElementById('v-sort-key')?.value || 'vehicle_number';
@@ -2510,6 +2596,7 @@ function renderVehiclesTable() {
           : auditVBtn);
     return `
       <tr style="${isRetired ? 'opacity:0.6;' : ''}">
+        <td class="vcol-bulk" style="text-align:center;"><input type="checkbox" class="v-check" value="${v.id}" onchange="updateBulkCount()"></td>
         <td><a href="#" style="color:#4d7a5e;" onclick="toggleVehicleDetail(${v.id});return false;">${esc(v.chassis_number || '—')}</a></td>
         <td class="vcol-model">${esc(v.vehicle_model || '')}</td>
         <td class="vcol-permit" style="font-size:11px;">${esc(v.permit_type || '')}</td>
@@ -2522,7 +2609,7 @@ function renderVehiclesTable() {
         <td><div style="display:flex;gap:4px;align-items:center;">${actionBtns}</div></td>
       </tr>
       <tr id="detail-${v.id}" style="display:none;">
-        <td colspan="10" style="padding:12px;background:#f0f8f0;border-bottom:1px solid #dde;">
+        <td colspan="11" style="padding:12px;background:#f0f8f0;border-bottom:1px solid #dde;">
           <div id="vdetail-view-${v.id}">
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px;font-size:12px;margin-bottom:8px;">
               <div><span style="color:#666;">定員:</span> ${v.capacity != null ? v.capacity+'名' : '—'}</div>
@@ -2591,6 +2678,16 @@ function renderVehiclesTable() {
   }).join('');
   // トグル状態を再適用
   applyVehicleColVisible();
+  // 一括変更バーの状態を更新（再描画でチェックが外れるため）
+  updateBulkCount();
+  {  // 変更日の初期値は今年度の4月1日（年度切替での使用が主なため）
+    const bd = document.getElementById('bulk-date');
+    if (bd && !bd.value) {
+      const t = new Date();
+      const fy = (t.getMonth() + 1 >= 4) ? t.getFullYear() : t.getFullYear() - 1;
+      bd.value = `${fy}-04-01`;
+    }
+  }
   // 台帳から車両を指定して来ていれば、その車の詳細を開いて画面内に表示する
   if (_pendingVehicleOpen !== null) {
     const _id = _pendingVehicleOpen;
