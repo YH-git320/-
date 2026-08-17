@@ -77,7 +77,8 @@ table.list tr:hover td{background:#f7faf8;}
 </header>
 <main>
   <h1>車両管理台帳</h1>
-  <p class="sub">車両ごとの<b>整備・修理・車検の記録</b>と<b>保険</b>を管理します。車検・保険の期限が近い車両は色で警告します。紙の台帳（1台＝1綴り）と同じ形で、車両を選ぶとその車のすべてが揃います。</p>
+  <p class="sub">車両ごとの<b>整備・修理・車検の記録</b>と<b>保険</b>を管理します。車検・保険の期限が近い車両は色で警告します。紙の台帳（1台＝1綴り）と同じ形で、車両を選ぶとその車のすべてが揃います。<br>
+  車番・車種・車庫などの基本情報は<b>車両マスタと同じデータ</b>です（マスタで直せばここにも反映されます）。<b>車検満了日は、整備記録に「次回車検日」を入れると自動で更新</b>されます（台帳の上部から直接変更もできます）。</p>
 
   <div id="status"></div>
 
@@ -1091,6 +1092,24 @@ function dRenderList(){
 }
 function dGo(vid){ CURV=vid; document.getElementById('dVehicle').value=String(vid); dSetTab('detail'); }
 
+// 車検満了日をこの画面から直接変更する（車両マスタと同じ項目を更新）
+async function dEditInsp(){
+  const v=VEHBY[CURV]; if(!v) return;
+  const cur=v.inspection_expiry_date||'';
+  const inp=prompt(`${v.vehicle_number} の車検満了日を入力してください（例 2027-04-08）\n※空欄で保存すると未設定に戻します`, cur);
+  if(inp===null) return;
+  const s=inp.trim();
+  if(s && !/^\d{4}-\d{2}-\d{2}$/.test(s)){ status('日付は 2027-04-08 の形式で入力してください', false); return; }
+  try{
+    const r=await fetch(`${REST_URL}/vehicles?id=eq.${CURV}`, {
+      method:'PATCH', headers:getH(), body:JSON.stringify({inspection_expiry_date: s||null})
+    });
+    if(!r.ok){ status('変更に失敗しました：'+(await r.text()).slice(0,150), false); return; }
+    await dLoad(); dRender();
+    status(s?`車検満了日を ${s} に変更しました（車両マスタにも反映されます）`:'車検満了日を未設定にしました', true);
+  }catch(e){ status('変更に失敗しました：'+e.message, false); }
+}
+
 /* ---------- 台帳（1台分） ---------- */
 function dRenderDetail(){
   const v=VEHBY[CURV];
@@ -1104,7 +1123,8 @@ function dRenderDetail(){
     <div class="kpi">
       <div class="box"><div class="lb">車台番号</div><div class="vl" style="font-size:14px;">${escHtml(v.chassis_number||'—')}</div></div>
       <div class="box"><div class="lb">初度登録</div><div class="vl" style="font-size:14px;">${escHtml(v.first_registration_date||'—')}</div></div>
-      <div class="box"><div class="lb">車検満了</div><div class="vl" style="font-size:14px;">${v.inspection_expiry_date?_limitCell(v.inspection_expiry_date):'<span class="muted">未設定</span>'}</div></div>
+      <div class="box"><div class="lb">車検満了　<a href="#" onclick="dEditInsp();return false;" style="color:var(--g);font-size:10px;">✎ 変更</a></div>
+        <div class="vl" style="font-size:14px;" id="dInspCell">${v.inspection_expiry_date?_limitCell(v.inspection_expiry_date):'<span class="muted">未設定</span>'}</div></div>
       <div class="box"><div class="lb">最終走行距離</div><div class="vl">${odo?_km(odo):'—'}</div></div>
       <div class="box"><div class="lb">記録件数</div><div class="vl">${ms.length}件</div></div>
       <div class="box"><div class="lb">費用累計（総額）</div><div class="vl">${_yen(sum)}円</div></div>
@@ -1324,12 +1344,8 @@ async function dSave(){
       if(!body.category){ status('区分を選んでください', false); return; }
       const ok = await _upsert('vehicle_maintenance', EDIT.id, body);
       if(!ok) return;
-      // 次回車検日が入っていれば車両の車検満了日も更新する
-      if(body.next_inspection_date){
-        await fetch(`${REST_URL}/vehicles?id=eq.${body.vehicle_id}`, {
-          method:'PATCH', headers:getH(), body:JSON.stringify({inspection_expiry_date: body.next_inspection_date})
-        });
-      }
+      // 車両マスタの車検満了日への反映はDB側のトリガーが行う（最新の実施日の記録を採用）。
+      // 画面側で上書きすると、古い記録を編集したときに誤った日付で上書きしてしまうため、ここでは何もしない。
     } else {
       const gv=id=>{ const e=document.getElementById(id); return e? e.value.trim() : ''; };
       const body={
