@@ -85,6 +85,7 @@ table.list tr:hover td{background:#f7faf8;}
 
   <div class="tabs">
     <div class="tab active" id="tabImport" onclick="jSetTab('import')">📥 デジタコ取込</div>
+    <div class="tab" id="tabTenko" onclick="jSetTab('tenko')">🕒 点呼記録取込</div>
     <div class="tab" id="tabList"   onclick="jSetTab('list')">📋 実績一覧</div>
     <div class="tab" id="tabSum"    onclick="jSetTab('sum')">📈 集計</div>
   </div>
@@ -116,6 +117,38 @@ table.list tr:hover td{background:#f7faf8;}
     <div class="panel">
       <div style="font-weight:700;margin-bottom:6px;">取り込みの状況</div>
       <div id="jStatArea" class="muted" style="font-size:13px;">読み込み中…</div>
+    </div>
+  </div>
+
+  <!-- ===== 点呼記録の取込 ===== -->
+  <div id="viewTenko" style="display:none;">
+    <div class="panel">
+      <div style="font-weight:700;margin-bottom:6px;">点呼結果一覧のCSVを取り込む</div>
+      <div class="muted" style="font-size:12px;line-height:1.7;margin-bottom:10px;">
+        点呼システムから出力した <b>点呼結果一覧のCSV</b>（例：<code>八王子(04010731)点呼結果一覧_….csv</code>）を入れてください。
+        <b>営業所ごとのファイルをまとめて選べます。</b><br>
+        点呼は<b>運行管理者が行う法定の記録</b>のため、デジタコのボタン操作より確かです。取り込むと
+        <b>業務前・業務後の時刻が、その日の運行実績の「業務開始・終了」として入ります</b>。
+        アルコール測定値や健康確認の結果もそのまま保存されるので、監査の際にそのまま示せます。
+      </div>
+      <div id="kDrop" style="border:2px dashed var(--line);border-radius:10px;padding:26px 14px;text-align:center;background:#fff;cursor:pointer;">
+        <div style="font-size:30px;line-height:1;">🕒</div>
+        <div style="margin-top:8px;font-weight:600;">ここにCSVをドラッグ＆ドロップ</div>
+        <div class="muted" style="font-size:12px;margin-top:4px;">またはクリックしてファイルを選ぶ（複数まとめて選べます）</div>
+        <input type="file" id="kFile" accept=".csv" multiple style="display:none;">
+      </div>
+      <div id="kProg" style="display:none;margin-top:12px;">
+        <div style="height:8px;background:#e8ede8;border-radius:4px;overflow:hidden;">
+          <div id="kBar" style="height:100%;width:0%;background:var(--g);transition:width .2s;"></div>
+        </div>
+        <div id="kProgText" class="muted" style="font-size:12px;margin-top:6px;"></div>
+      </div>
+      <div id="kResult" style="margin-top:12px;"></div>
+    </div>
+
+    <div class="panel">
+      <div style="font-weight:700;margin-bottom:6px;">取り込みの状況</div>
+      <div id="kStatArea" class="muted" style="font-size:13px;">読み込み中…</div>
     </div>
   </div>
 
@@ -989,7 +1022,7 @@ let VEH=[], STF=[], TRIPS=[];
 let VMAP=new Map(), SMAP=new Map();
 
 function jSetTab(t){
-  ['import','list','sum'].forEach(x=>{
+  ['import','tenko','list','sum'].forEach(x=>{
     document.getElementById('view'+x[0].toUpperCase()+x.slice(1)).style.display = (x===t)?'':'none';
     document.getElementById('tab'+x[0].toUpperCase()+x.slice(1)).classList.toggle('active', x===t);
   });
@@ -1003,21 +1036,22 @@ async function jLoad(){
   STF = await _fetchAll('staff?select=id,name,active');
   VMAP = new Map(VEH.map(v=>[norm(v.vehicle_number), v.id]));
   SMAP = new Map(STF.map(s=>[norm(s.name), s.id]));
-  TRIPS = await _fetchAll('trip_logs?select=*&order=work_date.desc,id.desc');
+  TRIPS = await _fetchAll('trip_logs_effective?select=*&order=work_date.desc,id.desc');
   jRenderStat();
+  kRenderStat();
 }
 
 function jRenderStat(){
   const el = document.getElementById('jStatArea');
   if(!TRIPS.length){ el.innerHTML = 'まだ取り込まれていません。'; return; }
   const by = {};
-  TRIPS.forEach(t=>{ const m=(t.work_date||'').slice(0,7); (by[m]=by[m]||{n:0,km:0}); by[m].n++; by[m].km += Number(t.km_total||0); });
+  TRIPS.forEach(t=>{ const m=(t.work_date||'').slice(0,7); (by[m]=by[m]||{n:0,km:0}); by[m].n++; by[m].km += Number(t.eff_km_total||0); });
   const un = TRIPS.filter(t=>!t.vehicle_id || !t.driver_id).length;
   let h = '<table style="width:auto;"><tr><th>年月</th><th style="text-align:right;">件数</th><th style="text-align:right;">走行キロ</th></tr>';
   Object.keys(by).sort().forEach(m=>{
     h += `<tr><td>${esc(m.replace('-','年'))}月</td><td style="text-align:right;">${n0(by[m].n)}</td><td style="text-align:right;">${nf(by[m].km)} km</td></tr>`;
   });
-  h += `<tr style="font-weight:700;background:#f5f8f4;"><td>合計</td><td style="text-align:right;">${n0(TRIPS.length)}</td><td style="text-align:right;">${nf(TRIPS.reduce((s,t)=>s+Number(t.km_total||0),0))} km</td></tr></table>`;
+  h += `<tr style="font-weight:700;background:#f5f8f4;"><td>合計</td><td style="text-align:right;">${n0(TRIPS.length)}</td><td style="text-align:right;">${nf(TRIPS.reduce((s,t)=>s+Number(t.eff_km_total||0),0))} km</td></tr></table>`;
   if(un) h += `<div style="margin-top:8px;"><span class="tag warn">未照合 ${n0(un)}件</span> 車両または乗務員がマスタに見つかっていません（実績一覧の「未照合のみ」で確認できます）</div>`;
   el.innerHTML = h;
 }
@@ -1244,6 +1278,175 @@ async function jImport(files){
   await jLoad();
 }
 
+/* ---------- 点呼記録の取込 ---------- */
+// 点呼日時 → ISO（日本時間）
+// ⚠️ 営業所によって書式が違う（八王子「2026/4/1 5:35」／寒川ほか「2026-04-01 07:09:16」）ので両方に対応する
+function _tenkoStamp(v){
+  const m = String(v==null?'':v).match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})[\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if(!m) return null;
+  const p = n => String(n).padStart(2,'0');
+  return `${m[1]}-${p(m[2])}-${p(m[3])}T${p(m[4])}:${m[5]}:${p(m[6]||0)}+09:00`;
+}
+// 免許証有効期限など「2028/8/23」「2028-08-23」→「2028-08-23」
+function _tenkoDate(v){
+  const m = String(v==null?'':v).match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  return m ? `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}` : null;
+}
+// 見出し行のあるCSVを {列名:値} の配列にする（営業所ごとに列構成が違うので必ず見出しで読む）
+function readTable(text){
+  const lines = text.split(/\r?\n/).filter(l=>l.trim());
+  if(lines.length<2) return [];
+  const head = parseCSVLine(lines[0]).map(h=>String(h).trim());
+  return lines.slice(1).map(l=>{
+    const v = parseCSVLine(l), o = {};
+    head.forEach((h,i)=>{ if(h) o[h]=v[i]; });
+    return o;
+  });
+}
+
+function kProg(pct, text){
+  document.getElementById('kProg').style.display='';
+  document.getElementById('kBar').style.width = pct+'%';
+  document.getElementById('kProgText').textContent = text;
+}
+
+async function kImport(files){
+  const R = document.getElementById('kResult');
+  R.innerHTML='';
+  if(!files || !files.length) return;
+
+  kProg(3,'CSVを読み込んでいます…');
+  const rows=[], seen=new Set(); let readErr=0;
+  for(let i=0;i<files.length;i++){
+    kProg(3 + i/files.length*40, `CSVを読み込んでいます… (${i+1}/${files.length})`);
+    let recs;
+    try{
+      const buf = await files[i].arrayBuffer();
+      recs = readTable(new TextDecoder('shift_jis').decode(buf));
+    }catch(e){ readErr++; continue; }
+    for(const r of recs){
+      const at = _tenkoStamp(r['点呼日時']);
+      const nm = _txt(r['ドライバー名']);
+      const kd = _txt(r['業務前後']);
+      if(!at || !nm || !kd) continue;
+      const key = at+'|'+norm(nm)+'|'+kd;
+      if(seen.has(key)) continue;      // 同じファイルを重ねて選んだ場合
+      seen.add(key);
+      const veh = _txt(r['車両番号']);
+      const vehPlain = veh ? veh.replace(/-/g,'') : null;   // 八王子-200-あ-327 → 八王子200あ327
+      rows.push({
+        tenko_at: at, kind: kd, method: _txt(r['点呼方法']),
+        driver_id: SMAP.get(norm(nm)) || null,
+        driver_label: nm, driver_code: _txt(r['ドライバーCD']),
+        office_label: _txt(r['所属事業所名']), driver_check: _txt(r['ドライバー確認方法']),
+        vehicle_id: vehPlain ? (VMAP.get(norm(vehPlain)) || null) : null,
+        vehicle_label: vehPlain, vehicle_code: _txt(r['車両CD']),
+        vehicle_group: _txt(r['車両グループCD']),
+        executor_name: _txt(r['執行者名']), executor_code: _txt(r['執行者CD']),
+        executor_role: _txt(r['執行者区分']),
+        result: _txt(r['点呼結果']),
+        alcohol_result: _txt(r['アルコール測定結果']),
+        alcohol_value: _num(r['測定値（mg/l）']),
+        temperature: _num(r['体温測定値（℃）']), temperature_ref: _num(r['体温平常値（℃）']),
+        blood_pressure: _txt(r['血圧測定値（mmHg）']), blood_pressure_ref: _txt(r['血圧平常値（mmHg）']),
+        chk_illness: _txt(r['疾病']), chk_fatigue: _txt(r['疲労']), chk_sleep: _txt(r['睡眠不足']),
+        chk_inspection: _txt(r['日常点検']), chk_license: _txt(r['免許証']), chk_medicine: _txt(r['服薬']),
+        license_expiry: _tenkoDate(r['免許証有効期限']), license_check: _txt(r['免許証確認方法']),
+        split_rest: _txt(r['分割休息後乗務']), interrupt_note: _txt(r['中断再開記録']),
+        weather: _txt(r['天候']), instruction: _txt(r['指示事項']),
+        report_status: _txt(r['運行状況']), report_note: _txt(r['通告内容']),
+        unfit_reason: _txt(r['乗務不可理由']),
+        source_file: files[i].name,
+      });
+    }
+  }
+
+  if(!rows.length){
+    document.getElementById('kProg').style.display='none';
+    R.innerHTML = `<div class="tag warn">点呼記録が読み取れませんでした。${readErr?'ファイルを開けませんでした。':'「点呼日時」「ドライバー名」「業務前後」の列がある点呼結果一覧のCSVかご確認ください。'}</div>`;
+    return;
+  }
+
+  // すでに取り込み済みのものを除く（点呼日時＋運転者＋区分で判定）
+  kProg(46,'取り込み済みの分を確認しています…');
+  const days = [...new Set(rows.map(r=>r.tenko_at.slice(0,10)))].sort();
+  const have = new Set(
+    (await _fetchAll(`tenko_records?select=tenko_at,driver_label,kind&tenko_at=gte.${days[0]}T00:00:00%2B09:00&tenko_at=lte.${days[days.length-1]}T23:59:59%2B09:00`))
+      .map(t=>new Date(t.tenko_at).toISOString().slice(0,16)+'|'+norm(t.driver_label)+'|'+t.kind)
+  );
+  const fresh = rows.filter(r=>!have.has(new Date(r.tenko_at).toISOString().slice(0,16)+'|'+norm(r.driver_label)+'|'+r.kind));
+  const skipped = rows.length - fresh.length;
+
+  let done=0, failed=0; const errs=[];
+  for(let i=0;i<fresh.length;i+=300){
+    const chunk = fresh.slice(i,i+300);
+    kProg(50 + i/fresh.length*35, `保存しています… (${i}/${fresh.length}件)`);
+    const res = await fetch(`${REST_URL}/tenko_records`, {
+      method:'POST',
+      headers: Object.assign(getH(), {'Prefer':'return=minimal,resolution=ignore-duplicates'}),
+      body: JSON.stringify(chunk)
+    });
+    if(res.ok) done += chunk.length;
+    else { failed += chunk.length; if(errs.length<2) errs.push(await res.text()); }
+  }
+
+  // 運行実績へ反映（業務前・業務後 → 業務開始・終了）
+  kProg(88,'運行実績に業務時刻を反映しています…');
+  let applied = null;
+  try{
+    const res = await fetch(`${REST_URL}/rpc/apply_tenko_to_trips`, {
+      method:'POST', headers:getH(),
+      body: JSON.stringify({ p_from: days[0], p_to: days[days.length-1] })
+    });
+    if(res.ok){ const j = await res.json(); applied = Array.isArray(j)?j[0]:j; }
+  }catch(e){}
+
+  kProg(100,'完了');
+  setTimeout(()=>{ document.getElementById('kProg').style.display='none'; }, 800);
+
+  const unmatched = fresh.filter(r=>!r.driver_id).length;
+  let h = `<div class="panel" style="background:#f5f8f4;">
+    <div style="font-weight:700;margin-bottom:6px;">取り込みが終わりました</div>
+    <table style="width:auto;">
+      <tr><td>読み取った点呼</td><td style="text-align:right;font-weight:700;">${n0(rows.length)} 件</td></tr>
+      <tr><td>新しく保存した分</td><td style="text-align:right;font-weight:700;color:var(--g);">${n0(done)} 件</td></tr>
+      ${skipped?`<tr><td>すでに取り込み済み（飛ばした分）</td><td style="text-align:right;">${n0(skipped)} 件</td></tr>`:''}
+      ${failed ?`<tr><td style="color:#c0392b;">保存できなかった分</td><td style="text-align:right;color:#c0392b;font-weight:700;">${n0(failed)} 件</td></tr>`:''}
+      ${applied?`<tr><td><b>運行実績に反映した業務時刻</b></td><td style="text-align:right;font-weight:700;color:var(--g);">${n0(applied['更新した運行']||0)} 件</td></tr>`:''}
+    </table>`;
+  if(unmatched) h += `<div style="margin-top:8px;"><span class="tag warn">未照合 ${n0(unmatched)}件</span> 従業員一覧に一致する氏名が見つかりませんでした。記録は残っています。</div>`;
+  if(errs.length) h += `<div style="margin-top:8px;font-size:12px;color:#c0392b;">エラー内容：${esc(errs[0]).slice(0,300)}</div>`;
+  h += '</div>';
+  R.innerHTML = h;
+
+  await jLoad();
+}
+
+async function kRenderStat(){
+  const el = document.getElementById('kStatArea');
+  const rows = await _fetchAll('tenko_records?select=tenko_at,kind,result,alcohol_result,driver_id&order=tenko_at');
+  if(!rows.length){ el.innerHTML = 'まだ取り込まれていません。'; return; }
+  const by={};
+  rows.forEach(r=>{
+    const m = new Date(r.tenko_at).toLocaleDateString('ja-JP',{year:'numeric',month:'2-digit',timeZone:'Asia/Tokyo'});
+    (by[m] = by[m] || {n:0,pre:0,post:0,ng:0});
+    by[m].n++;
+    if(r.kind==='業務前') by[m].pre++;
+    if(r.kind==='業務後') by[m].post++;
+    if(r.result==='NG' || r.alcohol_result==='NG') by[m].ng++;
+  });
+  let h = '<table style="width:auto;"><tr><th>年月</th><th style="text-align:right;">点呼</th><th style="text-align:right;">業務前</th><th style="text-align:right;">業務後</th><th style="text-align:right;">NG</th></tr>';
+  Object.keys(by).sort().forEach(m=>{
+    const o=by[m];
+    h += `<tr><td>${esc(m)}</td><td style="text-align:right;">${n0(o.n)}</td><td style="text-align:right;">${n0(o.pre)}</td><td style="text-align:right;">${n0(o.post)}</td>
+      <td style="text-align:right;${o.ng?'color:#c0392b;font-weight:700;':''}">${n0(o.ng)}</td></tr>`;
+  });
+  h += '</table>';
+  const un = rows.filter(r=>!r.driver_id).length;
+  if(un) h += `<div style="margin-top:8px;"><span class="tag warn">未照合 ${n0(un)}件</span> 従業員一覧に氏名が見つからないもの</div>`;
+  el.innerHTML = h;
+}
+
 /* ---------- 一覧 ---------- */
 function jRenderList(){
   const el = document.getElementById('jListArea');
@@ -1263,22 +1466,29 @@ function jRenderList(){
     <th>運行日</th><th>車両</th><th>乗務員</th>
     <th style="text-align:right;">出庫</th><th style="text-align:right;">帰庫</th>
     <th style="text-align:right;">走行</th><th style="text-align:right;">実車</th><th style="text-align:right;">空車</th>
-    <th style="text-align:right;">拘束</th><th>始業〜終業</th><th></th></tr></thead><tbody>`;
+    <th style="text-align:right;">拘束</th><th>業務 開始〜終了</th><th>出どころ</th><th></th></tr></thead><tbody>`;
   view.forEach(t=>{
     const bad = (!t.vehicle_id?'車両':'') + (!t.driver_id?(!t.vehicle_id?'・':'')+'乗務員':'');
     const hm = m => m==null ? '' : `${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}`;
     const tm = s => s ? new Date(s).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Tokyo'}) : '';
+    // デジタコの拘束時間との差（点呼が入っている行だけ）
+    const src = t['時刻の出どころ'] || 'デジタコ';
+    const gap = (t.eff_min_bound!=null && t.min_bound!=null && src!=='デジタコ') ? t.eff_min_bound - t.min_bound : null;
+    const srcTag = src==='デジタコ'
+      ? '<span class="muted" style="font-size:11px;">デジタコ</span>'
+      : `<span class="tag" style="background:#e6f0e9;color:var(--g2);">${esc(src)}</span>`;
     h += `<tr>
       <td style="white-space:nowrap;">${esc(t.work_date)}</td>
       <td style="white-space:nowrap;">${esc(t.vehicle_label)}</td>
       <td style="white-space:nowrap;">${esc(t.driver_label)}</td>
       <td style="text-align:right;">${nf(t.odo_start)}</td>
       <td style="text-align:right;">${nf(t.odo_end)}</td>
-      <td style="text-align:right;font-weight:600;">${nf(t.km_total)}</td>
-      <td style="text-align:right;">${nf(t.km_revenue)}</td>
-      <td style="text-align:right;">${nf(t.km_deadhead)}</td>
-      <td style="text-align:right;">${hm(t.min_bound)}</td>
-      <td style="white-space:nowrap;">${tm(t.start_at)}${t.start_at?'〜':''}${tm(t.end_at)}</td>
+      <td style="text-align:right;font-weight:600;">${nf(t.eff_km_total)}</td>
+      <td style="text-align:right;">${nf(t.eff_km_revenue)}</td>
+      <td style="text-align:right;">${nf(t.eff_km_deadhead)}</td>
+      <td style="text-align:right;">${hm(t.eff_min_bound)}${gap!=null&&Math.abs(gap)>=15?`<span class="muted" style="font-size:10px;"> (デジタコ比 ${gap>0?'+':''}${gap}分)</span>`:''}</td>
+      <td style="white-space:nowrap;">${tm(t.eff_start_at)}${t.eff_start_at?'〜':''}${tm(t.eff_end_at)}</td>
+      <td>${srcTag}</td>
       <td>${bad?`<span class="tag warn">${bad}未照合</span>`:''}</td>
     </tr>`;
   });
@@ -1303,7 +1513,7 @@ function jRenderSum(){
     const m = (t.work_date||'').slice(0,7);
     for(const [k,o] of [[p,byP],[m,byM]]){
       o[k] = o[k] || {n:0,km:0,rev:0,dead:0};
-      o[k].n++; o[k].km+=Number(t.km_total||0); o[k].rev+=Number(t.km_revenue||0); o[k].dead+=Number(t.km_deadhead||0);
+      o[k].n++; o[k].km+=Number(t.eff_km_total||0); o[k].rev+=Number(t.eff_km_revenue||0); o[k].dead+=Number(t.eff_km_deadhead||0);
     }
   });
   const tbl = (title, obj, keys, label) => {
@@ -1331,20 +1541,25 @@ window.addEventListener('DOMContentLoaded', async () => {
   const ok = await initAuth(['super_admin','admin','operator','staff']);
   if(!ok) return;
 
-  const drop = document.getElementById('jDrop'), file = document.getElementById('jFile');
-  drop.addEventListener('click', ()=>file.click());
-  file.addEventListener('change', e=>{ jImport(e.target.files); file.value=''; });
-  ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev, e=>{
-    e.preventDefault(); drop.style.borderColor='var(--g)'; drop.style.background='#f0f6f1';
-  }));
-  ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev, e=>{
-    e.preventDefault(); drop.style.borderColor='var(--line)'; drop.style.background='#fff';
-  }));
-  drop.addEventListener('drop', e=>{
-    const fs = [...e.dataTransfer.files].filter(f=>/\.zip$/i.test(f.name));
-    if(fs.length) jImport(fs);
-    else document.getElementById('jResult').innerHTML = '<div class="tag warn">ZIPファイルを入れてください。</div>';
-  });
+  // ドラッグ＆ドロップの共通設定
+  function setupDrop(dropId, fileId, pattern, handler, resultId, msg){
+    const drop = document.getElementById(dropId), file = document.getElementById(fileId);
+    drop.addEventListener('click', ()=>file.click());
+    file.addEventListener('change', e=>{ handler(e.target.files); file.value=''; });
+    ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev, e=>{
+      e.preventDefault(); drop.style.borderColor='var(--g)'; drop.style.background='#f0f6f1';
+    }));
+    ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev, e=>{
+      e.preventDefault(); drop.style.borderColor='var(--line)'; drop.style.background='#fff';
+    }));
+    drop.addEventListener('drop', e=>{
+      const fs = [...e.dataTransfer.files].filter(f=>pattern.test(f.name));
+      if(fs.length) handler(fs);
+      else document.getElementById(resultId).innerHTML = `<div class="tag warn">${msg}</div>`;
+    });
+  }
+  setupDrop('jDrop','jFile',/\.zip$/i, jImport, 'jResult', 'ZIPファイルを入れてください。');
+  setupDrop('kDrop','kFile',/\.csv$/i, kImport, 'kResult', 'CSVファイルを入れてください。');
 
   ['jMonth','jFilter','jUnmatched'].forEach(id=>{
     document.getElementById(id).addEventListener('input', jRenderList);
