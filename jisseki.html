@@ -1379,6 +1379,22 @@ async function jImport(files){
   }
   const stopsOk = stopRows.filter(s => (s.work_date ||= 日付[s.dg_report_id]));
 
+  // ③-3 立ち寄り地点を先に保存する
+  //     運行データがすべて取り込み済みでも、立ち寄り地点だけは入っていないことがあるため
+  //     （2026-08-18 に追加した項目。それ以前に取り込んだ月は地点が空になっている）
+  let stopDone = 0; const errs = [];
+  for(let i=0;i<stopsOk.length;i+=400){
+    const chunk = stopsOk.slice(i, i+400);
+    jProg(50 + i/Math.max(stopsOk.length,1)*12, `立ち寄り地点を保存しています… (${i}/${stopsOk.length}件)`);
+    const res = await fetch(`${REST_URL}/trip_stops`, {
+      method:'POST',
+      headers: Object.assign(getH(), {'Prefer':'return=minimal,resolution=merge-duplicates'}),
+      body: JSON.stringify(chunk)
+    });
+    if(res.ok) stopDone += chunk.length;
+    else if(errs.length<3) errs.push(await res.text());
+  }
+
   // ④ すでに取り込み済みのものを除く
   jProg(62,'取り込み済みの分を確認しています…');
   const have = new Set(
@@ -1389,13 +1405,20 @@ async function jImport(files){
   const skipped = rows.length - fresh.length;
 
   if(!fresh.length){
-    document.getElementById('jProg').style.display='none';
-    R.innerHTML = `<div class="panel" style="background:#f5f8f4;">読み取った <b>${n0(rows.length)}件</b> は、すべて取り込み済みでした。追加はありません。</div>`;
+    jProg(100,'完了');
+    setTimeout(()=>{ document.getElementById('jProg').style.display='none'; }, 800);
+    R.innerHTML = `<div class="panel" style="background:#f5f8f4;">
+      読み取った <b>${n0(rows.length)}件</b> の運行は、すべて取り込み済みでした。
+      ${stopDone ? `<br><b style="color:var(--g);">立ち寄り地点 ${n0(stopDone)}件</b> を保存しました（「🚏 回送中の停車」で見られます）。`
+                 : '追加はありません。'}
+      ${errs.length ? `<div style="margin-top:8px;font-size:12px;color:#c0392b;">エラー内容：${esc(errs[0]).slice(0,300)}</div>` : ''}
+    </div>`;
+    await jLoad();
     return;
   }
 
   // ⑤ 保存（200件ずつ）
-  let done=0, failed=0; const errs=[];
+  let done=0, failed=0;
   for(let i=0;i<fresh.length;i+=200){
     const chunk = fresh.slice(i,i+200);
     jProg(65 + i/fresh.length*33, `保存しています… (${i}/${fresh.length}件)`);
@@ -1406,20 +1429,6 @@ async function jImport(files){
     });
     if(res.ok) done += chunk.length;
     else { failed += chunk.length; if(errs.length<3) errs.push(await res.text()); }
-  }
-
-  // ⑥ 立ち寄り地点を保存（同じZIPを入れ直しても増えない）
-  let stopDone = 0;
-  for(let i=0;i<stopsOk.length;i+=400){
-    const chunk = stopsOk.slice(i, i+400);
-    jProg(80 + i/Math.max(stopsOk.length,1)*18, `立ち寄り地点を保存しています… (${i}/${stopsOk.length}件)`);
-    const res = await fetch(`${REST_URL}/trip_stops`, {
-      method:'POST',
-      headers: Object.assign(getH(), {'Prefer':'return=minimal,resolution=merge-duplicates'}),
-      body: JSON.stringify(chunk)
-    });
-    if(res.ok) stopDone += chunk.length;
-    else if(errs.length<3) errs.push(await res.text());
   }
 
   jProg(100,'完了');
