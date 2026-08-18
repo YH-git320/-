@@ -45,6 +45,20 @@ button.mini{font-size:12px;padding:6px 10px;}
 .crewline{display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap;}
 .crewline .lb{font-size:12px;color:#6b7d72;min-width:64px;}
 .crewline select{font-size:13px;padding:6px 8px;flex:1;min-width:150px;}
+
+/* ===== 予定表取込 ===== */
+/* 読み取り結果は列が多いので、配置グリッドと同じく画面幅いっぱいに使う */
+#ytPanel{width:96vw;margin-left:calc(50% - 48vw);}
+#ytPanel table{width:100%;border-collapse:collapse;font-size:13px;}
+#ytPanel th{text-align:left;font-size:12px;color:#6b7d72;font-weight:600;
+  padding:6px 8px;border-bottom:1px solid var(--line);background:#f6f9f7;position:sticky;top:0;}
+#ytPanel td{padding:6px 8px;border-bottom:1px solid #eef2ef;vertical-align:top;}
+#ytPanel tr:hover td{background:#fafcfa;}
+/* 便ごとの担当は「登校／下校」を行で分ける（名前と記号が混ざると読みにくいため） */
+.crewrow{display:flex;gap:6px;align-items:baseline;margin:2px 0;}
+.crewrow .names{display:flex;flex-wrap:wrap;gap:4px 10px;}
+.segtag{flex:0 0 auto;font-size:10px;color:var(--g2);background:#eef4ef;border:1px solid #d7e3d9;
+  border-radius:4px;padding:0 5px;line-height:19px;white-space:nowrap;}
 </style>
 </head>
 <body>
@@ -1910,11 +1924,11 @@ function normTime(s) {
   return m ? `${m[1].padStart(2,'0')}:${m[2]}` : '';
 }
 // 人ではない書き込み（欄が埋まっていないことを示す語）
-const CREW_SKIP = /^(調整中|未定|別途指示|学校待機|なし|同じ|上記|登|下|登校|下校|登校便|下校便|ﾌｫﾛｰ|フォロー)$/;
+const CREW_SKIP = /^(調整中|未定|別途指示|学校待機|なし|同じ|上記|登|下|登校|下校|登校便|下校便|ﾌｫﾛｰ|フォロー|休み|お休み|休|運休|代休|有休|年休|休校)$/;
 // 記号や数字だけの断片（罫線のはみ出し「①)」など）は人ではない
 const NOT_NAME = /^[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}a-zA-Z]+$/u;
-// 出勤場所や注記が氏名欄に書かれていることがある（「青葉第2車庫付近（7：00出社）」）
-const NOT_PERSON = /出社|出庫|車庫|待機|付近|学校|同乗/;
+// 出勤場所や注記が氏名欄に書かれていることがある（「青葉第2車庫付近（7：00出社）」「磯子駅（7:10）」）
+const NOT_PERSON = /出社|出庫|車庫|待機|付近|学校|同乗|駅|\d/;
 
 /** 氏名欄を読み解く。
  *
@@ -2156,6 +2170,63 @@ async function ytLinkDuties() {
   }
 }
 
+/** 予定表の時刻から、その日に走ったはずの便を組み立てる。
+ *  月次の運行依頼書に載らない運行（夏季休業日の校外学習・プールなど）は
+ *  月間予定から便が作られないため、予定表の内容から作れるようにする。 */
+function ytPlannedRuns(r) {
+  const runs = [];
+  if (r.登校便出庫) runs.push({ segment: '登校', seq: 0, start_time: r.登校便出庫 });
+  // 下校は「下校便運行」に複数時刻が入ることがある（下校①・下校②）
+  const pm = (r.下校便運行 && r.下校便運行.length) ? r.下校便運行
+           : (r.下校便出庫 ? [r.下校便出庫] : []);
+  pm.slice(0, 2).forEach((t, i) => runs.push({ segment: `下校${'①②'[i]}`, seq: i + 1, start_time: t }));
+  // 時刻がまったく無くても、人が書かれていれば1便あったものとして扱う
+  if (!runs.length && (ytAllOf(r._dr ?? {common:[],am:[],pm:[]}).length || ytAllOf(r._at ?? {common:[],am:[],pm:[]}).length))
+    runs.push({ segment: '登校', seq: 0, start_time: r.出社 || null });
+  return runs;
+}
+
+/** 予定表にある運行ぶんの便を作る。作ってから乗務を結び直す */
+async function ytMakeDuties(file) {
+  const f = YT_RESULT.find(x => x.file === file);
+  if (!f) return;
+  const 対象 = f.recs.filter(r => !r._duties.length && ytPlannedRuns(r).length);
+  if (!対象.length) { ytTell('作る便がありません', true); return; }
+
+  const rows = [];
+  for (const r of 対象) {
+    const c = CRS.find(x => x.id === r.course_id) || {};
+    for (const run of ytPlannedRuns(r)) {
+      rows.push({
+        work_date: f.date, work_type: 'スクールバス', course_id: r.course_id,
+        segment: run.segment, seq: run.seq, start_time: run.start_time,
+        vehicle_id: c.vehicle_id ?? null,
+        driver_need: c.driver_count ?? 1, attendant_need: c.attendant_count ?? 0,
+        note: '勤務予定表から作成',
+      });
+    }
+  }
+  ytProg(20, `便を作っています…（${rows.length}件）`);
+  // (work_date, course_id, segment) が一意なので、二度押しても増えない
+  const res = await fetch(`${REST_URL}/duties`, {
+    method: 'POST',
+    headers: Object.assign(getH(), { 'Prefer': 'return=minimal,resolution=merge-duplicates' }),
+    body: JSON.stringify(rows),
+  });
+  if (!res.ok) {
+    ytProg(100, '失敗');
+    setTimeout(() => { document.getElementById('ytProg').style.display = 'none'; }, 600);
+    ytTell('便を作れませんでした', true, [`${res.status} ${(await res.text()).slice(0, 300)}`]);
+    return;
+  }
+  ytProg(70, '乗務を結び直しています…');
+  await ytLinkDuties();
+  ytProg(100, '完了');
+  setTimeout(() => { document.getElementById('ytProg').style.display = 'none'; }, 600);
+  ytRender();
+  ytTell(`便を ${rows.length} 件作りました（コース ${対象.length}件）。続けて「この内容で保存する」を押してください`);
+}
+
 // その便に乗る人（登校便なら common＋am、下校便なら common＋pm）
 const ytSegIsAm = seg => String(seg ?? '').startsWith('登');
 function ytFor(m, seg) { return [...m.common, ...(ytSegIsAm(seg) ? m.am : m.pm)]; }
@@ -2173,6 +2244,8 @@ function ytRender() {
     const need   = f.recs.filter(r => [...ytAllOf(r._dr), ...ytAllOf(r._at)]
       .some(m => !m.staff_id && !YT_PICK[m._key])).length;
 
+    // 便がなく、しかも人が書かれている＝校外学習など月間予定に載らない運行
+    const 要作成 = f.recs.filter(r => !r._duties.length && ytPlannedRuns(r).length);
     h += `<div class="panel" style="margin-bottom:10px;">
       <div style="font-weight:700;">${escHtml(f.date || f.file)}
         <span class="muted" style="font-weight:400;font-size:12px;">${escHtml(f.file)}</span></div>
@@ -2180,28 +2253,50 @@ function ytRender() {
         コース <b>${f.recs.length}</b> 件
         ${noDuty ? `／ <span class="tag warn">便が未作成 ${noDuty}件</span>` : ''}
         ${need ? `／ <span class="tag warn">氏名の確認 ${need}件</span>` : ''}
-      </div>`;
+      </div>
+      ${要作成.length ? `<div style="background:#fff8e8;border:1px solid #e8d9b0;border-radius:8px;padding:10px 12px;margin:8px 0;">
+        <div style="font-size:13px;font-weight:600;color:#8a6d1a;">
+          月間予定にない運行が ${要作成.length}件あります</div>
+        <div class="muted" style="font-size:11px;margin:4px 0 8px;line-height:1.7;">
+          予定表には担当者と時刻が書かれているのに、便が作られていません。
+          校外学習やプールなど、月次の運行依頼書に載らない運行が該当します。<br>
+          ${要作成.slice(0, 6).map(r => escHtml(r.コース) + '（' + ytPlannedRuns(r).map(x => x.segment + ' ' + x.start_time).join('／') + '）').join('<br>')}
+          ${要作成.length > 6 ? `<br>ほか ${要作成.length - 6}件` : ''}
+        </div>
+        <button class="mini" onclick="ytMakeDuties('${escAttr(f.file)}')">この日の便を作る（${要作成.length}件）</button>
+      </div>` : ''}`;
 
-    h += `<div style="overflow:auto;max-height:52vh;"><table><thead><tr>
+    // 氏名の欄をいちばん広く取る（確認していただくのはそこなので）
+    h += `<div style="overflow:auto;max-height:60vh;"><table>
+      <colgroup><col style="width:17%"><col style="width:7%"><col style="width:21%"><col style="width:27%">
+        <col style="width:5%"><col style="width:6%"><col style="width:6%"><col style="width:11%"></colgroup>
+      <thead><tr>
       <th>コース</th><th>便</th><th>運転手</th><th>添乗員</th>
       <th>出社</th><th>登校出庫</th><th>下校出庫</th><th>登校の出勤場所</th></tr></thead><tbody>`;
     f.recs.forEach((r, i) => {
-      const segs = r._duties.map(d => d.segment).join('・') || '<span class="tag warn">なし</span>';
+      // 便は「登・①・②」と短く（列幅を氏名に回すため）
+      const segs = r._duties.map(d => d.segment.replace('登校', '登').replace('下校', '')).join('・')
+        || '<span class="tag warn">なし</span>';
       // 登校だけ／下校だけの人は、その旨を添えて出す
       const cell = crew => {
-        const one = (list, mark) => list.map(m =>
-          (mark ? `<span class="muted" style="font-size:9px;">${mark}</span>` : '') + ytNameCell(m)).join(' ');
-        const s = [one(crew.common, ''), one(crew.am, '登'), one(crew.pm, '下')].filter(Boolean).join(' ');
+        const line = (list, label) => list.length
+          ? `<div class="crewrow">${label ? `<span class="segtag">${label}</span>` : ''}
+               <span class="names">${list.map(ytNameCell).join('')}</span></div>`
+          : '';
+        const s = line(crew.common, '') + line(crew.am, '登校') + line(crew.pm, '下校');
         return s || '<span class="muted">—</span>';
       };
       // 予定表が2人体制でも、便の必要人数が1のことがある。そのまま保存すると配置が定員を超える
       const over = r._duties.flatMap(d => [['運転手', d.driver_need, r._dr], ['添乗員', d.attendant_need, r._at]]
         .filter(([, need, crew]) => need && ytFor(crew, d.segment).length > need)
         .map(([role]) => `${d.segment}の${role}`));
+      // 学校名とコース名は行を分ける（語の途中で折り返すと読みにくい）
+      const [school, ...cn] = String(r.コース).split(' ');
       h += `<tr>
-        <td style="white-space:nowrap;">${escHtml(r.コース)}
+        <td><div class="muted" style="font-size:11px;">${escHtml(school)}</div>
+          <div style="font-weight:600;">${escHtml(cn.join(' '))}</div>
           <div class="muted" style="font-size:10px;">PDF「${escHtml(r.PDF表記)}」</div></td>
-        <td style="white-space:nowrap;font-size:11px;">${segs}
+        <td style="font-size:11px;">${segs}
           ${over.length ? `<div class="tag warn" style="font-size:9px;">必要人数より多い（${escHtml([...new Set(over)].join('・'))}）</div>` : ''}</td>
         <td>${cell(r._dr)}</td>
         <td>${cell(r._at)}
@@ -2331,11 +2426,17 @@ function ytTell(msg, isError, errs) {
   const box = document.getElementById('ytDone');
   if (!box) return;
   box.style.display = '';
-  box.innerHTML = `<div class="${isError ? 'tag warn' : 'tag'}" style="font-size:13px;">${escHtml(msg)}</div>`
-    + ((errs && errs.length) ? `<div class="muted" style="font-size:11px;margin-top:6px;">
+  const col = isError ? { bg:'#fdeceb', bd:'#f3c3bf', fg:'#b5453a', ic:'⚠️' }
+                      : { bg:'#eef7ef', bd:'#bfe3c0', fg:'#2f7d32', ic:'✅' };
+  box.innerHTML = `
+    <div style="background:${col.bg};border:1px solid ${col.bd};border-radius:8px;padding:12px 14px;
+                color:${col.fg};font-size:15px;font-weight:700;line-height:1.6;">
+      ${col.ic} ${escHtml(msg)}
+    </div>`
+    + ((errs && errs.length) ? `<div style="margin-top:6px;font-size:11px;color:#b5453a;">
         <b>保存できなかったものがあります（${errs.length}件）。</b>下の内容を八重樫さんにお知らせください。<br>
         ${errs.slice(0, 3).map(e => escHtml(e)).join('<br>')}</div>` : '');
-  box.scrollIntoView({ block: 'center' });
+  box.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
 </script>
