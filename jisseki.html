@@ -88,6 +88,7 @@ table.list tr:hover td{background:#f7faf8;}
     <div class="tab" id="tabTenko" onclick="jSetTab('tenko')">🕒 点呼記録取込</div>
     <div class="tab" id="tabList"   onclick="jSetTab('list')">📋 実績一覧</div>
     <div class="tab" id="tabSum"    onclick="jSetTab('sum')">📈 集計</div>
+    <div class="tab" id="tabStop"   onclick="jSetTab('stop')">🚏 回送中の停車</div>
   </div>
 
   <!-- ===== 取込 ===== -->
@@ -183,6 +184,35 @@ table.list tr:hover td{background:#f7faf8;}
       </div>
     </div>
     <div id="jSumArea"></div>
+  </div>
+
+  <!-- ===== 回送中の停車 ===== -->
+  <div id="viewStop" style="display:none;">
+    <div class="panel">
+      <div class="row" style="align-items:center;">
+        <label class="muted" style="min-width:auto;">対象月</label>
+        <input type="month" id="sMonth" style="width:auto;" onchange="sRender()">
+        <label class="muted" style="min-width:auto;margin-left:8px;">何分以上</label>
+        <select id="sMin" style="width:auto;" onchange="sRender()">
+          <option value="15" selected>15分</option>
+          <option value="20">20分</option>
+          <option value="30">30分</option>
+          <option value="60">60分</option>
+        </select>
+        <button class="mini" onclick="sPrint()">🖨 印刷</button>
+      </div>
+      <div class="muted" style="font-size:11px;line-height:1.8;margin-top:8px;">
+        <b>最後に生徒を降ろしたあと、車庫へ戻るまでの間に、別の場所で停まっていた記録</b>です。<br>
+        大半は<b>機械が自動で記録したもの</b>（10分以上の停車）で、運転手の操作によりません。<br>
+        車庫での停車、降車地点での待機、日をまたいだ記録は除いてあります。
+      </div>
+      <div style="background:#fff8e8;border:1px solid #e8d9b0;border-radius:8px;padding:10px 12px;margin-top:8px;font-size:12px;color:#8a6d1a;line-height:1.7;">
+        ⚠️ <b>ここに出るのは「確認したい記録」であって、不正の証拠ではありません。</b>
+        法定休憩・トイレ・体調不良・渋滞待ちも同じ形で記録されます。
+        その日の運行内容と合わせてご判断ください。
+      </div>
+    </div>
+    <div id="sArea"></div>
   </div>
 </main>
 <script>
@@ -1022,13 +1052,85 @@ let VEH=[], STF=[], TRIPS=[];
 let VMAP=new Map(), SMAP=new Map();
 
 function jSetTab(t){
-  ['import','tenko','list','sum'].forEach(x=>{
+  ['import','tenko','list','sum','stop'].forEach(x=>{
     document.getElementById('view'+x[0].toUpperCase()+x.slice(1)).style.display = (x===t)?'':'none';
     document.getElementById('tab'+x[0].toUpperCase()+x.slice(1)).classList.toggle('active', x===t);
   });
   if(t==='list') jRenderList();
   if(t==='sum')  jRenderSum();
+  if(t==='stop') sRender();
 }
+
+/* ================= 回送中の停車 ================= */
+let STOPS = [], STOP_MONTH = '';
+
+/** 選ばれた月の記録を取ってきて一覧にする */
+async function sRender(){
+  const A = document.getElementById('sArea');
+  const el = document.getElementById('sMonth');
+  if(!el.value){                       // 初回は、記録のある最も新しい月を出す
+    const last = TRIPS.length ? TRIPS[0].work_date : null;
+    el.value = last ? last.slice(0,7) : new Date().toISOString().slice(0,7);
+  }
+  const 月 = el.value, 下限 = Number(document.getElementById('sMin').value);
+  A.innerHTML = '<div class="muted" style="padding:12px;">読み込んでいます…</div>';
+  if(STOP_MONTH !== 月){
+    const 末 = new Date(Number(月.slice(0,4)), Number(月.slice(5,7)), 0).getDate();
+    STOPS = await _fetchAll(`trip_deadhead_stops?select=*`
+      + `&work_date=gte.${月}-01&work_date=lte.${月}-${String(末).padStart(2,'0')}&order=work_date,arrive_at`);
+    STOP_MONTH = 月;
+  }
+  const rows = STOPS.filter(s => (s.minutes ?? 0) >= 下限);
+  if(!rows.length){
+    A.innerHTML = `<div class="panel" style="background:#f5f8f4;">${esc(月)} に ${下限}分以上の記録はありませんでした。</div>`;
+    return;
+  }
+
+  // 運転手ごとにまとめる（管理者はまずここを見る）
+  const 人 = {};
+  for(const s of rows){
+    const k = s.driver_label || '(不明)';
+    (人[k] ||= { 回:0, 分:0, 日:new Set() });
+    人[k].回++; 人[k].分 += s.minutes || 0; 人[k].日.add(s.work_date);
+  }
+  const 順 = Object.entries(人).map(([k,v])=>({k,...v})).sort((a,b)=>b.分-a.分);
+
+  let h = `<div class="panel">
+    <div style="font-weight:700;margin-bottom:8px;">${esc(月)}　${下限}分以上の停車　<b>${n0(rows.length)}</b>件
+      ／ のべ <b>${n0(rows.reduce((s,x)=>s+(x.minutes||0),0))}</b>分</div>
+    <table><thead><tr><th>運転手</th><th style="text-align:right;">回数</th>
+      <th style="text-align:right;">合計</th><th style="text-align:right;">日数</th></tr></thead><tbody>`;
+  for(const v of 順) h += `<tr><td>${esc(v.k)}</td><td style="text-align:right;">${v.回}</td>
+    <td style="text-align:right;font-weight:700;">${n0(v.分)}分</td>
+    <td style="text-align:right;">${v.日.size}</td></tr>`;
+  h += `</tbody></table></div>`;
+
+  h += `<div class="panel"><div style="font-weight:700;margin-bottom:8px;">明細</div>
+    <div style="overflow:auto;"><table><thead><tr>
+      <th>日付</th><th>運転手</th><th>車両</th><th style="text-align:right;">分</th>
+      <th>停まっていた場所</th><th>時刻</th><th>最後の降車</th><th>帰庫</th><th>記録</th>
+    </tr></thead><tbody>`;
+  for(const s of rows){
+    h += `<tr>
+      <td style="white-space:nowrap;">${esc(s.work_date)}</td>
+      <td style="white-space:nowrap;">${esc(s.driver_label || '—')}</td>
+      <td style="white-space:nowrap;font-size:11px;">${esc(s.vehicle_label || '—')}</td>
+      <td style="text-align:right;font-weight:700;${(s.minutes>=30)?'color:#c0392b;':''}">${s.minutes}</td>
+      <td style="font-size:12px;">${esc(s.place || '—')}</td>
+      <td style="white-space:nowrap;font-size:11px;">${_hm(s.arrive_at)}〜${_hm(s.depart_at)}</td>
+      <td style="font-size:11px;">${_hm(s.last_drop_at)} ${esc(s.last_drop_place || '')}</td>
+      <td style="white-space:nowrap;font-size:11px;">${_hm(s.home_at)}</td>
+      <td style="font-size:11px;">${s.auto ? '自動' : esc(s.kind)}</td>
+    </tr>`;
+  }
+  h += '</tbody></table></div></div>';
+  A.innerHTML = h;
+}
+
+const _hm = v => { if(!v) return '—'; const d=new Date(v);
+  return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
+
+function sPrint(){ window.print(); }
 
 /* ---------- 読み込み ---------- */
 async function jLoad(){
@@ -1090,6 +1192,13 @@ function readWork(text){
   const o={}, h=rows[0], v=rows[1];
   h.forEach((k,j)=>{ k=String(k).trim(); if(k) o[k]=v[j]; });
   return o;
+}
+// _4 CSV：1行目が見出し、2行目以降が経由地（立ち寄った地点）
+function readStops(text){
+  const rows = text.split(/\r?\n/).filter(l=>l.trim()).map(parseCSVLine);
+  if(rows.length<2) return [];
+  const h = rows[0].map(x=>String(x).trim());
+  return rows.slice(1).map(v => { const o={}; h.forEach((k,j)=>{ if(k) o[k]=v[j]; }); return o; });
 }
 
 const _num = v => { const n=parseFloat(String(v==null?'':v).replace(/,/g,'')); return Number.isFinite(n)?n:null; };
@@ -1170,9 +1279,10 @@ async function jImport(files){
   //    本体      … DR_<会社コード>_…（会社コードは8桁）
   //    分割ファイル… DR_1_ 〜 DR_6_（給油・通行料・安全評価・経由地・労働時間・乗務員切換）
   //    「DR_ のあとが1桁＋_」かどうかで見分ける
-  const mains = {}, works = {};
+  const mains = {}, works = {}, stops = {};
   for(const [name, text] of Object.entries(csv)){
     if(/^DR_5_/.test(name))      works[name] = text;   // 乗務員ごとの労働時間
+    else if(/^DR_4_/.test(name)) stops[name] = text;   // 経由地（立ち寄り地点）
     else if(/^DR_\d_/.test(name)) continue;            // 他の分割ファイルは使わない
     else if(/^DR_/.test(name))    mains[name] = text;  // 本体
   }
@@ -1233,6 +1343,42 @@ async function jImport(files){
     });
   }
 
+  // ③-2 立ち寄り地点（経由地）を組み立てる
+  //     どこに何時から何時まで停まっていたかが残る。回送中の停車を見るのに使う
+  jProg(58,'立ち寄り地点を読み取っています…');
+  const stopRows = [];
+  for(const text of Object.values(stops)){
+    for(const s of readStops(text)){
+      const id = _txt(s['運転日報ID']), seq = _int(s['追番']);
+      if(!id || seq == null) continue;
+      const 種別 = _txt(s['作業内容']);
+      const 着 = _stamp(s['到着日付(実績)'] || s['出発/経由地脱出日付'], s['到着時刻(実績)']);
+      const 発 = _stamp(s['出発/経由地脱出日付'] || s['到着日付(実績)'], s['出発/経由地脱出時刻']);
+      let 分 = null;
+      if(着 && 発){
+        分 = Math.round((new Date(発) - new Date(着)) / 60000);
+        if(分 < 0) 分 += 1440;              // 日をまたいだ場合
+      }
+      stopRows.push({
+        dg_report_id: id,
+        work_date: _date(s['到着日付(実績)'] || s['出発/経由地脱出日付']) || null,
+        seq, kind: 種別 || '不明',
+        auto: /\*/.test(種別 || ''),        // 「休憩*」＝機械が自動で記録したもの
+        place: _txt(s['場所']),
+        arrive_at: 着, depart_at: 発, minutes: 分,
+        odo: _num(s['走行距離(km)']),
+      });
+    }
+  }
+  // 運行日が空の地点（出庫など）は、同じ日報の他の地点から補う
+  const 日付 = {};
+  stopRows.forEach(s => { if(s.work_date && !日付[s.dg_report_id]) 日付[s.dg_report_id] = s.work_date; });
+  for(const m of Object.values(mains)) {
+    const o = readMain(m); const id=_txt(o['運転日報ID']);
+    if(id && !日付[id]) 日付[id] = _date(o['運行日付']);
+  }
+  const stopsOk = stopRows.filter(s => (s.work_date ||= 日付[s.dg_report_id]));
+
   // ④ すでに取り込み済みのものを除く
   jProg(62,'取り込み済みの分を確認しています…');
   const have = new Set(
@@ -1262,6 +1408,20 @@ async function jImport(files){
     else { failed += chunk.length; if(errs.length<3) errs.push(await res.text()); }
   }
 
+  // ⑥ 立ち寄り地点を保存（同じZIPを入れ直しても増えない）
+  let stopDone = 0;
+  for(let i=0;i<stopsOk.length;i+=400){
+    const chunk = stopsOk.slice(i, i+400);
+    jProg(80 + i/Math.max(stopsOk.length,1)*18, `立ち寄り地点を保存しています… (${i}/${stopsOk.length}件)`);
+    const res = await fetch(`${REST_URL}/trip_stops`, {
+      method:'POST',
+      headers: Object.assign(getH(), {'Prefer':'return=minimal,resolution=merge-duplicates'}),
+      body: JSON.stringify(chunk)
+    });
+    if(res.ok) stopDone += chunk.length;
+    else if(errs.length<3) errs.push(await res.text());
+  }
+
   jProg(100,'完了');
   setTimeout(()=>{ document.getElementById('jProg').style.display='none'; }, 800);
 
@@ -1272,6 +1432,7 @@ async function jImport(files){
       <tr><td>読み取った運行</td><td style="text-align:right;font-weight:700;">${n0(rows.length)} 件</td></tr>
       <tr><td>新しく保存した分</td><td style="text-align:right;font-weight:700;color:var(--g);">${n0(done)} 件</td></tr>
       ${skipped?`<tr><td>すでに取り込み済み（飛ばした分）</td><td style="text-align:right;">${n0(skipped)} 件</td></tr>`:''}
+      ${stopDone?`<tr><td>立ち寄り地点</td><td style="text-align:right;">${n0(stopDone)} 件</td></tr>`:""}
       ${failed ?`<tr><td style="color:#c0392b;">保存できなかった分</td><td style="text-align:right;color:#c0392b;font-weight:700;">${n0(failed)} 件</td></tr>`:''}
     </table>`;
   if(unmatched) h += `<div style="margin-top:8px;"><span class="tag warn">未照合 ${n0(unmatched)}件</span> 車両または乗務員がマスタに見つかりませんでした。記録は残っていますので、マスタに登録したうえで、もう一度同じZIPを入れ直すと結び付きます。</div>`;
@@ -1523,99 +1684,4 @@ function jRenderSum(){
   const tbl = (title, obj, keys, label) => {
     let h = `<div class="panel"><div style="font-weight:700;margin-bottom:8px;">${title}</div>
       <table><thead><tr><th>${label}</th><th style="text-align:right;">運行数</th>
-      <th style="text-align:right;">走行キロ</th><th style="text-align:right;">実車キロ</th><th style="text-align:right;">空車キロ</th></tr></thead><tbody>`;
-    let tn=0,tk=0,tr=0,td=0;
-    keys.forEach(k=>{
-      const o=obj[k]; tn+=o.n; tk+=o.km; tr+=o.rev; td+=o.dead;
-      h += `<tr><td>${esc(k)}</td><td style="text-align:right;">${n0(o.n)}</td>
-        <td style="text-align:right;font-weight:600;">${nf(o.km)}</td>
-        <td style="text-align:right;">${nf(o.rev)}</td><td style="text-align:right;">${nf(o.dead)}</td></tr>`;
-    });
-    h += `<tr style="font-weight:700;background:#f5f8f4;"><td>合計</td><td style="text-align:right;">${n0(tn)}</td>
-      <td style="text-align:right;">${nf(tk)}</td><td style="text-align:right;">${nf(tr)}</td><td style="text-align:right;">${nf(td)}</td></tr>`;
-    return h + '</tbody></table></div>';
-  };
-  el.innerHTML =
-    tbl(`令和${y-2018}年度（${y}年4月〜${y+1}年3月）　許可別`, byP, Object.keys(byP).sort(), '許可') +
-    tbl('月別', byM, Object.keys(byM).sort(), '年月') +
-    '<div id="jWorkArea"></div>';
-  jRenderWork(from, to);
-}
-
-// 拘束時間は「1日×1人」で数える（運行ごとに数えると同じ日を重複して数えてしまう）
-async function jRenderWork(from, to){
-  const el = document.getElementById('jWorkArea');
-  if(!el) return;
-  el.innerHTML = '<div class="panel muted">勤務を集計しています…</div>';
-  const rows = await _fetchAll(`driver_workdays?select=*&work_date=gte.${from}&work_date=lte.${to}&order=work_date`);
-  if(!rows.length){ el.innerHTML=''; return; }
-  const by={};
-  rows.forEach(r=>{
-    const m=(r.work_date||'').slice(0,7);
-    by[m] = by[m] || {days:0, bound:0, dg:0, trips:0, tenko:0};
-    by[m].days++; by[m].trips += r.運行数||0;
-    by[m].bound += (r.拘束時間分||0); by[m].dg += (r.デジタコ拘束分||0);
-    if(r.出どころ !== 'デジタコ') by[m].tenko++;
-  });
-  const hr = m => (m/60).toLocaleString('ja-JP',{minimumFractionDigits:1,maximumFractionDigits:1});
-  let h = `<div class="panel"><div style="font-weight:700;margin-bottom:4px;">勤務（拘束時間）</div>
-    <div class="muted" style="font-size:11px;margin-bottom:8px;">
-      拘束時間は<b>1日×1人</b>で数えています（1日に複数の運行があっても1日として数えます）。
-      <b>点呼の業務前〜業務後</b>が実際の拘束時間です。デジタコは運行中の時間しか記録しないため、待機の時間が抜けて短く出ます。
-    </div>
-    <table><thead><tr><th>年月</th><th style="text-align:right;">延べ勤務日数</th><th style="text-align:right;">運行数</th>
-    <th style="text-align:right;">拘束時間</th><th style="text-align:right;">うちデジタコ基準</th><th style="text-align:right;">差</th>
-    <th style="text-align:right;">点呼が入った日</th></tr></thead><tbody>`;
-  let td=0,tb=0,tg=0,tt=0,tk=0;
-  Object.keys(by).sort().forEach(m=>{
-    const o=by[m]; td+=o.days; tb+=o.bound; tg+=o.dg; tt+=o.trips; tk+=o.tenko;
-    h += `<tr><td>${esc(m)}</td><td style="text-align:right;">${n0(o.days)}</td><td style="text-align:right;">${n0(o.trips)}</td>
-      <td style="text-align:right;font-weight:600;">${hr(o.bound)} h</td>
-      <td style="text-align:right;" class="muted">${hr(o.dg)} h</td>
-      <td style="text-align:right;color:var(--g);">＋${hr(o.bound-o.dg)} h</td>
-      <td style="text-align:right;">${n0(o.tenko)} / ${n0(o.days)}</td></tr>`;
-  });
-  h += `<tr style="font-weight:700;background:#f5f8f4;"><td>合計</td><td style="text-align:right;">${n0(td)}</td><td style="text-align:right;">${n0(tt)}</td>
-    <td style="text-align:right;">${hr(tb)} h</td><td style="text-align:right;">${hr(tg)} h</td>
-    <td style="text-align:right;">＋${hr(tb-tg)} h</td><td style="text-align:right;">${n0(tk)} / ${n0(td)}</td></tr></tbody></table></div>`;
-  el.innerHTML = h;
-}
-
-/* ---------- 起動 ---------- */
-window.addEventListener('DOMContentLoaded', async () => {
-  const ok = await initAuth(['super_admin','admin','operator','staff']);
-  if(!ok) return;
-
-  // ドラッグ＆ドロップの共通設定
-  function setupDrop(dropId, fileId, pattern, handler, resultId, msg){
-    const drop = document.getElementById(dropId), file = document.getElementById(fileId);
-    drop.addEventListener('click', ()=>file.click());
-    file.addEventListener('change', e=>{ handler(e.target.files); file.value=''; });
-    ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev, e=>{
-      e.preventDefault(); drop.style.borderColor='var(--g)'; drop.style.background='#f0f6f1';
-    }));
-    ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev, e=>{
-      e.preventDefault(); drop.style.borderColor='var(--line)'; drop.style.background='#fff';
-    }));
-    drop.addEventListener('drop', e=>{
-      const fs = [...e.dataTransfer.files].filter(f=>pattern.test(f.name));
-      if(fs.length) handler(fs);
-      else document.getElementById(resultId).innerHTML = `<div class="tag warn">${msg}</div>`;
-    });
-  }
-  setupDrop('jDrop','jFile',/\.zip$/i, jImport, 'jResult', 'ZIPファイルを入れてください。');
-  setupDrop('kDrop','kFile',/\.csv$/i, kImport, 'kResult', 'CSVファイルを入れてください。');
-
-  ['jMonth','jFilter','jUnmatched'].forEach(id=>{
-    document.getElementById(id).addEventListener('input', jRenderList);
-  });
-  const ysel = document.getElementById('jYear');
-  const now = new Date(); const cy = now.getMonth()+1 >= 4 ? now.getFullYear() : now.getFullYear()-1;
-  for(let y=cy; y>=cy-3; y--) ysel.add(new Option(`令和${y-2018}年度`, y));
-  ysel.addEventListener('change', jRenderSum);
-
-  await jLoad();
-});
-</script>
-</body>
-</html>
+      <th style="text-align:right;">走行キロ</th><th style="text-align:right;">実車キロ</th><
