@@ -2083,7 +2083,13 @@ function ytMatchStaff(nameRaw, role, courseId) {
     if (hit.length) break;
   }
   if (hit.length === 1) return { staff_id: hit[0].id, candidates: [], raw: nameRaw, by: '氏名' };
-  // 3) 複数いる場合は、そのコースに乗った実績がある人を優先
+  // 3) 在籍者と退職者が同じ姓にいる場合は在籍者を先に見る
+  if (hit.length > 1) {
+    const 在籍 = hit.filter(p => p.active !== false);
+    if (在籍.length === 1) return { staff_id: 在籍[0].id, candidates: hit, raw: nameRaw, by: '氏名' };
+    if (在籍.length > 1) hit = 在籍;
+  }
+  // 4) なお複数いる場合は、そのコースに乗った実績がある人を優先
   if (hit.length > 1 && courseId) {
     const h = (HIST[`${courseId}|${role}|登校`] || []).concat(HIST[`${courseId}|${role}|下校`] || []);
     const ranked = hit.filter(p => h.some(x => x.staff_id === p.id));
@@ -2109,7 +2115,8 @@ async function ytImport(files) {
   // コースマスタ・従業員・別名表を用意
   setCourses(CRS.map(c => [c.id, c.course_name, c.school_name]));
   const keyed = buildKeys();
-  if (!PEOPLE_ALL.length) PEOPLE_ALL = await _fetchAll('staff?select=id,name&active=eq.true&order=name');
+  // 退職者も含めて読む。過去の予定表には退職された方が当然に出てくるため
+  if (!PEOPLE_ALL.length) PEOPLE_ALL = await _fetchAll('staff?select=id,name,active&order=name');
   YT_ALIAS = {};
   (await _fetchAll('staff_aliases?select=staff_id,alias')).forEach(a => { YT_ALIAS[norm(a.alias)] = a.staff_id; });
 
@@ -2340,10 +2347,12 @@ function ytNameCell(m) {
   if (chosen) {
     const p = PEOPLE_ALL.find(x => x.id === chosen);
     const tag = m.by === '別名' ? '' : (m.by === '実績' ? '<span class="muted" style="font-size:9px;">実績</span>' : '');
-    return `<span style="white-space:nowrap;">${escHtml(p ? p.name : chosen)}${tag}</span>`;
+    // 退職者は分かるようにする（過去の日付では正しいが、最近の日付なら誤りの目印になる）
+    const 退職 = (p && p.active === false) ? '<span class="muted" style="font-size:9px;">退職</span>' : '';
+    return `<span style="white-space:nowrap;">${escHtml(p ? p.name : chosen)}${退職}${tag}</span>`;
   }
   const opts = (m.candidates.length ? m.candidates : PEOPLE_ALL)
-    .map(p => `<option value="${p.id}">${escHtml(p.name)}</option>`).join('');
+    .map(p => `<option value="${p.id}">${escHtml(p.name)}${p.active === false ? '（退職）' : ''}</option>`).join('');
   return `<span style="white-space:nowrap;">
     <span class="tag warn">${escHtml(m.raw)}</span>
     <select onchange="ytPick('${key}',this.value)" style="width:auto;font-size:11px;padding:1px 3px;">
