@@ -70,9 +70,10 @@ button.mini{font-size:12px;padding:6px 10px;}
     <div class="tab" id="tabD" onclick="hSetTab('運転手')">🚌 運転手配置</div>
     <div class="tab" id="tabP" onclick="hSetTab('人別')">👤 人別</div>
     <div class="tab" id="tabV" onclick="hSetTab('車両別')">🚍 車両別</div>
+    <div class="tab" id="tabY" onclick="hSetTab('予定表取込')">📄 予定表取込</div>
   </div>
 
-  <div class="panel">
+  <div class="panel" id="hToolbar">
     <div class="row" style="align-items:center;">
       <label class="fld" style="margin:0;">対象月</label>
       <input type="month" id="hMonth" style="width:auto;">
@@ -93,7 +94,38 @@ button.mini{font-size:12px;padding:6px 10px;}
     </div>
   </div>
 
+
+  <!-- ===== 勤務予定表の取込 ===== -->
+  <div id="ytPanel" style="display:none;">
+    <div class="panel">
+      <div style="font-weight:700;margin-bottom:6px;">勤務予定表のPDFを取り込む</div>
+      <div class="muted" style="font-size:12px;line-height:1.7;margin-bottom:10px;">
+        毎日配られている <b>勤務予定表のPDF</b>（例：<code>R8年5月20日（水曜日）勤務予定.pdf</code>）を入れてください。
+        <b>何日分でもまとめて選べます。</b><br>
+        コース名は<b>コースマスタと突き合わせて</b>引き当てます（「大戸（御殿峠）」→ 御殿峠コース など）。
+        氏名は姓だけで書かれているため、同姓が複数いる場合は<b>選んでいただきます</b>。
+        一度選べば覚えるので、次回から自動で当たります。<br>
+        <b>保存する前に内容をご確認ください。</b> 読み取りが誤っていることもあります。
+      </div>
+      <div id="ytDrop" style="border:2px dashed var(--line);border-radius:10px;padding:26px 14px;text-align:center;background:#fff;cursor:pointer;">
+        <div style="font-size:30px;line-height:1;">📄</div>
+        <div style="margin-top:8px;font-weight:600;">ここにPDFをドラッグ＆ドロップ</div>
+        <div class="muted" style="font-size:12px;margin-top:4px;">またはクリックしてファイルを選ぶ</div>
+        <input type="file" id="ytFile" accept=".pdf" multiple style="display:none;">
+      </div>
+      <div id="ytProg" style="display:none;margin-top:12px;">
+        <div style="height:8px;background:#e8ede8;border-radius:4px;overflow:hidden;">
+          <div id="ytBar" style="height:100%;width:0%;background:var(--g);transition:width .2s;"></div>
+        </div>
+        <div id="ytProgText" class="muted" style="font-size:12px;margin-top:6px;"></div>
+      </div>
+    </div>
+    <div id="ytResult"></div>
+  </div>
+
+  <div id="hGridWrap">
   <div id="hArea" style="overflow:auto;max-height:76vh;border:1px solid var(--line);border-radius:8px;background:#fff;"></div>
+  </div>
 </main>
 
 <div id="asgWrap" onclick="if(event.target===this) hCloseAsg()">
@@ -1351,6 +1383,14 @@ function hSetTab(t){
   document.getElementById('tabD').className = 'tab'+(t==='運転手'?' active':'');
   document.getElementById('tabP').className = 'tab'+(t==='人別'?' active':'');
   document.getElementById('tabV').className = 'tab'+(t==='車両別'?' active':'');
+  document.getElementById('tabY').className = 'tab'+(t==='予定表取込'?' active':'');
+  // 取込タブでは表を隠し、取込パネルを出す
+  const yt = t === '予定表取込';
+  for (const [id, showOnYt] of [['ytPanel', true], ['hGridWrap', false], ['hToolbar', false]]) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = (yt === showOnYt) ? '' : 'none';
+  }
+  if (t==='予定表取込') return;
   const f=document.getElementById('hFilter');
   if(f) f.placeholder = (t==='人別') ? '氏名でしぼり込み'
                       : (t==='車両別') ? '車番・車庫でしぼり込み'
@@ -1595,7 +1635,677 @@ document.addEventListener('DOMContentLoaded', async () => {
     await hLoadMonth();
     hRender();
   }catch(e){ status('読み込みに失敗しました：'+e.message, false); }
+
+  // 予定表PDFの取り込み
+  const drop=document.getElementById('ytDrop'), file=document.getElementById('ytFile');
+  if(drop && file){
+    drop.addEventListener('click', ()=>file.click());
+    file.addEventListener('change', e=>{ ytImport(e.target.files); file.value=''; });
+    ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev, e=>{
+      e.preventDefault(); drop.style.borderColor='var(--g)'; drop.style.background='#f0f6f1'; }));
+    ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev, e=>{
+      e.preventDefault(); drop.style.borderColor='var(--line)'; drop.style.background='#fff'; }));
+    drop.addEventListener('drop', e=>{
+      const fs=[...e.dataTransfer.files].filter(f=>/.pdf$/i.test(f.name));
+      if(fs.length) ytImport(fs);
+      else document.getElementById('ytResult').innerHTML='<div class="tag warn">PDFファイルを入れてください。</div>';
+    });
+  }
 });
+
+/* ===== 勤務予定表PDFの読み取り ===== */
+// COURSES は画面側で courses テーブルから組み立てる
+let COURSES = [];
+function setCourses(rows){ COURSES = rows; }
+// 予定表での学校名の書き方（マスタの学校名 → PDF上の呼び方）
+const SCHOOL_ALIAS = {
+  "府中けやきの森学園":["けやきの森"], "あおば支援学校":["青葉","あおば"],
+  "鶴見支援学校":["鶴見"], "みどり支援学校":["みどり"], "湘南支援学校":["湘南"],
+  "金沢支援学校":["金沢"], "茅ヶ崎支援学校":["茅ヶ崎"], "大塚ろう学校":["大塚"],
+  "田園調布特別支援学校":["田園"], "矢口特別支援学校":["矢口"],
+  "青山特別支援学校":["青山特別"], "港特別支援学校":["港特別"], "品川特別支援学校":["品川特別"],
+  "北特別支援学校":["北特別"], "中野特別支援学校":["中野"], "石神井特別支援学校":["石神井"],
+  "小金井特別支援学校":["小金井"], "光明学園":["光明学園"], "久我山青光学園":["久我山青光学園"],
+  "武蔵台学園":["武蔵台学園"], "立川学園":["立川学園"],
+  "八王子西特別支援学校":[], "八王子特別支援学校":[],   // 予定表では学校名を書かない
+};
+
+// 予定表でのコース名の書き方（マスタのコース名 → PDF上の書かれ方）
+const COURSE_ALIAS = {
+  "御殿峠コース":["大戸（御殿峠）","御殿峠"],
+  "マイクロコース":["マイクロ"],
+  "三保コース":["三保","ﾋﾟﾝｸ","ピンク"],       // みどりは「ピンク三保コース」とも呼ばれる
+  "ピンクコース":["ﾋﾟﾝｸ","ピンク"],
+  "青コース":["あお","青"], "赤コース":["あか","赤"], "中央コース":["中央"],
+  "茶コース":["茶"], "みずいろコース":["みずいろ"],
+  "東コース":["東"], "西コース":["西"], "南コース":["南"], "北コース":["北"],
+  "1コース":["1"],"2コース":["2"],"3コース":["3"],"4コース":["4"],
+  "5コース":["5"],"6コース":["6"],"7コース":["7"],
+  "すずしろコース":["すずしろ","すずしろｺｰｽ"], "柳沢コース":["柳沢","柳沢ｺｰｽ"],
+};
+
+const norm = s => String(s ?? '').replace(/[\s　]/g,'')
+  .replace(/ｺｰｽ/g,'コース').replace(/ﾋﾟﾝｸ/g,'ピンク').replace(/[（(](.*?)[）)]/g,'$1');
+
+/** 各コースの照合キーを作る。
+ *  full = 学校名＋コース名（確実）／ solo = コース名だけ（学校名を書かない予定表用）
+ *  「青」「北」「品川」「立川」のような短い名前は、別の学校名の一部にもなる
+ *  （青葉／北特別／品川特別／立川学園）ので、solo からは外して誤対応を防ぐ。
+ */
+function buildKeys() {
+  const allSchools = [...new Set(COURSES.map(c => c[2])
+    .flatMap(s => [s, ...(SCHOOL_ALIAS[s] ?? [])]))].map(norm);
+
+  return COURSES.map(([id, course, school]) => {
+    const cs = [course, course.replace(/コース$/,''), ...(COURSE_ALIAS[course] ?? [])].map(norm).filter(Boolean);
+    const ss = [school, ...(SCHOOL_ALIAS[school] ?? [])].map(norm).filter(Boolean);
+    const full = new Set(), solo = new Set();
+    for (const c of cs) {
+      for (const s of ss) full.add(s + c);
+      // 他の学校名に紛れない、かつ十分に長い名前だけを単独キーにする
+      const ambiguous = allSchools.some(s => s !== norm(school) && s.includes(c));
+      if (c.length >= 2 && !ambiguous) solo.add(c);
+    }
+    return { id, course, school, full: [...full], solo: [...solo] };
+  });
+}
+
+/** テキスト片が、どのコースを指しているかを引き当てる。
+ *  学校名を伴うキーを先に、次にコース名だけのキーを見る。
+ *  同点なら長いキー＝より具体的に書かれている方を採る。
+ */
+function matchCourse(text, keyed) {
+  const t = norm(text);
+  if (!t) return null;
+  for (const field of ['full', 'solo']) {
+    let best = null;
+    for (const k of keyed) {
+      for (const key of k[field]) {
+        if (!key || !t.includes(key)) continue;
+        if (!best || key.length > best.key.length) best = { ...k, key };
+      }
+    }
+    if (best) return best;
+  }
+  return null;
+}
+
+/*
+ * 勤務予定表PDF（テキスト層あり）を読み取る。
+ *
+ * 様式が3通りある（コース名の置き方が違うだけで、列は共通）：
+ *   1行型  [寺田コース][久下][6:55]…
+ *   2行型  [けやきの森][加藤][5:55]…  ／ 次行 [南コース]
+ *   3行型  [久我山青光学園] ／ [村上][5:45]… ／ [砧コース]
+ * そこで行を y座標の間隔でグループ化し、1グループ＝1コースとして扱う
+ * （同じコース内の行間は4〜6px、コースの切れ目は20px以上）。
+ * 列は見出し行のx座標から求めるので、様式が多少動いても壊れない。
+ */
+
+
+// y座標が近いものを1行にまとめる
+function toRows(items, tol = 3) {
+  const rows = [];
+  for (const it of items) {
+    const s = it.str.replace(/\s+/g, ' ').trim();
+    if (!s) continue;
+    const x = Math.round(it.transform[4]), y = Math.round(it.transform[5]);
+    let r = rows.find(r => Math.abs(r.y - y) <= tol);
+    if (!r) { r = { y, cells: [] }; rows.push(r); }
+    r.cells.push({ x, s });
+  }
+  rows.sort((a, b) => b.y - a.y);
+  rows.forEach(r => r.cells.sort((a, b) => a.x - b.x));
+  return rows;
+}
+
+// 列の定義。見出しが見つからない場合は既定のx座標で補う
+const COLS = [
+  ['course',    null,             40],
+  ['driver',    'ドライバー',     124],
+  ['start',     '出社時間',       198],
+  ['depart_am', '登校便出庫時間', 253],
+  ['pm_run',    null,             319],   // 下校便運行／始発停留所（頁で見出しが違う）
+  ['depart_pm', '下校便出庫時間', 357],
+  ['attendant', '添乗員',         443],
+  ['place_am',  '登校便出勤場所', 520],
+  ['place_pm',  null,             660],   // 下校便出勤場所
+];
+
+function findColumns(rows) {
+  const head = {};
+  for (const r of rows.slice(0, 8)) {
+    for (const c of r.cells) {
+      const t = c.s.replace(/\s/g, '');
+      for (const [key, label] of COLS) {
+        if (label && t === label && head[key] == null) head[key] = c.x;
+      }
+      if (t === '下校便出勤場所' || t === '下校便') { if (c.x > 600) head.place_pm = c.x; }
+    }
+  }
+  const bounds = COLS.map(([key, , def]) => ({ key, x: head[key] ?? def }));
+  bounds.sort((a, b) => a.x - b.x);
+  return bounds;
+}
+
+// 見出しのx座標は「ラベルの左端」だが、データは列の中で寄って書かれる。
+// そこで隣り合う見出しの中間を境界にする（固定の許容幅では、
+// 添乗員欄と出勤場所欄のように間隔の広い列で取りこぼす）。
+function colOf(x, bounds) {
+  if (x < COURSE_MAX_X) return 'course';
+  let hit = bounds[1]?.key ?? 'course';
+  for (let i = 1; i < bounds.length; i++) {
+    const edge = i === 1 ? COURSE_MAX_X : (bounds[i-1].x + bounds[i].x) / 2;
+    if (x >= edge) hit = bounds[i].key;
+  }
+  return hit;
+}
+
+const EMPTY = () => ({ course:[], driver:[], start:[], depart_am:[], pm_run:[], depart_pm:[], attendant:[], place_am:[], place_pm:[] });
+
+// コースの切れ目とみなす行間隔（px）
+const GAP_LIMIT = 8;
+
+/** 1ページ分を、コース単位のかたまりに切り分ける
+ *
+ * 行間隔でのグループ化は使わない（コースの切れ目が11pxしかない箇所があり、
+ * 同一コース内の6pxと十分に離れていないため）。
+ * 代わりに「運転手または出社時間がある行」＝データ行を1コースの軸とし、
+ * その前後にある“コース名だけの行”を吸収する。様式3通りをこれ1つで扱える。
+ */
+/** 行のx座標から列の位置を割り出す。
+ *  同じページに列幅の違う表が続く（東京分の下に神奈川分）ので、
+ *  見出しの座標をページ全体に当てはめると神奈川分が拾えない。
+ *  近いx座標をまとめ、よく使われている位置の上位9つを列とみなす。
+ */
+const COURSE_MAX_X = 100;   // これより左はすべてコース名の欄
+
+function inferColumns(rows) {
+  // コース欄は「学校名」と「コース名」が横に並ぶ（大塚｜六郷、鶴見｜茶）。
+  // 位置だけで数えると2列と見なされ、以降が1つずつずれるので、
+  // 左端の一定幅をまとめてコース欄とし、残りだけを推定する。
+  const xs = rows.flatMap(r => r.cells.map(c => c.x))
+    .filter(x => x >= COURSE_MAX_X).sort((a, b) => a - b);
+  if (!xs.length) return null;
+  const clusters = []; let cur = [xs[0]];
+  for (let i = 1; i < xs.length; i++) {
+    if (xs[i] - xs[i-1] <= 12) cur.push(xs[i]);
+    else { clusters.push(cur); cur = [xs[i]]; }
+  }
+  clusters.push(cur);
+  const rest = COLS.length - 1;
+  const top = clusters.sort((a, b) => b.length - a.length).slice(0, rest)
+    .map(c => Math.round(c.reduce((s, x) => s + x, 0) / c.length))
+    .sort((a, b) => a - b);
+  if (top.length < rest) return null;
+  return [{ key: 'course', x: 0 }, ...COLS.slice(1).map(([key], i) => ({ key, x: top[i] }))];
+}
+
+/** 表が切り替わる位置で行を分ける（1行に書かれる右端が大きく変わる） */
+function splitAreas(rows) {
+  const areas = []; let cur = null, prevMax = null;
+  for (const r of rows) {
+    const max = Math.max(...r.cells.map(c => c.x));
+    if (!cur || (prevMax != null && Math.abs(max - prevMax) > 150 && r.cells.length >= 5)) {
+      cur = []; areas.push(cur);
+    }
+    cur.push(r);
+    if (r.cells.length >= 5) prevMax = max;
+  }
+  // 短い領域も捨てない（行数の少ないコースがそこに入っていることがある）。
+  // 列を推定できない領域は、呼び出し側で見出しベースの列に切り替える
+  return areas.filter(a => a.length > 0);
+}
+
+function parsePage(items, keyed) {
+  const rows = toRows(items);
+  const headRow = rows.find(r => r.cells.some(c => c.s.replace(/\s/g,'') === 'ドライバー'));
+  const body = rows.filter(r => headRow && r.y < headRow.y - 5);
+  // 表ごとに列を推定して解析し、結果を合わせる
+  const areas = splitAreas(body);
+  if (areas.length > 1) {
+    return areas.flatMap(a => parseArea(a, inferColumns(a) ?? findColumns(rows), keyed));
+  }
+  const bounds = inferColumns(body) ?? findColumns(rows);
+  return parseArea(body, bounds, keyed);
+}
+
+function parseArea(body, bounds, keyed) {
+
+  // 行の形からコースの切れ目を当てるのは諦める（同じコース内が10px、別コースが11px
+  // という箇所があり、様式も1行/2行/3行と揺れるため）。
+  // 代わりにコースマスタを正解表として使い、
+  // 「コース名が確定するまで行をためて、確定した時点で1コースとして切る」。
+  const acc = EMPTY();
+  let text = '', rows_ = 0, y0 = 0;
+  const out = [];
+
+  for (const r of body) {
+    if (!rows_) y0 = r.y;
+    for (const c of r.cells) acc[colOf(c.x, bounds)].push(c.s);
+    rows_++;
+    text = acc.course.join('');
+    const hit = matchCourse(text, keyed);
+    if (hit) {
+      out.push({ ...structuredClone(acc), _course: hit, _rows: rows_, _y: y0 });
+      for (const k of Object.keys(acc)) acc[k].length = 0;
+      text = ''; rows_ = 0;
+    }
+  }
+  return out;
+}
+
+/* ---------- 値の整形 ---------- */
+
+// 「車庫（6：50出社）」→ {place:'車庫', time:'06:50'}
+function splitPlace(s) {
+  if (!s) return { place: '', time: '' };
+  const m = s.match(/^(.*?)[（(]\s*(\d{1,2})\s*[:：]\s*(\d{2})\s*出社\s*[）)]?/);
+  if (m) return { place: m[1].trim(), time: `${m[2].padStart(2,'0')}:${m[3]}` };
+  return { place: s.trim(), time: '' };
+}
+// 「13：25出庫」「（13：15）」「14:10」→「13:25」
+function normTime(s) {
+  const m = String(s ?? '').match(/(\d{1,2})\s*[:：]\s*(\d{2})/);
+  return m ? `${m[1].padStart(2,'0')}:${m[2]}` : '';
+}
+// 人ではない書き込み（欄が埋まっていないことを示す語）
+const CREW_SKIP = /^(調整中|未定|別途指示|学校待機|なし|同じ|上記|登|下|登校|下校|登校便|下校便|ﾌｫﾛｰ|フォロー)$/;
+// 記号や数字だけの断片（罫線のはみ出し「①)」など）は人ではない
+const NOT_NAME = /^[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}a-zA-Z]+$/u;
+// 出勤場所や注記が氏名欄に書かれていることがある（「青葉第2車庫付近（7：00出社）」）
+const NOT_PERSON = /出社|出庫|車庫|待機|付近|学校|同乗/;
+
+/** 氏名欄を読み解く。
+ *  予定表の書き方は幅がある：
+ *    「久下」            … 登校も下校も同じ人
+ *    「鎌田・矢澤」      … 2人体制。どちらの便も2人
+ *    「登：笠原・山本 下：飯田・坂上」 … 便ごとに違う
+ *    「下：小林・瀧澤 落合・宮本」     … 片方だけ明示。残りは反対の便
+ *    「太田 下校研修；荒川」           … 研修の同乗者。乗務には入れない
+ *    「(下校のみ杉山) 石黒・宮﨑」     … 注記。自動では割り当てない
+ *  返り値：common=どちらの便にも、am=登校のみ、pm=下校のみ、train=研修、note=注記
+ */
+function parseCrew(raw) {
+  const out = { common: [], am: [], pm: [], train: [], note: '' };
+  let s = String(raw ?? '').replace(/\s+/g, ' ').trim();
+  if (!s) return out;
+
+  // 研修の同乗者を先に抜く（「登校研修：加藤」「下校研修；荒川」「研修:小川」）
+  s = s.replace(/(?:登校|下校|登|下)?研修\s*[：:；;]\s*([^\s・･／\/、]+)/g,
+    (_, n) => { out.train.push(n); return ' '; });
+  // 「同乗」「〜のみ」を含む断片は注記として残し、自動では割り当てない
+  const notes = [];
+  s = s.replace(/[^\s]*(?:同乗|のみ)[^\s]*/g, m => { notes.push(m.trim()); return ' '; });
+  out.note = notes.join(' ');
+
+  // 「登：」「下：」で区切る。区分は次の空白か次の区分までを受け持つ。
+  // 「山下：」「木下：」と紛れないよう、区切りの直後か先頭にあるものだけを見る
+  const parts = []; const re = /(^|[\s・･\/／、,，])(登校|下校|登|下)\s*[：:]\s*/g;
+  let m, last = 0, key = null;
+  while ((m = re.exec(s))) {
+    parts.push({ key, text: s.slice(last, m.index + m[1].length) });
+    key = m[2][0] === '登' ? 'am' : 'pm';
+    last = re.lastIndex;
+    const sp = s.indexOf(' ', last);          // 区分は空白まで
+    if (sp >= 0) { parts.push({ key, text: s.slice(last, sp) }); key = null; last = sp + 1; re.lastIndex = last; }
+  }
+  parts.push({ key, text: s.slice(last) });
+
+  const cut = t => t.split(/[・･\/／、,，：:\s]+/)
+    .map(x => x.replace(/^[※　]+|[　]+$/g, '').trim())   // 「梅（咲）」の括弧は残す（読み分けに使う）
+    .filter(x => x && x.length <= 7 && !CREW_SKIP.test(x) && !NOT_NAME.test(x) && !NOT_PERSON.test(x));
+  for (const p of parts) {
+    for (const n of cut(p.text)) {
+      // 「石塚研修」のように名前に研修が続く書き方は、乗務ではなく研修として持つ
+      if (/研修$/.test(n)) { out.train.push(n.replace(/研修$/, '')); continue; }
+      (p.key ? out[p.key] : out.common).push(n);
+    }
+  }
+  // 片方の便だけ明示されていたら、区分のない分は反対の便とみなす
+  const hasAm = out.am.length > 0, hasPm = out.pm.length > 0;
+  if (out.common.length && hasAm !== hasPm) {
+    (hasAm ? out.pm : out.am).push(...out.common);
+    out.common = [];
+  }
+  return out;
+}
+// 「鎌田/矢澤」→ ['鎌田','矢澤']（出勤場所などの分割に使う）
+function splitNames(s) {
+  return String(s ?? '').split(/[\/／、]/)
+    .map(x => x.replace(/^[※\s]+|\s+$/g, '')).filter(Boolean);
+}
+// 下校便は複数（14:10 と 15:35）。PDF上の並びは前後するので早い順に揃える
+const allTimes = s => [...new Set([...String(s ?? '').matchAll(/(\d{1,2})\s*[:：]\s*(\d{2})/g)]
+  .map(m => `${m[1].padStart(2,'0')}:${m[2]}`))].sort();
+
+/** 保存しやすい形に整える */
+function normalize(rec) {
+  const am = splitPlace(rec.place_am.join(' '));
+  const pm = splitPlace(rec.place_pm.join(' '));
+  const dr = parseCrew(rec.driver.join(' '));
+  const at = parseCrew(rec.attendant.join(' '));
+  return {
+    course_id: rec._course?.id ?? null,
+    コース: rec._course ? `${rec._course.school} ${rec._course.course}` : '',
+    PDF表記: rec.course.join(' ').replace(/\s+/g, ' ').trim(),
+    運転手: dr, 添乗員: at,
+    研修: [...dr.train, ...at.train],
+    注記: [dr.note, at.note].filter(Boolean).join(' '),
+    運転手表記: rec.driver.join(' ').replace(/\s+/g,' ').trim(),
+    添乗員表記: rec.attendant.join(' ').replace(/\s+/g,' ').trim(),
+    出社: normTime(rec.start.join(' ')),
+    登校便出庫: normTime(rec.depart_am.join(' ')),
+    下校便運行: allTimes(rec.pm_run.join(' ')),
+    下校便出庫: normTime(rec.depart_pm.join(' ')),
+    登校便出勤場所: am.place, 登校便出社時刻: am.time,
+    下校便出勤場所: pm.place, 下校便出社時刻: pm.time,
+    _行数: rec._rows,
+  };
+}
+
+/** ファイル名や表題から日付を取る（「5月20日」＋令和8年） */
+function findDate(rows, year = 2026) {
+  for (const r of rows.slice(0, 6)) {
+    const t = r.cells.map(c => c.s).join('');
+    const m = t.match(/(\d{1,2})月(\d{1,2})日/);
+    if (m) return `${year}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+  }
+  return '';
+}
+
+/* ===== 勤務予定表PDFの取り込み（画面） ===== */
+
+let YT_RESULT = [];      // 読み取り結果 [{date, recs:[...]}]
+let YT_ALIAS = {};       // 姓など → staff_id（staff_aliases から）
+let YT_PICK = {};        // 'ファイル|行|役割|番号' -> staff_id（画面で選んだぶん）
+// 予定表の氏名は姓だけのことが多く、運転手・添乗員の区別なく引き当てたいので全員を持つ
+let PEOPLE_ALL = [];
+
+function ytProg(pct, text) {
+  document.getElementById('ytProg').style.display = '';
+  document.getElementById('ytBar').style.width = pct + '%';
+  document.getElementById('ytProgText').textContent = text;
+}
+
+// pdf.js は使うときだけ読み込む
+async function ytLoadPdfjs() {
+  if (window.__pdfjs) return window.__pdfjs;
+  const m = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.6.82/pdf.min.mjs');
+  m.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.6.82/pdf.worker.min.mjs';
+  return (window.__pdfjs = m);
+}
+
+// 名簿は「髙原」「宮﨑」「曾木」、予定表は「高原」「宮崎」「曽木」と書かれる。
+// 厳密に一致しなかったときだけ、この対応でならして探す
+const KANJI_VARIANT = { '髙':'高','﨑':'崎','曾':'曽','德':'徳','瀨':'瀬','濵':'浜','濱':'浜',
+  '邉':'辺','邊':'辺','齋':'斎','齊':'斎','寬':'寛','栁':'柳','嶋':'島','澤':'沢','廣':'広',
+  '國':'国','桒':'桑','眞':'真','萬':'万','來':'来','惠':'恵','應':'応','嵜':'崎','瀧':'滝' };
+const VARIANT_RE = new RegExp('[' + Object.keys(KANJI_VARIANT).join('') + ']', 'g');
+const vnorm = s => norm(s).replace(VARIANT_RE, c => KANJI_VARIANT[c]);
+
+/** 予定表の氏名（姓だけのことが多い）を従業員に当てる */
+function ytMatchStaff(nameRaw, role, courseId) {
+  const nm = norm(nameRaw).replace(/[（(].*?[）)]/g, '');   // 「佐藤（謙）」→「佐藤」＋読み分け用に原文も見る
+  if (!nm) return { candidates: [], raw: nameRaw };
+  // 1) 別名表に登録済みならそれ
+  if (YT_ALIAS[nm]) return { staff_id: YT_ALIAS[nm], candidates: [], raw: nameRaw, by: '別名' };
+  // 2) 氏名の前方一致（空白を除いて比較）。
+  //    「佐藤（謙）」は名前の頭文字なので「佐藤謙」を先に試す。これで同姓が1人に絞れる。
+  //    厳密に当たらないときは異体字をならして探す（予定表「高原」＝名簿「髙原」）
+  const full = norm(nameRaw).replace(/[（()）]/g, '');
+  let hit = [];
+  for (const k of (full === nm ? [nm] : [full, nm])) {
+    hit = PEOPLE_ALL.filter(p => norm(p.name).startsWith(k));
+    if (!hit.length) hit = PEOPLE_ALL.filter(p => vnorm(p.name).startsWith(vnorm(k)));
+    if (hit.length) break;
+  }
+  if (hit.length === 1) return { staff_id: hit[0].id, candidates: [], raw: nameRaw, by: '氏名' };
+  // 3) 複数いる場合は、そのコースに乗った実績がある人を優先
+  if (hit.length > 1 && courseId) {
+    const h = (HIST[`${courseId}|${role}|登校`] || []).concat(HIST[`${courseId}|${role}|下校`] || []);
+    const ranked = hit.filter(p => h.some(x => x.staff_id === p.id));
+    if (ranked.length === 1) return { staff_id: ranked[0].id, candidates: hit, raw: nameRaw, by: '実績' };
+  }
+  return { staff_id: null, candidates: hit, raw: nameRaw };
+}
+
+async function ytImport(files) {
+  const R = document.getElementById('ytResult');
+  R.innerHTML = ''; YT_RESULT = []; YT_PICK = {};
+  if (!files || !files.length) return;
+
+  ytProg(3, 'PDFを開いています…');
+  let pdfjs;
+  try { pdfjs = await ytLoadPdfjs(); }
+  catch (e) {
+    document.getElementById('ytProg').style.display = 'none';
+    R.innerHTML = '<div class="tag warn">PDFを読むための部品を読み込めませんでした。ネットワークをご確認ください。</div>';
+    return;
+  }
+
+  // コースマスタ・従業員・別名表を用意
+  setCourses(CRS.map(c => [c.id, c.course_name, c.school_name]));
+  const keyed = buildKeys();
+  if (!PEOPLE_ALL.length) PEOPLE_ALL = await _fetchAll('staff?select=id,name&active=eq.true&order=name');
+  YT_ALIAS = {};
+  (await _fetchAll('staff_aliases?select=staff_id,alias')).forEach(a => { YT_ALIAS[norm(a.alias)] = a.staff_id; });
+
+  for (let i = 0; i < files.length; i++) {
+    ytProg(5 + i / files.length * 80, `読み取っています… (${i+1}/${files.length}) ${files[i].name}`);
+    try {
+      const doc = await pdfjs.getDocument({ data: await files[i].arrayBuffer() }).promise;
+      const recs = []; let date = '';
+      for (let p = 1; p <= doc.numPages; p++) {
+        const tc = await (await doc.getPage(p)).getTextContent();
+        if (!date) date = findDate(toRows(tc.items), ytYearOf(files[i].name));
+        recs.push(...parsePage(tc.items, keyed).map(normalize));
+      }
+      YT_RESULT.push({ file: files[i].name, date, recs });
+    } catch (e) {
+      YT_RESULT.push({ file: files[i].name, date: '', recs: [], error: e.message });
+    }
+  }
+
+  ytProg(90, '便と従業員を照合しています…');
+  await ytLinkDuties();
+  ytProg(100, '完了');
+  setTimeout(() => { document.getElementById('ytProg').style.display = 'none'; }, 600);
+  ytRender();
+}
+
+// ファイル名「R8年5月20日…」から年を取る（令和8年＝2026年）
+function ytYearOf(fileName) {
+  const m = String(fileName).match(/R(\d+)年/);
+  return m ? 2018 + Number(m[1]) : new Date().getFullYear();
+}
+
+/** 読み取った日付の便（duties）を取ってきて、コースごとに結びつける */
+async function ytLinkDuties() {
+  const dates = [...new Set(YT_RESULT.map(f => f.date).filter(Boolean))].sort();
+  if (!dates.length) return;
+  const ds = await _fetchAll(
+    `duties?select=id,work_date,course_id,segment,seq,start_time,end_time,driver_need,attendant_need`
+    + `&work_date=gte.${dates[0]}&work_date=lte.${dates[dates.length-1]}&order=course_id,seq`);
+  const by = {};
+  ds.forEach(d => { (by[`${d.work_date}|${d.course_id}`] ||= []).push(d); });
+  for (const f of YT_RESULT) {
+    f.recs.forEach((r, i) => {
+      r._duties = by[`${f.date}|${r.course_id}`] || [];
+      // 便ごとに人を決める。common はどちらの便にも、am/pm はその便だけ。
+      // _key は画面で選び直した人を覚えるための目印（描画前から決めておく）
+      const mk = (crew, role) => {
+        const one = (list, mark) => list.map((n, k) => {
+          const m = ytMatchStaff(n, role, r.course_id);
+          m._key = `${f.file}|${i}|${role}|${mark}${k}`;
+          return m;
+        });
+        return { common: one(crew.common, '共'), am: one(crew.am, '登'), pm: one(crew.pm, '下') };
+      };
+      r._dr = mk(r.運転手, '運転手');
+      r._at = mk(r.添乗員, '添乗員');
+    });
+  }
+}
+
+// その便に乗る人（登校便なら common＋am、下校便なら common＋pm）
+const ytSegIsAm = seg => String(seg ?? '').startsWith('登');
+function ytFor(m, seg) { return [...m.common, ...(ytSegIsAm(seg) ? m.am : m.pm)]; }
+// 画面に出す一覧（便がまだ無いコースは、分かっている人をすべて並べる）
+function ytAllOf(m) { return [...m.common, ...m.am, ...m.pm]; }
+
+function ytRender() {
+  const R = document.getElementById('ytResult');
+  if (!YT_RESULT.length) { R.innerHTML = ''; return; }
+
+  let h = '';
+  for (const f of YT_RESULT) {
+    if (f.error) { h += `<div class="tag warn">${escHtml(f.file)}：${escHtml(f.error)}</div>`; continue; }
+    const noDuty = f.recs.filter(r => !r._duties.length).length;
+    const need   = f.recs.filter(r => [...ytAllOf(r._dr), ...ytAllOf(r._at)]
+      .some(m => !m.staff_id && !YT_PICK[m._key])).length;
+
+    h += `<div class="panel" style="margin-bottom:10px;">
+      <div style="font-weight:700;">${escHtml(f.date || f.file)}
+        <span class="muted" style="font-weight:400;font-size:12px;">${escHtml(f.file)}</span></div>
+      <div style="margin:6px 0;font-size:12px;">
+        コース <b>${f.recs.length}</b> 件
+        ${noDuty ? `／ <span class="tag warn">便が未作成 ${noDuty}件</span>` : ''}
+        ${need ? `／ <span class="tag warn">氏名の確認 ${need}件</span>` : ''}
+      </div>`;
+
+    h += `<div style="overflow:auto;max-height:52vh;"><table><thead><tr>
+      <th>コース</th><th>便</th><th>運転手</th><th>添乗員</th>
+      <th>出社</th><th>登校出庫</th><th>下校出庫</th><th>登校の出勤場所</th></tr></thead><tbody>`;
+    f.recs.forEach((r, i) => {
+      const segs = r._duties.map(d => d.segment).join('・') || '<span class="tag warn">なし</span>';
+      // 登校だけ／下校だけの人は、その旨を添えて出す
+      const cell = crew => {
+        const one = (list, mark) => list.map(m =>
+          (mark ? `<span class="muted" style="font-size:9px;">${mark}</span>` : '') + ytNameCell(m)).join(' ');
+        const s = [one(crew.common, ''), one(crew.am, '登'), one(crew.pm, '下')].filter(Boolean).join(' ');
+        return s || '<span class="muted">—</span>';
+      };
+      // 予定表が2人体制でも、便の必要人数が1のことがある。そのまま保存すると配置が定員を超える
+      const over = r._duties.flatMap(d => [['運転手', d.driver_need, r._dr], ['添乗員', d.attendant_need, r._at]]
+        .filter(([, need, crew]) => need && ytFor(crew, d.segment).length > need)
+        .map(([role]) => `${d.segment}の${role}`));
+      h += `<tr>
+        <td style="white-space:nowrap;">${escHtml(r.コース)}
+          <div class="muted" style="font-size:10px;">PDF「${escHtml(r.PDF表記)}」</div></td>
+        <td style="white-space:nowrap;font-size:11px;">${segs}
+          ${over.length ? `<div class="tag warn" style="font-size:9px;">必要人数より多い（${escHtml([...new Set(over)].join('・'))}）</div>` : ''}</td>
+        <td>${cell(r._dr)}</td>
+        <td>${cell(r._at)}
+          ${r.研修.length ? `<div class="muted" style="font-size:10px;">研修：${escHtml(r.研修.join('・'))}</div>` : ''}
+          ${r.注記 ? `<div class="muted" style="font-size:10px;">${escHtml(r.注記)}</div>` : ''}</td>
+        <td style="white-space:nowrap;">${escHtml(r.出社)}</td>
+        <td style="white-space:nowrap;">${escHtml(r.登校便出庫)}</td>
+        <td style="white-space:nowrap;">${escHtml(r.下校便出庫)}</td>
+        <td style="font-size:11px;">${escHtml(r.登校便出勤場所)}${r.登校便出社時刻?`（${escHtml(r.登校便出社時刻)}）`:''}</td>
+      </tr>`;
+    });
+    h += '</tbody></table></div></div>';
+  }
+
+  const all = YT_RESULT.flatMap(f => f.recs);
+  const total = all.length;
+  const unresolved = all.flatMap(r => [...ytAllOf(r._dr), ...ytAllOf(r._at)])
+    .filter(m => !m.staff_id && !YT_PICK[m._key]).length;
+  const savable = all.filter(r => r._duties.length).length;
+
+  h += `<div class="panel" style="position:sticky;bottom:0;background:#fff;">
+    <div class="row" style="align-items:center;gap:10px;">
+      <button class="primary" onclick="ytSave()" ${savable?'':'disabled'}>この内容で保存する（${savable}件）</button>
+      <span class="muted" style="font-size:12px;">
+        読み取り ${total}件 ／ 保存できる ${savable}件
+        ${total-savable ? `／ <b>便が未作成のため保存できない ${total-savable}件</b>` : ''}
+        ${unresolved ? `／ <b>氏名が決まっていない ${unresolved}人ぶん（保存されません）</b>` : ''}
+      </span>
+    </div>
+    ${total-savable ? `<div class="muted" style="font-size:11px;margin-top:6px;">
+      便が未作成の日は、先に「月間予定」で日課を入れてから便を作ってください。</div>` : ''}
+  </div>`;
+  R.innerHTML = h;
+}
+
+/** 氏名のセル。決まっていれば名前、曖昧なら選択欄を出す */
+function ytNameCell(m) {
+  const key = m._key;
+  const chosen = YT_PICK[key] ?? m.staff_id;
+  if (chosen) {
+    const p = PEOPLE_ALL.find(x => x.id === chosen);
+    const tag = m.by === '別名' ? '' : (m.by === '実績' ? '<span class="muted" style="font-size:9px;">実績</span>' : '');
+    return `<span style="white-space:nowrap;">${escHtml(p ? p.name : chosen)}${tag}</span>`;
+  }
+  const opts = (m.candidates.length ? m.candidates : PEOPLE_ALL)
+    .map(p => `<option value="${p.id}">${escHtml(p.name)}</option>`).join('');
+  return `<span style="white-space:nowrap;">
+    <span class="tag warn">${escHtml(m.raw)}</span>
+    <select onchange="ytPick('${key}',this.value)" style="width:auto;font-size:11px;padding:1px 3px;">
+      <option value="">選んでください</option>${opts}</select></span>`;
+}
+
+function ytPick(key, v) {
+  if (v) YT_PICK[key] = Number(v); else delete YT_PICK[key];
+  ytRender();
+}
+
+/** duty_crew に保存し、選んだ氏名は別名として覚える */
+async function ytSave() {
+  const rows = [], aliases = [];
+  for (const f of YT_RESULT) {
+    for (let i = 0; i < f.recs.length; i++) {
+      const r = f.recs[i];
+      if (!r._duties.length) continue;
+      // 便ごとに、その便に乗る人だけを入れる（「登：」「下：」の区分をここで効かせる）
+      const put = (crew, role) => {
+        for (const d of r._duties) {
+          const need = role === '運転手' ? d.driver_need : d.attendant_need;
+          if (!need) continue;
+          for (const m of ytFor(crew, d.segment)) {
+            const sid = YT_PICK[m._key] ?? m.staff_id;
+            if (!sid) continue;
+            // 覚えるのは表記が1人に結びつくときだけ。「佐藤」のように同姓が何人もいる姓を
+            // 覚えてしまうと、別の佐藤さんの日まで誤って当ててしまう
+            if (!m.staff_id && YT_PICK[m._key] && m.candidates.length <= 1)
+              aliases.push({ staff_id: sid, alias: m.raw, source: '勤務予定表' });
+            rows.push({ duty_id: d.id, staff_id: sid, role });
+          }
+        }
+      };
+      put(r._dr, '運転手'); put(r._at, '添乗員');
+    }
+  }
+  if (!rows.length) { status('保存できる乗務がありません', true); return; }
+
+  ytProg(10, `保存しています…（${rows.length}件）`);
+  let done = 0; const errs = [];
+  for (let i = 0; i < rows.length; i += 200) {
+    const chunk = rows.slice(i, i + 200);
+    ytProg(10 + i / rows.length * 80, `保存しています…（${i}/${rows.length}）`);
+    const res = await fetch(`${REST_URL}/duty_crew`, {
+      method: 'POST',
+      headers: Object.assign(getH(), { 'Prefer': 'return=minimal,resolution=merge-duplicates' }),
+      body: JSON.stringify(chunk),
+    });
+    if (res.ok) done += chunk.length; else if (errs.length < 2) errs.push(await res.text());
+  }
+  // 選んだ氏名を別名として覚える（次回から自動で当たる）
+  if (aliases.length) {
+    const uniq = [...new Map(aliases.map(a => [norm(a.alias), a])).values()];
+    await fetch(`${REST_URL}/staff_aliases`, {
+      method: 'POST',
+      headers: Object.assign(getH(), { 'Prefer': 'return=minimal,resolution=ignore-duplicates' }),
+      body: JSON.stringify(uniq),
+    });
+  }
+  ytProg(100, '完了');
+  setTimeout(() => { document.getElementById('ytProg').style.display = 'none'; }, 600);
+  status(`乗務を ${done} 件保存しました${aliases.length ? `／氏名の対応を ${aliases.length} 件覚えました` : ''}`);
+  await hLoad();
+}
+
 </script>
 </body>
 </html>
