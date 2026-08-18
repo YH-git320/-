@@ -1036,6 +1036,10 @@ async function jLoad(){
   STF = await _fetchAll('staff?select=id,name,active');
   VMAP = new Map(VEH.map(v=>[norm(v.vehicle_number), v.id]));
   SMAP = new Map(STF.map(s=>[norm(s.name), s.id]));
+  // 他システムでの表記ゆれ（点呼CSVの「?原 逸雄」など）を吸収する
+  (await _fetchAll('staff_aliases?select=staff_id,alias')).forEach(a=>{
+    if(!SMAP.has(norm(a.alias))) SMAP.set(norm(a.alias), a.staff_id);
+  });
   TRIPS = await _fetchAll('trip_logs_effective?select=*&order=work_date.desc,id.desc');
   jRenderStat();
   kRenderStat();
@@ -1466,7 +1470,7 @@ function jRenderList(){
     <th>運行日</th><th>車両</th><th>乗務員</th>
     <th style="text-align:right;">出庫</th><th style="text-align:right;">帰庫</th>
     <th style="text-align:right;">走行</th><th style="text-align:right;">実車</th><th style="text-align:right;">空車</th>
-    <th style="text-align:right;">拘束</th><th>業務 開始〜終了</th><th>出どころ</th><th></th></tr></thead><tbody>`;
+    <th style="text-align:right;">その日の拘束</th><th>その日の業務 開始〜終了</th><th>出どころ</th><th></th></tr></thead><tbody>`;
   view.forEach(t=>{
     const bad = (!t.vehicle_id?'車両':'') + (!t.driver_id?(!t.vehicle_id?'・':'')+'乗務員':'');
     const hm = m => m==null ? '' : `${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}`;
@@ -1533,7 +1537,48 @@ function jRenderSum(){
   };
   el.innerHTML =
     tbl(`令和${y-2018}年度（${y}年4月〜${y+1}年3月）　許可別`, byP, Object.keys(byP).sort(), '許可') +
-    tbl('月別', byM, Object.keys(byM).sort(), '年月');
+    tbl('月別', byM, Object.keys(byM).sort(), '年月') +
+    '<div id="jWorkArea"></div>';
+  jRenderWork(from, to);
+}
+
+// 拘束時間は「1日×1人」で数える（運行ごとに数えると同じ日を重複して数えてしまう）
+async function jRenderWork(from, to){
+  const el = document.getElementById('jWorkArea');
+  if(!el) return;
+  el.innerHTML = '<div class="panel muted">勤務を集計しています…</div>';
+  const rows = await _fetchAll(`driver_workdays?select=*&work_date=gte.${from}&work_date=lte.${to}&order=work_date`);
+  if(!rows.length){ el.innerHTML=''; return; }
+  const by={};
+  rows.forEach(r=>{
+    const m=(r.work_date||'').slice(0,7);
+    by[m] = by[m] || {days:0, bound:0, dg:0, trips:0, tenko:0};
+    by[m].days++; by[m].trips += r.運行数||0;
+    by[m].bound += (r.拘束時間分||0); by[m].dg += (r.デジタコ拘束分||0);
+    if(r.出どころ !== 'デジタコ') by[m].tenko++;
+  });
+  const hr = m => (m/60).toLocaleString('ja-JP',{minimumFractionDigits:1,maximumFractionDigits:1});
+  let h = `<div class="panel"><div style="font-weight:700;margin-bottom:4px;">勤務（拘束時間）</div>
+    <div class="muted" style="font-size:11px;margin-bottom:8px;">
+      拘束時間は<b>1日×1人</b>で数えています（1日に複数の運行があっても1日として数えます）。
+      <b>点呼の業務前〜業務後</b>が実際の拘束時間です。デジタコは運行中の時間しか記録しないため、待機の時間が抜けて短く出ます。
+    </div>
+    <table><thead><tr><th>年月</th><th style="text-align:right;">延べ勤務日数</th><th style="text-align:right;">運行数</th>
+    <th style="text-align:right;">拘束時間</th><th style="text-align:right;">うちデジタコ基準</th><th style="text-align:right;">差</th>
+    <th style="text-align:right;">点呼が入った日</th></tr></thead><tbody>`;
+  let td=0,tb=0,tg=0,tt=0,tk=0;
+  Object.keys(by).sort().forEach(m=>{
+    const o=by[m]; td+=o.days; tb+=o.bound; tg+=o.dg; tt+=o.trips; tk+=o.tenko;
+    h += `<tr><td>${esc(m)}</td><td style="text-align:right;">${n0(o.days)}</td><td style="text-align:right;">${n0(o.trips)}</td>
+      <td style="text-align:right;font-weight:600;">${hr(o.bound)} h</td>
+      <td style="text-align:right;" class="muted">${hr(o.dg)} h</td>
+      <td style="text-align:right;color:var(--g);">＋${hr(o.bound-o.dg)} h</td>
+      <td style="text-align:right;">${n0(o.tenko)} / ${n0(o.days)}</td></tr>`;
+  });
+  h += `<tr style="font-weight:700;background:#f5f8f4;"><td>合計</td><td style="text-align:right;">${n0(td)}</td><td style="text-align:right;">${n0(tt)}</td>
+    <td style="text-align:right;">${hr(tb)} h</td><td style="text-align:right;">${hr(tg)} h</td>
+    <td style="text-align:right;">＋${hr(tb-tg)} h</td><td style="text-align:right;">${n0(tk)} / ${n0(td)}</td></tr></tbody></table></div>`;
+  el.innerHTML = h;
 }
 
 /* ---------- 起動 ---------- */
