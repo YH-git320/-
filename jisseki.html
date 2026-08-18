@@ -89,6 +89,7 @@ table.list tr:hover td{background:#f7faf8;}
     <div class="tab" id="tabList"   onclick="jSetTab('list')">📋 実績一覧</div>
     <div class="tab" id="tabSum"    onclick="jSetTab('sum')">📈 集計</div>
     <div class="tab" id="tabStop"   onclick="jSetTab('stop')">🚏 回送中の停車</div>
+    <div class="tab" id="tabIssue"  onclick="jSetTab('issue')">🚌 運転日報の発行</div>
   </div>
 
   <!-- ===== 取込 ===== -->
@@ -214,6 +215,29 @@ table.list tr:hover td{background:#f7faf8;}
     </div>
     <div id="sArea"></div>
   </div>
+
+  <!-- ===== 運転日報の発行 ===== -->
+  <div id="viewIssue" style="display:none;">
+    <div class="panel">
+      <div class="row" style="align-items:center;">
+        <label class="muted" style="min-width:auto;">対象日</label>
+        <input type="date" id="uDate" style="width:auto;">
+        <button class="mini" onclick="uLoadCandidates()">この日の候補を読み込む</button>
+      </div>
+      <div class="muted" style="font-size:11px;line-height:1.8;margin-top:8px;">
+        その日に<b>運転手として乗った便</b>、または<b>デジタコの実績がある方</b>を候補として出します。<br>
+        リンクは<b>本人専用</b>です。開くと乗車人数の確認とメーターの確認ができ、送信すると運転日報として記録されます。<br>
+        メールが登録されている方には<b>送信</b>できます。登録がない方は<b>リンクをコピー</b>して、事務所の端末等でお渡しください。
+      </div>
+      <div class="row" style="align-items:center;margin-top:10px;">
+        <label style="font-size:13px;display:flex;align-items:center;gap:5px;white-space:nowrap;">
+          <input type="checkbox" id="uTestMode" style="width:auto;" checked> テスト送信（自分宛に届く。運転手には届きません）
+        </label>
+        <input id="uTestAddr" type="text" placeholder="テスト送信の宛先メール" style="flex:1;min-width:160px;">
+      </div>
+    </div>
+    <div id="uArea"></div>
+  </div>
 </main>
 <script>
 // ===== 高尾輸送サービス 管理システム 共通認証モジュール =====
@@ -222,6 +246,7 @@ table.list tr:hover td{background:#f7faf8;}
 
 const AUTH_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/auth/v1';
 const REST_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/rest/v1';
+const FUNCTIONS_URL = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/functions/v1';
 const ANON_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4ZHlxa3lxdGl6aHRrd3RwdnJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NzYxODEsImV4cCI6MjA5OTQ1MjE4MX0.yVbClXBk2JVeglevsBLY5sH2_m2ybCf71u4i_YYWyHE';
 
 const ROLE_LABEL = { super_admin: '権限付与者', admin: 'システム管理者', operator: '担当者', staff: '事務員' };
@@ -1052,13 +1077,157 @@ let VEH=[], STF=[], TRIPS=[];
 let VMAP=new Map(), SMAP=new Map();
 
 function jSetTab(t){
-  ['import','tenko','list','sum','stop'].forEach(x=>{
+  ['import','tenko','list','sum','stop','issue'].forEach(x=>{
     document.getElementById('view'+x[0].toUpperCase()+x.slice(1)).style.display = (x===t)?'':'none';
     document.getElementById('tab'+x[0].toUpperCase()+x.slice(1)).classList.toggle('active', x===t);
   });
   if(t==='list') jRenderList();
   if(t==='sum')  jRenderSum();
   if(t==='stop') sRender();
+  if(t==='issue' && !document.getElementById('uDate').value){
+    document.getElementById('uDate').value = new Date().toISOString().slice(0,10);
+  }
+}
+
+/* ================= 運転日報の発行 ================= */
+let U_CAND = [];
+
+/** その日、運転手として乗った便／デジタコ実績がある人を候補にする */
+async function uLoadCandidates(){
+  const date = document.getElementById('uDate').value;
+  const A = document.getElementById('uArea');
+  if(!date){ A.innerHTML = '<div class="tag warn">対象日を選んでください</div>'; return; }
+  A.innerHTML = '<div class="muted" style="padding:12px;">読み込んでいます…</div>';
+
+  const dutyIds = (await _fetchAll(`duties?select=id&work_date=eq.${date}`)).map(d=>d.id);
+  const byId = {};
+  if(dutyIds.length){
+    const crew = await _fetchAll(`duty_crew?select=staff_id&role=eq.運転手&duty_id=in.(${dutyIds.join(',')})`);
+    crew.forEach(c=>{ (byId[c.staff_id] ||= {duties:0,trips:0}).duties++; });
+  }
+  const trips = await _fetchAll(`trip_logs?select=driver_id&work_date=eq.${date}&driver_id=not.is.null`);
+  trips.forEach(t=>{ (byId[t.driver_id] ||= {duties:0,trips:0}).trips++; });
+
+  const ids = Object.keys(byId).map(Number);
+  if(!ids.length){ A.innerHTML = `<div class="panel" style="background:#f5f8f4;">${esc(date)} に運転手として乗った記録は見つかりませんでした。</div>`; return; }
+  const staff = await _fetchAll(`staff?select=id,name,email&id=in.(${ids.join(',')})`);
+  U_CAND = staff.map(s=>({ ...s, ...byId[s.id] })).sort((a,b)=>a.name.localeCompare(b.name,'ja'));
+  uRenderCandidates();
+}
+
+function uRenderCandidates(){
+  const A = document.getElementById('uArea');
+  const withMail = U_CAND.filter(c=>c.email).length;
+  let h = `<div class="panel">
+    <div class="row" style="align-items:center;">
+      <span style="font-size:13px;">候補 <b>${U_CAND.length}</b>名（うちメール登録 ${withMail}名）</span>
+      <button class="primary" onclick="uSendAll()">この日の候補ぜんいんに発行して送信</button>
+    </div>
+    <div id="uSendResult" style="margin-top:8px;"></div>
+  </div>
+  <div style="overflow:auto;"><table><thead><tr>
+    <th>氏名</th><th>便数</th><th>運行数</th><th>メール</th><th>操作</th><th>発行したリンク</th>
+  </tr></thead><tbody>`;
+  U_CAND.forEach(c=>{
+    h += `<tr id="uRow${c.id}">
+      <td style="white-space:nowrap;">${esc(c.name)}</td>
+      <td style="text-align:right;">${c.duties||0}</td>
+      <td style="text-align:right;">${c.trips||0}</td>
+      <td style="font-size:12px;">${c.email?esc(c.email):'<span class="tag warn">未登録</span>'}</td>
+      <td style="white-space:nowrap;">
+        <button class="mini" onclick="uIssueOne(${c.id})">リンク発行</button>
+        ${c.email?`<button class="mini" onclick="uMailOne(${c.id})">メール送信</button>`:''}
+      </td>
+      <td style="font-size:11px;word-break:break-all;" id="uLink${c.id}"></td>
+    </tr>`;
+  });
+  h += '</tbody></table></div>';
+  A.innerHTML = h;
+}
+
+async function uIssueOne(staffId){
+  const date = document.getElementById('uDate').value;
+  const cell = document.getElementById('uLink'+staffId);
+  cell.textContent = '発行しています…';
+  try{
+    const res = await fetch(`${REST_URL}/rpc/issue_unten_for_day`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ p_staff_id: staffId, p_work_date: date, p_valid_hours: 168 }) });
+    if(!res.ok) throw new Error(await res.text());
+    const info = await res.json();
+    cell.innerHTML = `<a href="${esc(info.url)}" target="_blank">${esc(info.url)}</a>
+      <button class="mini" style="margin-left:6px;" onclick="navigator.clipboard.writeText('${esc(info.url)}');this.textContent='コピーしました';">コピー</button>`;
+    return info;
+  }catch(e){ cell.innerHTML = `<span class="tag warn">失敗：${esc(e.message).slice(0,120)}</span>`; return null; }
+}
+
+function uMailHtml(name, dateJp, url){
+  return `<div style="font-family:'Hiragino Kaku Gothic ProN','Meiryo',sans-serif;font-size:14px;line-height:1.75;color:#222;">
+<p>${esc(name)} 様</p>
+<p>${esc(dateJp)}の運転日報のご確認をお願いします。</p>
+<p>乗車人数とメーターが正しいかご確認のうえ、送信してください。<br>（スマートフォンからもご入力いただけます）</p>
+<p>▼ 運転日報<br><a href="${esc(url)}">${esc(url)}</a></p>
+<p style="color:#888;">---<br>高尾輸送サービス</p>
+</div>`;
+}
+function uDateJp(d){
+  const dt = new Date(d), days=['日','月','火','水','木','金','土'];
+  return `${dt.getFullYear()}年${dt.getMonth()+1}月${dt.getDate()}日（${days[dt.getDay()]}）`;
+}
+
+async function uMailOne(staffId){
+  const date = document.getElementById('uDate').value;
+  const testMode = document.getElementById('uTestMode').checked;
+  const testAddr = document.getElementById('uTestAddr').value.trim();
+  if(testMode && !testAddr){ alert('テスト送信の宛先メールを入力してください'); return; }
+  const c = U_CAND.find(x=>x.id===staffId);
+  const info = await uIssueOne(staffId);
+  if(!info) return;
+  const to = testMode ? testAddr : c.email;
+  const subject = (testMode?`[テスト｜本来の宛先：${c.name}] `:'') + `【高尾輸送】${uDateJp(date)}の運転日報のご確認`;
+  const html = uMailHtml(c.name, uDateJp(date), info.url);
+  const res = await fetch(`${FUNCTIONS_URL}/send-email`, { method:'POST', headers:getH(),
+    body: JSON.stringify({ to, subject, html }) });
+  const sr = await res.json().catch(()=>({}));
+  const row = document.getElementById('uRow'+staffId);
+  if(res.ok && sr.ok) row.style.background = '#eef7ef';
+  else alert(`${c.name} さんへの送信に失敗しました：${sr.error || ('HTTP '+res.status)}`);
+}
+
+async function uSendAll(){
+  if(!U_CAND.length) return;
+  const date = document.getElementById('uDate').value;
+  const testMode = document.getElementById('uTestMode').checked;
+  const testAddr = document.getElementById('uTestAddr').value.trim();
+  if(testMode && !testAddr){ alert('テスト送信の宛先メールを入力してください'); return; }
+  const targets = testMode ? U_CAND : U_CAND.filter(c=>c.email);
+  const skipped = testMode ? 0 : U_CAND.length - targets.length;
+  const msg = testMode
+    ? `テスト送信：${targets.length}名ぶんを ${testAddr} にまとめて送ります。運転手には届きません。よろしいですか？`
+    : `本番送信：${targets.length}名の運転手へリンクを送ります。${skipped?`（メール未登録の${skipped}名は除外）`:''}\nよろしいですか？`;
+  if(!confirm(msg)) return;
+
+  const box = document.getElementById('uSendResult');
+  let sent=0; const fails=[];
+  for(let i=0;i<targets.length;i++){
+    const c = targets[i];
+    box.innerHTML = `<div class="muted" style="font-size:12px;">送信中… ${i+1}/${targets.length}（${esc(c.name)}）</div>`;
+    try{
+      const info = await uIssueOne(c.id);
+      if(!info) throw new Error('リンク発行に失敗');
+      const to = testMode ? testAddr : c.email;
+      const subject = (testMode?`[テスト｜本来の宛先：${c.name}] `:'') + `【高尾輸送】${uDateJp(date)}の運転日報のご確認`;
+      const html = uMailHtml(c.name, uDateJp(date), info.url);
+      const res = await fetch(`${FUNCTIONS_URL}/send-email`, { method:'POST', headers:getH(),
+        body: JSON.stringify({ to, subject, html }) });
+      const sr = await res.json().catch(()=>({}));
+      if(res.ok && sr.ok) sent++; else fails.push(`${c.name}：${sr.error || ('HTTP '+res.status)}`);
+    }catch(e){ fails.push(`${c.name}：${e.message}`); }
+  }
+  box.innerHTML = `<div style="padding:10px 12px;border-radius:8px;font-size:13px;background:${fails.length?'#fdf2f2':'#eef7ef'};border:1px solid ${fails.length?'#eeaaa4':'#bfe3c0'};">
+    ✅ ${sent}件 送信${skipped?`／⏭ 未登録 ${skipped}件 除外`:''}${fails.length?`／⚠ 失敗 ${fails.length}件`:''}
+    ${fails.length?`<div style="margin-top:6px;color:#b5453a;">${fails.map(esc).join('<br>')}</div>`:''}
+    ${testMode?'<div style="margin-top:6px;color:#666;">※テスト送信でした。本番は「テスト送信」のチェックを外してください。</div>':''}
+  </div>`;
 }
 
 /* ================= 回送中の停車 ================= */
