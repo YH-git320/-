@@ -1917,10 +1917,12 @@ const NOT_NAME = /^[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}a-zA-Z]
 const NOT_PERSON = /出社|出庫|車庫|待機|付近|学校|同乗/;
 
 /** 氏名欄を読み解く。
- *  予定表の書き方は幅がある：
- *    「久下」            … 登校も下校も同じ人
- *    「鎌田・矢澤」      … 2人体制。どちらの便も2人
- *    「登：笠原・山本 下：飯田・坂上」 … 便ごとに違う
+ *
+ *  **「/」は登校便と下校便の区切り、「・」は同じ便に乗る複数人**（八重樫さん確認・2026-08-18）。
+ *    「久下」                          … 登校も下校も同じ人
+ *    「鎌田/矢澤」                     … 登校が鎌田、下校が矢澤
+ *    「国広・太田(麻)/伊藤」           … 登校が国広と太田、下校が伊藤
+ *    「登：笠原・山本 下：飯田・坂上」 … 同じことを明示的に書いたもの
  *    「下：小林・瀧澤 落合・宮本」     … 片方だけ明示。残りは反対の便
  *    「太田 下校研修；荒川」           … 研修の同乗者。乗務には入れない
  *    「(下校のみ杉山) 石黒・宮﨑」     … 注記。自動では割り当てない
@@ -1939,6 +1941,21 @@ function parseCrew(raw) {
   s = s.replace(/[^\s]*(?:同乗|のみ)[^\s]*/g, m => { notes.push(m.trim()); return ' '; });
   out.note = notes.join(' ');
 
+  const cut = t => t.split(/[・･、,，：:\s]+/)
+    .map(x => x.replace(/^[※　]+|[　]+$/g, '').trim())   // 「梅（咲）」の括弧は残す（読み分けに使う）
+    .filter(x => x && x.length <= 7 && !CREW_SKIP.test(x) && !NOT_NAME.test(x) && !NOT_PERSON.test(x));
+  // 名前として採る。「石塚研修」のように研修が続く書き方は乗務ではなく研修として持つ
+  const take = (t, where) => { for (const n of cut(t)) {
+    if (/研修$/.test(n)) out.train.push(n.replace(/研修$/, '')); else where.push(n); } };
+
+  // 「/」は登校便と下校便の区切り。「登：」「下：」との併用は実データで0件のため、
+  // スラッシュがあればそれだけで判断する
+  if (/[\/／]/.test(s) && !/(^|[\s・･、,，])(登校|下校|登|下)\s*[：:]/.test(s)) {
+    const [am, pm] = s.split(/[\/／]/);
+    take(am, out.am); take(pm ?? '', out.pm);
+    return out;
+  }
+
   // 「登：」「下：」で区切る。区分は次の空白か次の区分までを受け持つ。
   // 「山下：」「木下：」と紛れないよう、区切りの直後か先頭にあるものだけを見る
   const parts = []; const re = /(^|[\s・･\/／、,，])(登校|下校|登|下)\s*[：:]\s*/g;
@@ -1952,16 +1969,7 @@ function parseCrew(raw) {
   }
   parts.push({ key, text: s.slice(last) });
 
-  const cut = t => t.split(/[・･\/／、,，：:\s]+/)
-    .map(x => x.replace(/^[※　]+|[　]+$/g, '').trim())   // 「梅（咲）」の括弧は残す（読み分けに使う）
-    .filter(x => x && x.length <= 7 && !CREW_SKIP.test(x) && !NOT_NAME.test(x) && !NOT_PERSON.test(x));
-  for (const p of parts) {
-    for (const n of cut(p.text)) {
-      // 「石塚研修」のように名前に研修が続く書き方は、乗務ではなく研修として持つ
-      if (/研修$/.test(n)) { out.train.push(n.replace(/研修$/, '')); continue; }
-      (p.key ? out[p.key] : out.common).push(n);
-    }
-  }
+  for (const p of parts) take(p.text, p.key ? out[p.key] : out.common);
   // 片方の便だけ明示されていたら、区分のない分は反対の便とみなす
   const hasAm = out.am.length > 0, hasPm = out.pm.length > 0;
   if (out.common.length && hasAm !== hasPm) {
@@ -2225,6 +2233,7 @@ function ytRender() {
     </div>
     ${total-savable ? `<div class="muted" style="font-size:11px;margin-top:6px;">
       便が未作成の日は、先に「月間予定」で日課を入れてから便を作ってください。</div>` : ''}
+    <div id="ytDone" style="display:none;margin-top:8px;"></div>
   </div>`;
   R.innerHTML = h;
 }
@@ -2277,19 +2286,24 @@ async function ytSave() {
       put(r._dr, '運転手'); put(r._at, '添乗員');
     }
   }
-  if (!rows.length) { status('保存できる乗務がありません', true); return; }
+  // 予定表に同じ人が2回書かれていることがある（「千安/千安・小林」など）。
+  // 同じ便に同じ人を2件送るとまとまり全体が拒否されるため、ここで1件にまとめる
+  const uniqRows = [...new Map(rows.map(r => [`${r.duty_id}|${r.staff_id}|${r.role}`, r])).values()];
+  const dupCount = rows.length - uniqRows.length;
+  if (!uniqRows.length) { ytTell('保存できる乗務がありません', true); return; }
 
-  ytProg(10, `保存しています…（${rows.length}件）`);
+  ytProg(10, `保存しています…（${uniqRows.length}件）`);
   let done = 0; const errs = [];
-  for (let i = 0; i < rows.length; i += 200) {
-    const chunk = rows.slice(i, i + 200);
-    ytProg(10 + i / rows.length * 80, `保存しています…（${i}/${rows.length}）`);
+  for (let i = 0; i < uniqRows.length; i += 200) {
+    const chunk = uniqRows.slice(i, i + 200);
+    ytProg(10 + i / uniqRows.length * 80, `保存しています…（${i}/${uniqRows.length}）`);
     const res = await fetch(`${REST_URL}/duty_crew`, {
       method: 'POST',
       headers: Object.assign(getH(), { 'Prefer': 'return=minimal,resolution=merge-duplicates' }),
       body: JSON.stringify(chunk),
     });
-    if (res.ok) done += chunk.length; else if (errs.length < 2) errs.push(await res.text());
+    if (res.ok) done += chunk.length;
+    else { const t = await res.text(); errs.push(`${res.status} ${t.slice(0, 300)}`); }
   }
   // 選んだ氏名を別名として覚える（次回から自動で当たる）
   if (aliases.length) {
@@ -2302,8 +2316,26 @@ async function ytSave() {
   }
   ytProg(100, '完了');
   setTimeout(() => { document.getElementById('ytProg').style.display = 'none'; }, 600);
-  status(`乗務を ${done} 件保存しました${aliases.length ? `／氏名の対応を ${aliases.length} 件覚えました` : ''}`);
+
+  const msg = `乗務を ${done} 件保存しました`
+    + (dupCount ? `／予定表に2回書かれていた ${dupCount} 件は1件にまとめました` : '')
+    + (aliases.length ? `／氏名の対応を ${aliases.length} 件覚えました` : '');
+  ytTell(msg, errs.length > 0, errs);
   await hLoad();
+}
+
+/** 保存の結果を、画面の上（status）と保存ボタンのそばの両方に出す。
+ *  結果の表は長く、押したときには画面上部が見えていないため */
+function ytTell(msg, isError, errs) {
+  status(msg, !isError);
+  const box = document.getElementById('ytDone');
+  if (!box) return;
+  box.style.display = '';
+  box.innerHTML = `<div class="${isError ? 'tag warn' : 'tag'}" style="font-size:13px;">${escHtml(msg)}</div>`
+    + ((errs && errs.length) ? `<div class="muted" style="font-size:11px;margin-top:6px;">
+        <b>保存できなかったものがあります（${errs.length}件）。</b>下の内容を八重樫さんにお知らせください。<br>
+        ${errs.slice(0, 3).map(e => escHtml(e)).join('<br>')}</div>` : '');
+  box.scrollIntoView({ block: 'center' });
 }
 
 </script>
