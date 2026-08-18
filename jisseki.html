@@ -1377,7 +1377,11 @@ async function jImport(files){
     const o = readMain(m); const id=_txt(o['運転日報ID']);
     if(id && !日付[id]) 日付[id] = _date(o['運行日付']);
   }
-  const stopsOk = stopRows.filter(s => (s.work_date ||= 日付[s.dg_report_id]));
+  // 同じZIPを重ねて選んだ場合に備えて、日報ID＋追番で1件にまとめる
+  const stopsOk = [...new Map(
+    stopRows.filter(s => (s.work_date ||= 日付[s.dg_report_id]))
+            .map(s => [s.dg_report_id + '|' + s.seq, s])
+  ).values()];
 
   // ③-3 立ち寄り地点を先に保存する
   //     運行データがすべて取り込み済みでも、立ち寄り地点だけは入っていないことがあるため
@@ -1386,7 +1390,9 @@ async function jImport(files){
   for(let i=0;i<stopsOk.length;i+=400){
     const chunk = stopsOk.slice(i, i+400);
     jProg(50 + i/Math.max(stopsOk.length,1)*12, `立ち寄り地点を保存しています… (${i}/${stopsOk.length}件)`);
-    const res = await fetch(`${REST_URL}/trip_stops`, {
+    // on_conflict で「日報ID＋追番」を指定する。指定しないと主キー(id)で判定され、
+    // すでに入っている地点とぶつかってそのまとまり全体が弾かれる
+    const res = await fetch(`${REST_URL}/trip_stops?on_conflict=dg_report_id,seq`, {
       method:'POST',
       headers: Object.assign(getH(), {'Prefer':'return=minimal,resolution=merge-duplicates'}),
       body: JSON.stringify(chunk)
