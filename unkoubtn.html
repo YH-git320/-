@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>運行ボタン</title>
+<style>
+  :root{
+    --ink:#2d3b35;--ink-soft:#5c7066;--line:#c8d8cc;--bg:#f5f8f4;--card:#ffffff;
+    --brand:#6b9e7e;--brand-dark:#4d7a5e;--brand-tint:#e4f0e8;
+    --amber:#9a5f12;--amber-tint:#fbf0db;--danger:#a82d24;--ok:#2e7d52;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{font-family:"Noto Sans JP","Hiragino Kaku Gothic ProN","Yu Gothic","Meiryo",system-ui,sans-serif;
+    background:var(--bg);color:var(--ink);font-size:19px;line-height:1.7;
+    display:flex;flex-direction:column;min-height:100dvh;-webkit-text-size-adjust:100%;overflow-x:hidden;}
+  .pbar-wrap{background:#fff;border-bottom:1px solid var(--line);padding:12px 16px;position:sticky;top:0;z-index:10;}
+  .pbar-title{font-size:18px;font-weight:800;color:var(--brand-dark);}
+  .pbar-sub{font-size:14px;color:var(--ink-soft);margin-top:2px;}
+  main{flex:1;padding:14px 16px 28px;max-width:680px;margin:0 auto;width:100%;}
+  .sec-h{font-size:16px;font-weight:800;color:#fff;background:var(--brand);border-radius:10px;
+    padding:9px 14px;margin:20px 0 12px;}
+
+  /* ── 手順の並び ── */
+  .step{background:#fff;border:2px solid var(--line);border-radius:14px;padding:13px 15px;margin-bottom:10px;}
+  .step.done{background:#f4faf6;border-color:#bcdcc7;}
+  .step.now{border-color:var(--brand);box-shadow:0 0 0 4px var(--brand-tint);}
+  .step.next{opacity:.62;}
+  .step .head{display:flex;align-items:center;gap:10px;}
+  .step .mark{flex:0 0 auto;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-size:15px;font-weight:800;background:#eef3ef;color:var(--ink-soft);}
+  .step.done .mark{background:var(--ok);color:#fff;}
+  .step.now  .mark{background:var(--brand);color:#fff;}
+  .step .name{flex:1;min-width:0;font-size:20px;font-weight:800;}
+  .step .time{flex:0 0 auto;font-size:20px;font-weight:800;color:var(--ok);font-variant-numeric:tabular-nums;}
+
+  .warn{background:var(--amber-tint);border:1px solid #e6d3a8;border-radius:10px;
+    padding:9px 12px;margin-top:9px;font-size:15px;line-height:1.65;color:var(--amber);font-weight:700;}
+
+  .bigbtn{width:100%;font-family:inherit;font-size:23px;font-weight:800;background:var(--brand);
+    color:#fff;border:none;border-radius:14px;padding:19px;margin-top:11px;cursor:pointer;}
+  .bigbtn:active{background:var(--brand-dark);}
+  .bigbtn[disabled]{opacity:.5;}
+  .mapbtn{width:100%;font-family:inherit;font-size:17px;font-weight:700;background:#fff;
+    border:2px solid var(--brand);color:var(--brand-dark);border-radius:12px;padding:13px;
+    margin-top:9px;cursor:pointer;text-decoration:none;display:block;text-align:center;}
+  .undo{font-family:inherit;font-size:13px;font-weight:700;background:none;border:none;
+    color:var(--ink-soft);text-decoration:underline;padding:6px 2px;margin-top:4px;cursor:pointer;}
+
+  /* ── 乗車人数 ── */
+  .pcard{background:#fff;border:2px solid var(--line);border-radius:14px;padding:14px 16px;}
+  .prow{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid #eef2ef;}
+  .prow:last-child{border-bottom:none;}
+  .prow .pn{flex:1;min-width:0;font-size:18px;font-weight:700;}
+  .prow input{width:96px;flex:0 0 auto;font-size:24px;font-family:inherit;font-weight:800;text-align:center;
+    color:var(--ink);border:2px solid var(--line);border-radius:12px;background:#fff;padding:10px 8px;
+    -webkit-appearance:none;appearance:none;}
+  .prow input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 4px var(--brand-tint);}
+
+  .hint{font-size:14px;color:var(--ink-soft);line-height:1.7;margin:8px 2px 0;}
+  .msg{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#2d3b35;color:#fff;
+    font-size:16px;font-weight:700;padding:12px 20px;border-radius:12px;opacity:0;transition:opacity .2s;
+    pointer-events:none;z-index:50;max-width:90%;text-align:center;}
+  .msg.show{opacity:.94;}
+  .err{background:#fbe9e7;border:2px solid #e8b4ae;color:var(--danger);border-radius:12px;
+    padding:14px 16px;font-size:16px;font-weight:700;margin-bottom:14px;}
+  .prev{background:var(--amber-tint);border:2px solid #e6d3a8;color:var(--amber);border-radius:12px;
+    padding:12px 15px;font-size:15px;font-weight:700;margin-bottom:14px;}
+  .segbtns{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+  .segbtns button{font-family:inherit;font-size:16px;font-weight:700;border-radius:10px;padding:10px 16px;
+    border:2px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;}
+  .segbtns button.on{background:var(--brand);border-color:var(--brand);color:#fff;}
+</style>
+</head>
+<body>
+
+<div class="pbar-wrap">
+  <div class="pbar-title" id="barTitle">運行ボタン</div>
+  <div class="pbar-sub" id="barSub">読み込んでいます…</div>
+</div>
+
+<main id="app"></main>
+<div class="msg" id="msg"></div>
+
+<script>
+const SUPABASE_URL = 'https://wxdyqkyqtizhtkwtpvru.supabase.co';
+const REST_URL = SUPABASE_URL + '/rest/v1';
+const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4ZHlxa3lxdGl6aHRrd3RwdnJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NzYxODEsImV4cCI6MjA5OTQ1MjE4MX0.yVbClXBk2JVeglevsBLY5sH2_m2ybCf71u4i_YYWyHE';
+
+const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+let PREVIEW = false;      // #preview なら見本モード（DBへ書かない）
+let TOKEN = '';
+let INFO = null;          // { 日付, 運転手, コース, 便ごとの手順 }
+let SEG = '登校';         // いま表示している便
+let EVENTS = {};          // 'segment|kind|seq' -> { pressed_at, id }
+let COUNTS = {};          // 'segment|seq' -> 乗車人数
+
+function toast(t){ const el=document.getElementById('msg'); el.textContent=t; el.classList.add('show');
+  clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'), 2200); }
+function hm(iso){ if(!iso) return ''; const d=new Date(iso);
+  return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
+function todayStr(){ const d=new Date();
+  return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+function dateJp(s){ if(!s) return ''; const d=new Date(s+'T00:00:00');
+  return (d.getMonth()+1)+'月'+d.getDate()+'日('+['日','月','火','水','木','金','土'][d.getDay()]+')'; }
+
+/* ===== Googleマップの道案内（unkou.html と同じ作り） =====
+   ・地点を「/」で並べる形式。経由地は44か所まで通ることを確認済み
+   ・data=!4m5!4m4!2m2!1b1!2b1!3e0 は「高速を使わない・有料を使わない・車」 */
+function mapUrl(pts){
+  const c = pts.filter(p=>p.lat!=null&&p.lng!=null).map(p=>Number(p.lat)+','+Number(p.lng));
+  if(c.length<2) return null;
+  return 'https://www.google.com/maps/dir/'+c.join('/')+'/data=!4m5!4m4!2m2!1b1!2b1!3e0';
+}
+
+/** その手順から「次のバス停まで」の道案内を作る。区切（split_here）は必ず効かせる */
+function legFrom(points, fromIdx){
+  const out=[points[fromIdx]];
+  for(let i=fromIdx+1;i<points.length;i++){
+    out.push(points[i]);
+    if(points[i].split_here) break;      // ここで案内を切る（Uターンなど）
+    if(points[i].is_stop) break;         // 次のバス停まで
+  }
+  return out.length>=2 ? out : null;
+}
+
+/* ===== 画面 ===== */
+function render(){
+  const app=document.getElementById('app');
+  if(!INFO){ app.innerHTML=''; return; }
+
+  document.getElementById('barTitle').textContent = INFO.course_label || '運行ボタン';
+  document.getElementById('barSub').textContent =
+    dateJp(INFO.work_date) + '　' + (INFO.driver_name||'') + (PREVIEW?'　【見本】':'');
+
+  // 登校便を先に、次に下校便①②③の順に並べる
+  const order = { '登校':0, '下校①':1, '下校②':2, '下校③':3 };
+  const segs = INFO.segments.filter(s=>s.points.length)
+                            .slice().sort((a,b)=>(order[a.segment]??9)-(order[b.segment]??9));
+  if(!segs.length){ app.innerHTML='<div class="err">このコースの経路がまだ登録されていません。事務所にご連絡ください。</div>'; return; }
+  if(!segs.some(s=>s.segment===SEG)) SEG = segs[0].segment;
+  const cur = segs.find(s=>s.segment===SEG);
+
+  let h = '';
+  if(PREVIEW) h += '<div class="prev">これは<b>見本</b>です。押しても記録されません。</div>';
+
+  if(segs.length>1){
+    h += '<div class="segbtns">' + segs.map(s=>
+      `<button class="${s.segment===SEG?'on':''}" onclick="setSeg('${esc(s.segment)}')">${esc(s.label)}</button>`).join('') + '</div>';
+  }
+
+  // ── 手順（出庫 → 各バス停 → 帰庫）
+  h += '<div class="sec-h">運行の記録</div>';
+  const steps = buildSteps(cur);
+  const doneIdx = steps.reduce((a,s,i)=> ev(s) ? i : a, -1);   // 押し終わった最後
+  steps.forEach((s,i)=>{
+    const e = ev(s);
+    const state = e ? 'done' : (i===doneIdx+1 ? 'now' : 'next');
+    const mark  = e ? '✓' : (i===doneIdx+1 ? '▶' : (i+1));
+    h += `<div class="step ${state}">
+      <div class="head">
+        <div class="mark">${mark}</div>
+        <div class="name">${esc(s.label)}</div>
+        <div class="time">${e?hm(e.pressed_at):''}</div>
+      </div>`;
+    if(s.note) h += `<div class="warn">⚠ ${esc(s.note).replace(/／/g,'<br>⚠ ')}</div>`;
+    if(!e && i===doneIdx+1){
+      h += `<button class="bigbtn" onclick="press(${i})">${esc(s.btn)}</button>`;
+      const leg = s.legPoints ? mapUrl(s.legPoints) : null;
+      if(leg) h += `<a class="mapbtn" href="${leg}" target="_blank" rel="noopener">🗺 ここまでの道案内</a>`;
+    }
+    if(e && i===doneIdx) h += `<button class="undo" onclick="undo(${i})">押し間違えた（取り消す）</button>`;
+    h += '</div>';
+  });
+
+  // ── 乗車人数（いつでも入れられる）
+  const stops = cur.points.filter(p=>p.is_stop);
+  if(stops.length){
+    h += '<div class="sec-h">乗車人数</div><div class="pcard">';
+    stops.forEach(p=>{
+      const k = SEG+'|'+p.seq;
+      h += `<div class="prow"><div class="pn">${esc(p.name||('地点'+p.seq))}</div>
+        <input type="number" inputmode="numeric" min="0" max="99" value="${COUNTS[k]!=null?COUNTS[k]:''}"
+          onchange="setCount(${p.seq}, this.value)" placeholder="—"></div>`;
+    });
+    h += '</div><p class="hint">運行が一区切りついてから、落ち着いて入れてください。あとから直せます。</p>';
+  }
+
+  app.innerHTML = h;
+}
+
+/** 手順を組み立てる：出庫 → 各バス停（到着） → 帰庫
+ *  バス停でない地点（曲がり角の目印）はボタンにしないが、
+ *  そこに注意書きがあれば、**次のバス停の注意書きにまとめて出す**（見落とし防止） */
+function buildSteps(seg){
+  const pts = seg.points;
+  const steps = [];
+  steps.push({ kind:'出庫', seq:null, label:'出庫', btn:'出庫した', note:null });
+  let carry = [];                               // 手前の目印に付いていた注意書き
+  pts.forEach((p,idx)=>{
+    const n = (p.note||'').trim();
+    if(!p.is_stop){ if(n) carry.push(n); return; }
+    const notes = carry.concat(n?[n]:[]);
+    carry = [];
+    steps.push({ kind:'到着', seq:p.seq, label:p.name||('地点'+p.seq), btn:'着いた',
+                 note: notes.length ? notes.join('／') : null,
+                 legPoints: legTo(pts, idx) });
+  });
+  // 最後の目印に注意書きが残っていれば、帰庫の手前に出す
+  steps.push({ kind:'帰庫', seq:null, label:'帰庫', btn:'帰庫した',
+               note: carry.length ? carry.join('／') : null });
+  return steps;
+}
+
+/** 一つ前のバス停（または先頭）から、この地点までの道案内 */
+function legTo(pts, toIdx){
+  let from = 0;
+  for(let i=toIdx-1;i>=0;i--){ if(pts[i].is_stop || pts[i].split_here){ from=i; break; } }
+  const out = pts.slice(from, toIdx+1);
+  return out.length>=2 ? out : null;
+}
+
+function ev(s){ return EVENTS[SEG+'|'+s.kind+'|'+(s.seq==null?'':s.seq)] || null; }
+function setSeg(s){ SEG=s; render(); }
+
+/* ===== 押す・取り消す・人数 ===== */
+async function press(i){
+  const seg = INFO.segments.find(x=>x.segment===SEG);
+  const s = buildSteps(seg)[i];
+  const now = new Date().toISOString();
+  const key = SEG+'|'+s.kind+'|'+(s.seq==null?'':s.seq);
+  EVENTS[key] = { pressed_at: now };
+  render();
+  if(PREVIEW){ toast('見本のため記録していません'); return; }
+  const r = await call('unkoubtn_press', { p_token:TOKEN, p_segment:SEG, p_kind:s.kind,
+                                           p_seq:s.seq, p_label:s.label, p_pressed_at:now });
+  if(!r.ok){ delete EVENTS[key]; render(); toast('記録できませんでした。もう一度押してください'); return; }
+  toast(s.label+' '+hm(now));
+}
+async function undo(i){
+  const seg = INFO.segments.find(x=>x.segment===SEG);
+  const s = buildSteps(seg)[i];
+  if(!confirm(s.label+' の記録を取り消します。よろしいですか？')) return;
+  const key = SEG+'|'+s.kind+'|'+(s.seq==null?'':s.seq);
+  const bk = EVENTS[key]; delete EVENTS[key]; render();
+  if(PREVIEW){ toast('見本のため記録していません'); return; }
+  const r = await call('unkoubtn_undo', { p_token:TOKEN, p_segment:SEG, p_kind:s.kind, p_seq:s.seq });
+  if(!r.ok){ EVENTS[key]=bk; render(); toast('取り消せませんでした'); return; }
+  toast('取り消しました');
+}
+async function setCount(seq, val){
+  const n = (val==='' ? null : Math.max(0, parseInt(val,10)||0));
+  COUNTS[SEG+'|'+seq] = n;
+  if(PREVIEW){ toast('見本のため記録していません'); return; }
+  const r = await call('unkoubtn_count', { p_token:TOKEN, p_segment:SEG, p_seq:seq, p_passengers:n });
+  toast(r.ok ? '人数を記録しました' : '記録できませんでした');
+}
+
+async function call(fn, body){
+  try{
+    const res = await fetch(`${REST_URL}/rpc/${fn}`, { method:'POST',
+      headers:{ 'apikey':ANON_KEY, 'Authorization':'Bearer '+ANON_KEY, 'Content-Type':'application/json' },
+      body: JSON.stringify(body) });
+    const j = await res.json().catch(()=>null);
+    return { ok: res.ok && j && j.ok!==false, data: j };
+  }catch(e){ return { ok:false }; }
+}
+
+/* ===== 起動 ===== */
+async function start(){
+  const hash = location.hash || '';
+  PREVIEW = /(^|#|&)preview/.test(hash);
+  const m = hash.match(/[#&]t=([0-9a-f]{64})/i);
+  TOKEN = m ? m[1] : '';
+
+  if(PREVIEW){ INFO = await previewInfo(); render(); return; }
+  if(!TOKEN){
+    document.getElementById('barSub').textContent = '';
+    document.getElementById('app').innerHTML =
+      '<div class="err">リンクが正しくありません。<br>事務所から届いたリンクを、そのまま開いてください。</div>';
+    return;
+  }
+  const r = await call('unkoubtn_open', { p_token: TOKEN });
+  if(!r.ok || !r.data){
+    document.getElementById('barSub').textContent = '';
+    document.getElementById('app').innerHTML =
+      '<div class="err">リンクの有効期限が切れているか、正しくありません。<br>事務所にご連絡ください。</div>';
+    return;
+  }
+  INFO = r.data;
+  (INFO.events||[]).forEach(e=>{ EVENTS[e.segment+'|'+e.kind+'|'+(e.seq==null?'':e.seq)] =
+    { pressed_at:e.pressed_at, id:e.id }; if(e.passengers!=null) COUNTS[e.segment+'|'+e.seq]=e.passengers; });
+  render();
+}
+
+/** 見本モード：ログインなしで中身を見せる（公開されている経路データを読むだけ） */
+async function previewInfo(){
+  const h = { 'apikey':ANON_KEY, 'Authorization':'Bearer '+ANON_KEY };
+  let course=null, pts=[];
+  try{
+    const rc = await fetch(`${REST_URL}/courses?select=id,school_name,course_name&limit=1&order=id`, {headers:h});
+    const cs = rc.ok ? await rc.json() : [];
+    course = cs[0] || null;
+    if(course){
+      const rp = await fetch(`${REST_URL}/course_route_points?course_id=eq.${course.id}&select=segment,seq,name,lat,lng,is_stop,split_here,note&order=segment,seq`, {headers:h});
+      pts = rp.ok ? await rp.json() : [];
+    }
+  }catch(e){}
+  if(!pts.length) return sampleInfo();
+  const byseg = {};
+  pts.forEach(p=>{ (byseg[p.segment]=byseg[p.segment]||[]).push(p); });
+  const label = { '登校':'登校便','下校①':'下校便①','下校②':'下校便②','下校③':'下校便③' };
+  return {
+    work_date: todayStr(),
+    driver_name: '（見本）',
+    course_label: (course.school_name||'')+'／'+(course.course_name||''),
+    segments: Object.keys(byseg).sort().map(s=>({ segment:s, label:label[s]||s, points:byseg[s] })),
+    events: []
+  };
+}
+function sampleInfo(){
+  return { work_date: todayStr(), driver_name:'（見本）', course_label:'見本コース',
+    segments:[{ segment:'登校', label:'登校便', points:[
+      {seq:1,name:'○○バス停',lat:35.5,lng:139.7,is_stop:true,split_here:false,note:null},
+      {seq:2,name:'△△小学校',lat:35.6,lng:139.7,is_stop:true,split_here:false,note:'正門前で乗降'},
+      {seq:3,name:'□□支援学校',lat:35.7,lng:139.7,is_stop:true,split_here:false,note:'8:30まで進入禁止'}
+    ]}], events:[] };
+}
+
+document.addEventListener('DOMContentLoaded', start);
+</script>
+</body>
+</html>
