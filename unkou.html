@@ -980,10 +980,10 @@ async function loadStops(){
 // 各コースの最新版の経路点をバッファへ（コースを選ぶ前の一覧表示用）
 async function loadRoutePointsLatest(){
   RPTS = {};
-  const res = await fetch(`${REST_URL}/course_route_points?select=course_id,version_id,segment,seq,name,lat,lng,is_stop&order=segment,seq`, { headers: getH() });
+  const res = await fetch(`${REST_URL}/course_route_points?select=course_id,version_id,segment,seq,name,lat,lng,is_stop,split_here&order=segment,seq`, { headers: getH() });
   if (res.ok){ (await res.json()).forEach(r=>{ if(r.version_id!==latestVerId(r.course_id)) return; const k=String(r.course_id);
     RPTS[k] = RPTS[k] || _emptyRpts();
-    if(RPTS[k][r.segment]) RPTS[k][r.segment].push({ name:r.name||'', lat:(r.lat==null?'':String(r.lat)), lng:(r.lng==null?'':String(r.lng)), is_stop:!!r.is_stop });
+    if(RPTS[k][r.segment]) RPTS[k][r.segment].push({ name:r.name||'', lat:(r.lat==null?'':String(r.lat)), lng:(r.lng==null?'':String(r.lng)), is_stop:!!r.is_stop, split_here:!!r.split_here });
   }); }
 }
 // 指定コース・指定版の内容をバッファへ（版切替・新版作成後）
@@ -993,9 +993,9 @@ async function loadVersionInto(cid, verId){
   FORMS[k] = rf.ok ? (await rf.json()).map(_mapForm) : []; FORMS[k].sort(_cmpForm);
   const rs = await fetch(`${REST_URL}/course_locations?version_id=eq.${verId}&select=name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_overrides&order=seq.nullslast,name`, { headers: getH() });
   STOPS[k] = rs.ok ? (await rs.json()).map(_mapStop) : [];
-  const rr = await fetch(`${REST_URL}/course_route_points?version_id=eq.${verId}&select=segment,seq,name,lat,lng,is_stop&order=segment,seq`, { headers: getH() });
+  const rr = await fetch(`${REST_URL}/course_route_points?version_id=eq.${verId}&select=segment,seq,name,lat,lng,is_stop,split_here&order=segment,seq`, { headers: getH() });
   const box = _emptyRpts();
-  if (rr.ok) (await rr.json()).forEach(r=>{ if(box[r.segment]) box[r.segment].push({ name:r.name||'', lat:(r.lat==null?'':String(r.lat)), lng:(r.lng==null?'':String(r.lng)), is_stop:!!r.is_stop }); });
+  if (rr.ok) (await rr.json()).forEach(r=>{ if(box[r.segment]) box[r.segment].push({ name:r.name||'', lat:(r.lat==null?'':String(r.lat)), lng:(r.lng==null?'':String(r.lng)), is_stop:!!r.is_stop, split_here:!!r.split_here }); });
   RPTS[k] = box;
 }
 async function loadScenarios(){
@@ -1085,12 +1085,12 @@ async function createVersion(){
     const [sf,ss,sr]=await Promise.all([
       fetch(`${REST_URL}/course_schedule_forms?version_id=eq.${srcVid}&select=form_name,gekou_departures,after_toukou,after_toukou_place,after_toukou_addr,after_toukou_coord,dep_overrides`, { headers:getH() }),
       fetch(`${REST_URL}/course_locations?version_id=eq.${srcVid}&select=name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_overrides`, { headers:getH() }),
-      fetch(`${REST_URL}/course_route_points?version_id=eq.${srcVid}&select=segment,seq,name,lat,lng,is_stop`, { headers:getH() })
+      fetch(`${REST_URL}/course_route_points?version_id=eq.${srcVid}&select=segment,seq,name,lat,lng,is_stop,split_here`, { headers:getH() })
     ]);
     const forms=(sf.ok?await sf.json():[]).map(r=>({ course_id:c.id, version_id:newId, form_name:r.form_name, gekou_departures:r.gekou_departures, after_toukou:r.after_toukou, after_toukou_place:r.after_toukou_place, after_toukou_addr:r.after_toukou_addr, after_toukou_coord:r.after_toukou_coord, dep_overrides:r.dep_overrides||{} }));
     const stops=(ss.ok?await ss.json():[]).map(r=>({ course_id:c.id, version_id:newId, name:r.name, address:r.address, seq:r.seq, toukou_time:r.toukou_time, gekou_offset:r.gekou_offset, gekou_only:r.gekou_only, coord:r.coord, gekou_overrides:r.gekou_overrides||{}, in_gekou:(r.gekou_offset!=null) }));
     if(forms.length){ const r=await fetch(`${REST_URL}/course_schedule_forms`, { method:'POST', headers:getH(), body:JSON.stringify(forms) }); if(!r.ok){ const t=await r.text(); _saveMsg('日課の複製に失敗：'+t.slice(0,120), false); return; } }
-    const rpts=(sr.ok?await sr.json():[]).map(r=>({ course_id:c.id, version_id:newId, segment:r.segment, seq:r.seq, name:r.name, lat:r.lat, lng:r.lng, is_stop:r.is_stop }));
+    const rpts=(sr.ok?await sr.json():[]).map(r=>({ course_id:c.id, version_id:newId, segment:r.segment, seq:r.seq, name:r.name, lat:r.lat, lng:r.lng, is_stop:r.is_stop, split_here:r.split_here }));
     if(stops.length){ const r=await fetch(`${REST_URL}/course_locations`, { method:'POST', headers:getH(), body:JSON.stringify(stops) }); if(!r.ok){ const t=await r.text(); _saveMsg('停留所の複製に失敗：'+t.slice(0,120), false); return; } }
     if(rpts.length){ const r=await fetch(`${REST_URL}/course_route_points`, { method:'POST', headers:getH(), body:JSON.stringify(rpts) }); if(!r.ok){ const t=await r.text(); _saveMsg('経路点の複製に失敗：'+t.slice(0,120), false); return; } }
     await loadVersions(); selVerId=newId; await loadVersionInto(c.id, newId);
@@ -1477,11 +1477,13 @@ function rptSyncFromInputs(){
   const pts=_rpts();
   rows.forEach((tr,i)=>{
     if(!pts[i]) return;
-    const n=tr.querySelector('.rp-name'), la=tr.querySelector('.rp-lat'), ln=tr.querySelector('.rp-lng'), st=tr.querySelector('.rp-stop');
+    const n=tr.querySelector('.rp-name'), la=tr.querySelector('.rp-lat'), ln=tr.querySelector('.rp-lng'),
+          st=tr.querySelector('.rp-stop'), ct=tr.querySelector('.rp-cut');
     if(n) pts[i].name=n.value;
     if(la) pts[i].lat=la.value;
     if(ln) pts[i].lng=ln.value;
     if(st) pts[i].is_stop=st.checked;
+    if(ct) pts[i].split_here=ct.checked;
   });
 }
 function setRSeg(seg){ rptSyncFromInputs(); selRSeg=seg; rptSelIdx=null; renderEditor(); }
@@ -1502,7 +1504,7 @@ function rptAdd(at){
   var pts=_rpts();
   if(at==null) at = (rptSelIdx==null) ? pts.length : rptSelIdx;
   if(at<0) at=0; if(at>pts.length) at=pts.length;
-  pts.splice(at, 0, { name:'', lat:'', lng:'', is_stop:false });
+  pts.splice(at, 0, { name:'', lat:'', lng:'', is_stop:false, split_here:false });
   // 差し込んだ位置より下の行は1つずつ下がる。選んでいた行もそれに合わせて動かす
   // （選んだ行の上に足した場合は選択がその行を追い続けるので、続けて足すと進行方向どおりに並ぶ）
   if(rptSelIdx!=null && rptSelIdx>=at) rptSelIdx++;
@@ -1548,7 +1550,7 @@ function rptFillFromStops(){
   const pts=[], skipped=[];
   src.forEach(s=>{
     const c=dmsToDecimal(s.coord);
-    if(c) pts.push({ name:s.name||'', lat:String(c.lat), lng:String(c.lng), is_stop:true });
+    if(c) pts.push({ name:s.name||'', lat:String(c.lat), lng:String(c.lng), is_stop:true, split_here:false });
     else if((s.name||'').trim()) skipped.push(s.name);
   });
   if(!pts.length){ _saveMsg('②のバス停に座標が入っていません。先にバス停の「座標」欄を埋めてください。', false); return; }
@@ -1566,7 +1568,7 @@ function rptCopyFrom(srcSeg){
   rptSyncFromInputs();
   const cur = box[selRSeg] || [];
   if(cur.length && !confirm(`いま開いている${R_SEG_LABEL[selRSeg]}の${cur.length}地点を、${R_SEG_LABEL[srcSeg]}の${src.length}地点で置き換えます。よろしいですか。`)) return;
-  box[selRSeg] = src.map(p=>({ name:p.name, lat:p.lat, lng:p.lng, is_stop:p.is_stop }));
+  box[selRSeg] = src.map(p=>({ name:p.name, lat:p.lat, lng:p.lng, is_stop:p.is_stop, split_here:p.split_here }));
   rptSelIdx = null;
   renderEditor();
   _saveMsg(`${R_SEG_LABEL[srcSeg]}から ${src.length}地点をコピーしました。違うところだけ直してください。`, true);
@@ -1581,22 +1583,31 @@ function rptCopyFrom(srcSeg){
      data=…!1b1!2b1… を付けると一般道だけの28.9kmになる */
 const RPT_MAX_VIA = 44;   // 実測で通った数。これを超えるかは未確認なので目安として警告に使う
 
-/** バス停（停のチェック）で区切って、区間ごとの地点の並びを返す */
+/** 区間に切り分ける。区切り方は2種類ある
+ *  ・バス停（停）… その地点を前後の区間で**共有**する（バスはそこで停まって、そこから続ける）
+ *  ・区切（切）  … その地点で終わり、**次の地点から**新しい区間（地点を共有しない）。
+ *                  Uターンのように、地点と地点の間をナビに任せられないときに使う  */
 function rptLegs(){
   const pts=_rpts().filter(p=>String(p.lat).trim()!==''&&String(p.lng).trim()!=='');
   if(pts.length<2) return [];
-  // 区切り位置＝バス停。先頭と末尾は必ず区切りにする
-  const cuts=[0];
-  pts.forEach((p,i)=>{ if(i>0 && i<pts.length-1 && p.is_stop) cuts.push(i); });
-  cuts.push(pts.length-1);
-  const legs=[];
-  for(let k=0;k<cuts.length-1;k++){
-    const a=cuts[k], b=cuts[k+1];
-    legs.push({
-      from: pts[a].name || `${a+1}番目`,
-      to:   pts[b].name || `${b+1}番目`,
-      pts:  pts.slice(a, b+1)
-    });
+  const mk=(a,b)=>({
+    from: pts[a].name || `${a+1}番目`,
+    to:   pts[b].name || `${b+1}番目`,
+    cut:  !!pts[b].split_here,      // この区間が「切」で終わるか（画面の表示に使う）
+    pts:  pts.slice(a, b+1)
+  });
+  const legs=[]; let start=0;
+  for(let i=1;i<pts.length;i++){
+    const last=(i===pts.length-1);
+    if(pts[i].split_here){          // 切：ここで終わって、次から仕切り直す
+      if(i>start) legs.push(mk(start,i));
+      start=i+1;
+    } else if(pts[i].is_stop && !last){   // バス停：ここで区切り、同じ地点から続ける
+      if(i>start) legs.push(mk(start,i));
+      start=i;
+    } else if(last){
+      if(i>start) legs.push(mk(start,i));
+    }
   }
   return legs;
 }
@@ -1640,11 +1651,13 @@ function renderRoutePoints(){
       <div class="line" style="gap:6px;flex-wrap:wrap;">
         ${legs.map((g,i)=>{
           const via=g.pts.length-2, over=via>RPT_MAX_VIA;
-          return `<button class="mini" onclick="rptOpenLeg(${i})" title="${escAttr(g.from)} から ${escAttr(g.to)} までをGoogleマップで開きます（目印${via}か所）"${over?' style="border-color:#c0392b;color:#c0392b;"':''}>${escHtml(g.from)} → ${escHtml(g.to)}${over?' ⚠':''}</button>`;
+          return `<button class="mini" onclick="rptOpenLeg(${i})" title="${escAttr(g.from)} から ${escAttr(g.to)} までをGoogleマップで開きます（目印${via}か所）"${over?' style="border-color:#c0392b;color:#c0392b;"':''}>${escHtml(g.from)} → ${escHtml(g.to)}${over?' ⚠':''}</button>`
+               + (g.cut?`<span class="muted" style="font-size:11px;align-self:center;">✂ ここで案内を切る</span>`:'');
         }).join('')}
       </div>
       <div class="muted" style="font-size:12px;margin-top:6px;">
-        「バス停」にチェックを入れた地点で区切って開きます。<b>有料道路・高速道路は使わない</b>設定です。<br>
+        「バス停」または「区切」にチェックを入れた地点で区切って開きます。<b>有料道路・高速道路は使わない</b>設定です。<br>
+        <b>「区切」は、Uターンなどナビが通してくれない場所で使います。</b>その地点で案内を終え、<b>次の地点から</b>新しい案内が始まります（間の動きは運転手が行います）。<br>
         <b>狙った道を通らないときは、その手前に地点を足してください。</b>
         地点は<b>曲がった直後の道の上（曲がり角から50〜100m先）</b>に置くとよく効きます。交差点そのものに置くと、どの道に付くかGoogleが決めてしまい、手前で曲がることがあります。
         まっすぐな道には置かなくて構いません。${legs.some(g=>g.pts.length-2>RPT_MAX_VIA)?'<br><span style="color:#c0392b;font-weight:700;">⚠ の区間は地点が多すぎるかもしれません（44か所までは通ることを確認済み）。反映されているかGoogleマップ側で確かめてください。</span>':''}
@@ -1659,7 +1672,8 @@ function renderRoutePoints(){
       <td style="padding:5px 6px;"><input type="text" class="rp-name" value="${escAttr(p.name||'')}" placeholder="例：○○交差点" style="width:100%;min-width:100px;font-size:15px;padding:7px 9px;"></td>
       <td style="padding:5px 6px;"><input type="text" class="rp-lat" value="${escAttr(p.lat)}" placeholder="35.xxxxxx" onchange="rptCoordIn(this)" title="「35.5442, 139.7043」のまま貼っても分けて入ります" style="width:112px;font-size:15px;padding:7px 9px;"></td>
       <td style="padding:5px 6px;"><input type="text" class="rp-lng" value="${escAttr(p.lng)}" placeholder="139.xxxxxx" onchange="rptCoordIn(this)" style="width:112px;font-size:15px;padding:7px 9px;"></td>
-      <td style="text-align:center;padding:5px 6px;"><input type="checkbox" class="rp-stop" ${p.is_stop?'checked':''} title="実際に乗り降りするバス停ならチェック" style="width:18px;height:18px;"></td>
+      <td style="text-align:center;padding:5px 6px;"><input type="checkbox" class="rp-stop" ${p.is_stop?'checked':''} onchange="rptRecalc()" title="実際に乗り降りするバス停ならチェック" style="width:18px;height:18px;"></td>
+      <td style="text-align:center;padding:5px 6px;"><input type="checkbox" class="rp-cut" ${p.split_here?'checked':''} onchange="rptRecalc()" title="ここで道案内を切る（Uターンなど、次の地点まではナビに任せられない場所）" style="width:18px;height:18px;"></td>
       <td class="muted" style="white-space:nowrap;padding:5px 6px;font-size:14px;text-align:right;">${d&&d.seg!=null?d.seg.toFixed(2):''}</td>
       <td class="muted" style="white-space:nowrap;padding:5px 6px;font-size:14px;text-align:right;">${d?d.cum.toFixed(2):''}</td>
       <td style="white-space:nowrap;padding:5px 4px;text-align:right;">
@@ -1699,11 +1713,12 @@ function renderRoutePoints(){
         <th style="text-align:left;padding:7px 6px;font-size:13px;color:#6b7d72;width:124px;">緯度</th>
         <th style="text-align:left;padding:7px 6px;font-size:13px;color:#6b7d72;width:124px;">経度</th>
         <th style="width:52px;padding:7px 6px;font-size:13px;color:#6b7d72;">バス停</th>
+        <th style="width:52px;padding:7px 6px;font-size:13px;color:#6b7d72;" title="ここで道案内を切る（Uターンなど）">区切</th>
         <th style="width:64px;text-align:right;padding:7px 6px;font-size:13px;color:#6b7d72;">区間km</th>
         <th style="width:64px;text-align:right;padding:7px 6px;font-size:13px;color:#6b7d72;">累計km</th>
         <th style="width:124px;"></th>
       </tr></thead>
-      <tbody>${rows||'<tr><td colspan="8" class="muted" style="padding:10px 6px;">まだ地点がありません。「②のバス停から並びを作る」で下書きを作れます。</td></tr>'}</tbody>
+      <tbody>${rows||'<tr><td colspan="9" class="muted" style="padding:10px 6px;">まだ地点がありません。「②のバス停から並びを作る」で下書きを作れます。</td></tr>'}</tbody>
     </table></div>
     `;
 }
@@ -1744,7 +1759,7 @@ async function saveCourse(){
     R_SEGS.forEach(seg=>{
       const list=((RPTS[key]||{})[seg]||[]).filter(p=>String(p.lat).trim()!==''&&String(p.lng).trim()!=='');
       list.forEach((p,i)=>rptRows.push({ course_id:c.id, version_id:selVerId, segment:seg, seq:i+1,
-        name:(p.name||'').trim()||null, lat:Number(p.lat), lng:Number(p.lng), is_stop:!!p.is_stop }));
+        name:(p.name||'').trim()||null, lat:Number(p.lat), lng:Number(p.lng), is_stop:!!p.is_stop, split_here:!!p.split_here }));
     });
     if(rptRows.length){ const r35=await fetch(`${REST_URL}/course_route_points`, { method:'POST', headers:getH(), body:JSON.stringify(rptRows) }); if(!r35.ok){ const t=await r35.text(); _saveMsg('経路点の保存に失敗：'+t.slice(0,100), false); return; } }
     // 4) 送迎シナリオ（このコースを置き換え）— scenarios削除で points/settings も連動削除
