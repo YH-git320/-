@@ -1573,12 +1573,13 @@ function rptCopyFrom(srcSeg){
 }
 
 /* ===== Googleマップの道案内リンク =====
-   確かめたこと（2026-08-19・実際にGoogleマップへ渡して確認）：
-   ・経由地は9か所までしか受け付けない。10個以上渡すと超えた分は黙って捨てられる
-   ・指定しないと首都高を使うルートになる（六郷→大塚ろう学校で34.0km・有料区間あり）。
-     avoid=tolls,highways を付けると一般道だけの28.9kmになる。区切りは「,」で、「|」では効かない
-   → そこで、バス停ごとに区間を分けてリンクを作る。1区間あたり9か所まで目印を置ける。 */
-const RPT_MAX_VIA = 9;
+   実際にGoogleマップへ渡して確かめたこと（2026-08-19）：
+   ・`?api=1&waypoints=…` の形式は経由地9か所まで。10個以上渡すと超えた分は黙って捨てられる
+   ・地点を「/」で並べる形式（/maps/dir/緯度,経度/緯度,経度/…）なら**44か所まで通った**。
+     こちらを使う。狙った道を通らせるには地点を密に置くしかないため、9か所では足りない
+   ・指定しないと首都高を使う（六郷→大塚ろう学校で34.0km・有料区間あり）。
+     data=…!1b1!2b1… を付けると一般道だけの28.9kmになる */
+const RPT_MAX_VIA = 44;   // 実測で通った数。これを超えるかは未確認なので目安として警告に使う
 
 /** バス停（停のチェック）で区切って、区間ごとの地点の並びを返す */
 function rptLegs(){
@@ -1599,13 +1600,13 @@ function rptLegs(){
   }
   return legs;
 }
+/* 地点を「/」で並べる形式のURLを組み立てる。
+   末尾の data=!4m5!4m4!2m2!1b1!2b1!3e0 は、Googleマップの設定画面で
+   「高速道路を利用しない」「有料道路を利用しない」にチェックを入れたときと同じ状態を表す
+   （!1b1=高速を使わない ／ !2b1=有料を使わない ／ !3e0=車）。 */
 function rptLegUrl(leg){
   const c=leg.pts.map(p=>`${Number(p.lat)},${Number(p.lng)}`);
-  const via=c.slice(1,-1).slice(0, RPT_MAX_VIA);   // 9か所を超えた分は渡しても捨てられる
-  let url=`https://www.google.com/maps/dir/?api=1&travelmode=driving&avoid=tolls,highways`
-        + `&origin=${c[0]}&destination=${c[c.length-1]}`;
-  if(via.length) url+=`&waypoints=${via.join('|')}`;
-  return url;
+  return 'https://www.google.com/maps/dir/' + c.join('/') + '/data=!4m5!4m4!2m2!1b1!2b1!3e0';
 }
 function rptOpenLeg(i){
   rptSyncFromInputs();
@@ -1643,8 +1644,10 @@ function renderRoutePoints(){
         }).join('')}
       </div>
       <div class="muted" style="font-size:12px;margin-top:6px;">
-        Googleマップは<b>経由地を9か所まで</b>しか受け付けないため、バス停で区切って開きます（「バス停」にチェックを入れた地点が区切りです）。
-        <b>有料道路・高速道路は使わない</b>設定で開きます。${legs.some(g=>g.pts.length-2>RPT_MAX_VIA)?'<br><span style="color:#c0392b;font-weight:700;">⚠ の区間は目印が9か所を超えています。超えた分は反映されません。バス停を挟むか、目印を減らしてください。</span>':''}
+        「バス停」にチェックを入れた地点で区切って開きます。<b>有料道路・高速道路は使わない</b>設定です。<br>
+        <b>狙った道を通らないときは、その手前に地点を足してください。</b>
+        地点は<b>曲がった直後の道の上（曲がり角から50〜100m先）</b>に置くとよく効きます。交差点そのものに置くと、どの道に付くかGoogleが決めてしまい、手前で曲がることがあります。
+        まっすぐな道には置かなくて構いません。${legs.some(g=>g.pts.length-2>RPT_MAX_VIA)?'<br><span style="color:#c0392b;font-weight:700;">⚠ の区間は地点が多すぎるかもしれません（44か所までは通ることを確認済み）。反映されているかGoogleマップ側で確かめてください。</span>':''}
       </div>
     </div>` : '';
   const rows = pts.map((p,i)=>{
