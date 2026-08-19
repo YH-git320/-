@@ -1175,7 +1175,7 @@ function renderEditor(){
   const refD = _refDeparture();
   const firstFormName = (forms.find(f=>(f.gekou_departures||[]).some(t=>t))||{}).form_name || '';
   area.innerHTML = `<div class="courseCard">
-    <div style="position:sticky;top:0;z-index:6;background:#fff;padding:8px 0 0;border-bottom:1px solid #e2ede6;margin-bottom:12px;">
+    <div id="stickyHead" style="position:sticky;top:0;z-index:6;background:#fff;padding:8px 0 0;border-bottom:1px solid #e2ede6;margin-bottom:12px;">
       <div class="courseHead" style="margin-bottom:8px;">
         <div class="courseTitle">${escHtml(courseLabel(c))}</div>
         <button class="${c.active?'':'primary'}" onclick="toggleActive()">${c.active?'✅ 有効（クリックで廃止）':'🚫 廃止中（クリックで有効）'}</button>
@@ -1237,7 +1237,16 @@ function renderEditor(){
     <div style="position:sticky;bottom:0;background:#fff;padding:10px 0 2px;margin-top:12px;border-top:1px solid #e2ede6;"><button class="primary" style="width:100%;padding:12px;" onclick="saveCourse()">💾 このコースを保存</button>
       <div id="editSaveMsg" style="text-align:center;margin-top:8px;font-weight:600;min-height:20px;"></div></div>
   </div>`;
+  _fitRptSticky();
 }
+
+/** ④経路タブの「便・区間ボタン」を、上の固定ヘッダーのすぐ下に貼り付ける。
+ *  ヘッダーの高さは版の表示などで変わるので、描画のたびに測って合わせる */
+function _fitRptSticky(){
+  const head=document.getElementById('stickyHead'), bar=document.getElementById('rptSticky');
+  if(head && bar) bar.style.top = head.offsetHeight + 'px';
+}
+window.addEventListener('resize', _fitRptSticky);
 
 function renderGekouPreview(){
   const c=_c();
@@ -1614,6 +1623,28 @@ function rptLegs(byStop){
   }
   return legs;
 }
+/** 隣り合う2地点の順番が逆になっていないか調べる。
+ *  入れ替えたときに道のりが目に見えて短くなるなら、順番が逆の可能性が高い。
+ *  （差し込む位置を1つ間違えると起きる。2026-08-19 実際に発生した）
+ *  Uターンのように短い距離で折り返す場合は差が出ないので、誤検出しない。 */
+const RPT_SWAP_KM = 0.5;   // これ以上短くなるなら知らせる
+function rptOrderWarnings(){
+  const pts=_rpts().map((p,i)=>({...p, idx:i}))
+                   .filter(p=>String(p.lat).trim()!==''&&String(p.lng).trim()!=='');
+  const D=(a,b)=>rptHaversine({lat:Number(a.lat),lng:Number(a.lng)},{lat:Number(b.lat),lng:Number(b.lng)});
+  const out=[];
+  // 両隣がある組だけを見る。先頭・末尾を入れ替えるのは「順番の誤り」ではなく
+  // 出発地・目的地そのものの変更なので、判定に混ぜると誤って知らせてしまう
+  // （学校の裏門へ回り込むために最後だけ south へ下がる、といった正しい動きが引っかかった）
+  for(let i=1;i+2<pts.length;i++){
+    // i と i+1 を入れ替えると、前後との繋がりだけが変わる（i↔i+1 の間は共通なので相殺される）
+    const gain = (D(pts[i-1],pts[i]) + D(pts[i+1],pts[i+2]))
+               - (D(pts[i-1],pts[i+1]) + D(pts[i],pts[i+2]));
+    if(gain>RPT_SWAP_KM) out.push({ a:pts[i].idx+1, b:pts[i+1].idx+1, km:gain });
+  }
+  return out;
+}
+
 /* 地点を「/」で並べる形式のURLを組み立てる。
    末尾の data=!4m5!4m4!2m2!1b1!2b1!3e0 は、Googleマップの設定画面で
    「高速道路を利用しない」「有料道路を利用しない」にチェックを入れたときと同じ状態を表す
@@ -1657,26 +1688,29 @@ function renderRoutePoints(){
   }).join('');
   // バス停ごとが通しと同じ並びなら、2段に分けても意味がないので1段だけにする
   const sameAsWhole = (legsStop.length === legsWhole.length);
-  const legRow = legsWhole.length ? `<div style="background:#f6faf7;border:1px solid #e2ede6;border-radius:8px;padding:9px 12px;margin-bottom:10px;">
+  const legRow = legsWhole.length ? `<div style="background:#f6faf7;border:1px solid #e2ede6;border-radius:8px;padding:9px 12px;margin-bottom:6px;">
       <div style="font-size:13px;color:#2d4a38;font-weight:700;margin-bottom:6px;">🗺 Googleマップで道を確かめる</div>
       <div style="font-size:12px;color:#6b7d72;margin-bottom:4px;">${legsWhole.length===1?'通し（全区間）':`通し（${legsWhole.length}区間・「区切」で分かれています）`}</div>
       <div class="line" style="gap:6px;flex-wrap:wrap;margin-bottom:${sameAsWhole?'0':'8px'};">${legBtns(legsWhole,false)}</div>
       ${sameAsWhole?'':`<div style="font-size:12px;color:#6b7d72;margin-bottom:4px;">バス停ごと（${legsStop.length}区間）</div>
       <div class="line" style="gap:6px;flex-wrap:wrap;">${legBtns(legsStop,true)}</div>`}
-      <div class="muted" style="font-size:12px;margin-top:6px;">
+    </div>` : '';
+  const legNote = legsWhole.length ? `<div class="muted" style="font-size:12px;margin:0 0 10px;">
         <b>有料道路・高速道路は使わない</b>設定で開きます。<b>「通し」は全体を1本で</b>、<b>「バス停ごと」は停留所で分けて</b>開きます（運転手がバス停ごとに開く想定）。<br>
         <b>「区切」は、Uターンなどナビが通してくれない場所で使います。</b>その地点で案内を終え、<b>次の地点から</b>新しい案内が始まります（間の動きは運転手が行います）。どちらの開き方でも区切は必ず効きます。<br>
         <b>狙った道を通らないときは、その手前に地点を足してください。</b>
         地点は<b>曲がった直後の道の上（曲がり角から50〜100m先）</b>に置くとよく効きます。交差点そのものに置くと、どの道に付くかGoogleが決めてしまい、手前で曲がることがあります。
         まっすぐな道には置かなくて構いません。${legsWhole.some(g=>g.pts.length-2>RPT_MAX_VIA)?'<br><span style="color:#c0392b;font-weight:700;">⚠ の区間は地点が多すぎるかもしれません（44か所までは通ることを確認済み）。反映されているかGoogleマップ側で確かめてください。</span>':''}
-      </div>
-    </div>` : '';
+      </div>` : '';
+  const orderWarn = rptOrderWarnings();
+  const warnIdx = new Set(orderWarn.flatMap(w=>[w.a-1, w.b-1]));   // 0起点に直す
   const rows = pts.map((p,i)=>{
     const d=dist.byIdx[i];
     const on=(rptSelIdx===i);
+    const warn=warnIdx.has(i);
     const ib='background:none;border:none;cursor:pointer;padding:3px 5px;font-size:16px;line-height:1;';
-    return `<tr onclick="rptSelect(${i})" style="cursor:pointer;${on?'background:#eef4ef;':''}" title="この行を選ぶと、上に地点を差し込めます">
-      <td class="muted" style="text-align:right;padding:5px 6px;font-size:14px;">${i+1}</td>
+    return `<tr onclick="rptSelect(${i})" style="cursor:pointer;${on?'background:#eef4ef;':(warn?'background:#fff8e8;':'')}" title="${warn?'並び順が逆になっていないか確認してください':'この行を選ぶと、上に地点を差し込めます'}">
+      <td class="muted" style="text-align:right;padding:5px 6px;font-size:14px;${warn?'color:#8a6d1a;font-weight:700;':''}">${warn?'⚠':''}${i+1}</td>
       <td style="padding:5px 6px;"><input type="text" class="rp-name" value="${escAttr(p.name||'')}" placeholder="例：○○交差点" style="width:100%;min-width:100px;font-size:15px;padding:7px 9px;"></td>
       <td style="padding:5px 6px;"><input type="text" class="rp-lat" value="${escAttr(p.lat)}" placeholder="35.xxxxxx" onchange="rptCoordIn(this)" title="「35.5442, 139.7043」のまま貼っても分けて入ります" style="width:112px;font-size:15px;padding:7px 9px;"></td>
       <td style="padding:5px 6px;"><input type="text" class="rp-lng" value="${escAttr(p.lng)}" placeholder="139.xxxxxx" onchange="rptCoordIn(this)" style="width:112px;font-size:15px;padding:7px 9px;"></td>
@@ -1699,13 +1733,16 @@ function renderRoutePoints(){
       渋滞状況や到着予定時刻はGoogleマップ本体がその場で出すので、こちら側で経路の計算はしません（費用はかかりません）。
       この地点はこの<b>版</b>に属し、新版を作ると一緒に複製されます。
     </div>
-    <div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;">${segBtns}</div>
+    <div id="rptSticky" style="position:sticky;top:0;z-index:5;background:#fff;padding-top:6px;box-shadow:0 6px 8px -6px rgba(0,0,0,0.12);">
+      <div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;">${segBtns}</div>
+      ${legRow}
+    </div>
     ${copyRow}
+    ${legNote}
     <div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;">
       <button class="mini" onclick="rptFillFromStops()">②のバス停から並びを作る</button>
       <button class="mini" id="rptAddBtn" onclick="rptAdd()">${rptSelIdx==null?'＋ 最後に地点を追加':'＋ '+(rptSelIdx+1)+'番の上に差し込む'}</button>
     </div>
-    ${legRow}
     <div class="muted" style="font-size:13px;margin:-4px 0 10px;line-height:1.8;">
       <b>間に差し込むには</b>：差し込みたい場所の<b>下の行をクリックして選ぶ</b>（薄い緑になります）→ 上の「◯番の上に差し込む」を押すと、その上に空欄の行が入ります。
       各行の <b>＋</b> でも同じことができます（その行の上に入ります）。<br>
@@ -1714,6 +1751,13 @@ function renderRoutePoints(){
     ${valid>=2?`<div style="background:#f6faf7;border:1px solid #e2ede6;border-radius:8px;padding:9px 12px;margin-bottom:8px;">
       <span style="font-size:13px;color:#2d4a38;font-weight:700;">直線距離の積み上げ　${dist.total.toFixed(2)} km</span>
       <div class="muted" style="font-size:12px;margin-top:4px;">地点が疎らな区間があると、実際の道のりより短く出ます。曲がり角ごとに地点を足すほど実際に近づきます。</div>
+    </div>`:''}
+    ${orderWarn.length?`<div style="background:#fff8e8;border:1px solid #e8d9b0;border-radius:8px;padding:9px 12px;margin-bottom:8px;">
+      <div style="font-size:13px;color:#8a6d1a;font-weight:700;margin-bottom:4px;">⚠️ 並び順が逆になっていませんか</div>
+      <div style="font-size:12px;color:#8a6d1a;line-height:1.8;">
+        ${orderWarn.map(w=>`<b>${w.a}番と${w.b}番</b>を入れ替えると <b>${w.km.toFixed(2)}km</b> 短くなります。`).join('<br>')}<br>
+        <span class="muted" style="font-size:11px;">行き来する運行なら問題ありません。差し込む位置を1つ間違えたときにも出ます（「▲」で入れ替えられます）。</span>
+      </div>
     </div>`:''}
     <div style="overflow-x:auto;"><table id="rptTable" style="width:100%;border-collapse:collapse;font-size:13px;">
       <thead><tr style="background:#f6f9f7;">
