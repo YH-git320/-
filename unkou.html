@@ -907,6 +907,7 @@ let selRefD = '14:00';  // 下校の基準便（学校出発時刻）
 let SCEN = {};    // course_id(String) -> [{dbId?,segment,label,pts:[{phase,kind,name,address,coord,bus_time}],ps:{phase:{shussha,shukko}}}] 送迎シナリオ
 let RPTS = {};    // course_id(String) -> { '登校':[{name,lat,lng,is_stop}], '下校①':[...], '下校②':[...] } 経路点（版に属する）
 let selRSeg = '登校';  // ④経路タブで編集中の便
+let rptSelIdx = null;  // ④経路タブで選んでいる行（この行の上に地点を差し込む）
 let tpOpen = false;   // ⑤パネルの開閉状態（再描画で保持）
 const SEG_PHASES = { '登校':['登校前','登校後'], '下校':['下校前','下校後'] };
 const PHASE_SETTINGS = { '登校前':['shussha','shukko'], '下校前':['shukko'], '登校後':[], '下校後':[] };
@@ -1040,7 +1041,7 @@ function _refDeparture(){
   for(const f of forms){ for(const t of (f.gekou_departures||[])){ if(t) return t; } }
   return '';
 }
-async function selectCourse(id){ selCourseId = id; selVerId = latestVerId(id); _nvOpen=false; if(selVerId) await loadVersionInto(id, selVerId); selRefD = _refDeparture() || '14:00'; renderCourseList(); renderEditor(); }
+async function selectCourse(id){ selCourseId = id; selVerId = latestVerId(id); _nvOpen=false; rptSelIdx=null; if(selVerId) await loadVersionInto(id, selVerId); selRefD = _refDeparture() || '14:00'; renderCourseList(); renderEditor(); }
 async function changeVersion(verId){ selVerId = Number(verId); await loadVersionInto(selCourseId, selVerId); selRefD = _refDeparture() || '14:00'; renderEditor(); }
 function _nextApril(){ const d=new Date(); const y=d.getFullYear(); const ny=(d.getMonth()+1>=4)?y+1:y; return ny+'-04-01'; }
 // 編集タブ（主要・登校便／下校便／添乗員送迎）。再描画せず表示切替＝入力途中も保持・軽快
@@ -1482,17 +1483,60 @@ function rptSyncFromInputs(){
     if(st) pts[i].is_stop=st.checked;
   });
 }
-function setRSeg(seg){ rptSyncFromInputs(); selRSeg=seg; renderEditor(); }
-function rptAdd(){ rptSyncFromInputs(); _rpts().push({ name:'', lat:'', lng:'', is_stop:false }); renderEditor(); }
+function setRSeg(seg){ rptSyncFromInputs(); selRSeg=seg; rptSelIdx=null; renderEditor(); }
+
+/** 行を選ぶ。差し込み先の目印なので、再描画はせず色とボタンの文字だけ変える（入力中の値を消さないため） */
+function rptSelect(i){
+  rptSelIdx = (rptSelIdx===i) ? null : i;   // 同じ行をもう一度押すと選択解除
+  document.querySelectorAll('#rptTable tbody tr').forEach(function(tr,k){
+    tr.style.background = (k===rptSelIdx) ? '#eef4ef' : '';
+  });
+  var b = document.getElementById('rptAddBtn');
+  if(b) b.textContent = (rptSelIdx==null) ? '＋ 最後に地点を追加' : ('＋ '+(rptSelIdx+1)+'番の上に差し込む');
+}
+
+/** 指定位置に空欄の行を差し込む。at を省くと末尾に足す */
+function rptAdd(at){
+  rptSyncFromInputs();
+  var pts=_rpts();
+  if(at==null) at = (rptSelIdx==null) ? pts.length : rptSelIdx;
+  if(at<0) at=0; if(at>pts.length) at=pts.length;
+  pts.splice(at, 0, { name:'', lat:'', lng:'', is_stop:false });
+  // 差し込んだ位置より下の行は1つずつ下がる。選んでいた行もそれに合わせて動かす
+  // （選んだ行の上に足した場合は選択がその行を追い続けるので、続けて足すと進行方向どおりに並ぶ）
+  if(rptSelIdx!=null && rptSelIdx>=at) rptSelIdx++;
+  renderEditor();
+  // 差し込んだ行の緯度欄へすぐ入力できるようにする
+  var tr = document.querySelectorAll('#rptTable tbody tr')[at];
+  if(tr){ var el=tr.querySelector('.rp-lat'); if(el){ el.focus(); } }
+}
 function rptMove(i,dir){
   rptSyncFromInputs();   // 先に画面の値を拾ってから入れ替える（順序を逆にすると入れ替えが打ち消される）
   const pts=_rpts(), j=i+dir;
   if(j<0||j>=pts.length) return;
   [pts[i],pts[j]]=[pts[j],pts[i]];
+  if(rptSelIdx===i) rptSelIdx=j; else if(rptSelIdx===j) rptSelIdx=i;
   renderEditor();
 }
-function rptDel(i){ rptSyncFromInputs(); _rpts().splice(i,1); renderEditor(); }
+function rptDel(i){
+  rptSyncFromInputs();
+  _rpts().splice(i,1);
+  if(rptSelIdx===i) rptSelIdx=null; else if(rptSelIdx!=null && rptSelIdx>i) rptSelIdx--;
+  renderEditor();
+}
 function rptRecalc(){ rptSyncFromInputs(); renderEditor(); }
+
+/** 緯度・経度欄に「35.5442, 139.7043」や度分秒をそのまま貼っても、2つに分けて入れる */
+function rptCoordIn(el){
+  var tr = el.closest('tr');
+  var c = dmsToDecimal(el.value);
+  if(c && tr){
+    var la=tr.querySelector('.rp-lat'), ln=tr.querySelector('.rp-lng');
+    if(la) la.value = c.lat;
+    if(ln) ln.value = c.lng;
+  }
+  rptRecalc();
+}
 
 /** ②のバス停一覧から下書きを作る。登校＝順路どおり、下校＝逆順の目安 */
 function rptFillFromStops(){
@@ -1508,6 +1552,7 @@ function rptFillFromStops(){
   });
   if(!pts.length){ _saveMsg('②のバス停に座標が入っていません。先にバス停の「座標」欄を埋めてください。', false); return; }
   RPTS[String(selCourseId)][selRSeg] = pts;
+  rptSelIdx = null;
   renderEditor();
   _saveMsg(`バス停 ${pts.length}件から並びを作りました。${skipped.length?('（座標なしで飛ばした停：'+skipped.join('、')+'）'):''}曲がり角の目印を足して調整してください。`, true);
 }
@@ -1534,18 +1579,21 @@ function renderRoutePoints(){
   }).join('');
   const rows = pts.map((p,i)=>{
     const d=dist.byIdx[i];
-    return `<tr>
-      <td class="muted" style="text-align:right;padding:4px 6px;">${i+1}</td>
-      <td style="padding:4px 6px;"><input type="text" class="rp-name" value="${escAttr(p.name||'')}" placeholder="任意（例：○○交差点）" style="width:100%;min-width:110px;font-size:13px;padding:5px 7px;"></td>
-      <td style="padding:4px 6px;"><input type="text" class="rp-lat" value="${escAttr(p.lat)}" placeholder="35.xxxxxx" onchange="rptRecalc()" style="width:104px;font-size:13px;padding:5px 7px;"></td>
-      <td style="padding:4px 6px;"><input type="text" class="rp-lng" value="${escAttr(p.lng)}" placeholder="139.xxxxxx" onchange="rptRecalc()" style="width:104px;font-size:13px;padding:5px 7px;"></td>
-      <td style="text-align:center;padding:4px 6px;"><input type="checkbox" class="rp-stop" ${p.is_stop?'checked':''} title="実際に乗り降りするバス停ならチェック"></td>
-      <td class="muted" style="white-space:nowrap;padding:4px 6px;font-size:12px;">${d&&d.seg!=null?d.seg.toFixed(2)+'km':''}</td>
-      <td class="muted" style="white-space:nowrap;padding:4px 6px;font-size:12px;">${d?d.cum.toFixed(2)+'km':''}</td>
-      <td style="white-space:nowrap;padding:4px 6px;">
-        <button class="link" onclick="rptMove(${i},-1)" ${i===0?'disabled':''} title="上へ">▲</button>
-        <button class="link" onclick="rptMove(${i},1)" ${i===pts.length-1?'disabled':''} title="下へ">▼</button>
-        <button class="link" onclick="rptDel(${i})" style="color:#c0392b;">削除</button>
+    const on=(rptSelIdx===i);
+    const ib='background:none;border:none;cursor:pointer;padding:2px 3px;font-size:13px;line-height:1;';
+    return `<tr onclick="rptSelect(${i})" style="cursor:pointer;${on?'background:#eef4ef;':''}" title="この行を選ぶと、上に地点を差し込めます">
+      <td class="muted" style="text-align:right;padding:3px 3px;font-size:12px;">${i+1}</td>
+      <td style="padding:3px 3px;"><input type="text" class="rp-name" value="${escAttr(p.name||'')}" placeholder="例：○○交差点" style="width:100%;min-width:80px;font-size:12px;padding:4px 5px;"></td>
+      <td style="padding:3px 3px;"><input type="text" class="rp-lat" value="${escAttr(p.lat)}" placeholder="35.xxxxxx" onchange="rptCoordIn(this)" title="「35.5442, 139.7043」のまま貼っても分けて入ります" style="width:86px;font-size:12px;padding:4px 5px;"></td>
+      <td style="padding:3px 3px;"><input type="text" class="rp-lng" value="${escAttr(p.lng)}" placeholder="139.xxxxxx" onchange="rptCoordIn(this)" style="width:86px;font-size:12px;padding:4px 5px;"></td>
+      <td style="text-align:center;padding:3px 3px;"><input type="checkbox" class="rp-stop" ${p.is_stop?'checked':''} title="実際に乗り降りするバス停ならチェック"></td>
+      <td class="muted" style="white-space:nowrap;padding:3px 3px;font-size:11px;text-align:right;">${d&&d.seg!=null?d.seg.toFixed(2):''}</td>
+      <td class="muted" style="white-space:nowrap;padding:3px 3px;font-size:11px;text-align:right;">${d?d.cum.toFixed(2):''}</td>
+      <td style="white-space:nowrap;padding:3px 2px;text-align:right;">
+        <button onclick="event.stopPropagation();rptAdd(${i})" title="この行の上に地点を差し込む" style="${ib}color:var(--g);font-weight:700;">＋</button>
+        <button onclick="event.stopPropagation();rptMove(${i},-1)" ${i===0?'disabled':''} title="上へ" style="${ib}color:var(--g);${i===0?'opacity:.3;cursor:default;':''}">▲</button>
+        <button onclick="event.stopPropagation();rptMove(${i},1)" ${i===pts.length-1?'disabled':''} title="下へ" style="${ib}color:var(--g);${i===pts.length-1?'opacity:.3;cursor:default;':''}">▼</button>
+        <button onclick="event.stopPropagation();rptDel(${i})" title="この地点を削除" style="${ib}color:#c0392b;">✕</button>
       </td>
     </tr>`;
   }).join('');
@@ -1559,9 +1607,14 @@ function renderRoutePoints(){
     <div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;">${segBtns}</div>
     <div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;">
       <button class="mini" onclick="rptFillFromStops()">②のバス停から並びを作る</button>
-      <button class="mini" onclick="rptAdd()">＋ 地点を追加</button>
+      <button class="mini" id="rptAddBtn" onclick="rptAdd()">${rptSelIdx==null?'＋ 最後に地点を追加':'＋ '+(rptSelIdx+1)+'番の上に差し込む'}</button>
       <span style="flex:1;"></span>
       <button class="mini" onclick="rptOpenMaps()" ${valid<2?'disabled':''}>🗺 Googleマップで確認する</button>
+    </div>
+    <div class="muted" style="font-size:11px;margin:-4px 0 8px;line-height:1.7;">
+      <b>間に差し込むには</b>：差し込みたい場所の<b>下の行をクリックして選ぶ</b>（薄い緑になります）→ 上の「◯番の上に差し込む」を押すと、その上に空欄の行が入ります。
+      各行の <b>＋</b> でも同じことができます（その行の上に入ります）。<br>
+      緯度・経度は、Googleマップで場所を右クリック→出てきた数字をコピーし、<b>緯度の欄にそのまま貼れば</b>2つに分かれて入ります。
     </div>
     ${valid>=2?`<div style="background:#f6faf7;border:1px solid #e2ede6;border-radius:8px;padding:9px 12px;margin-bottom:8px;">
       <span style="font-size:13px;color:#2d4a38;font-weight:700;">直線距離の積み上げ　${dist.total.toFixed(2)} km</span>
@@ -1569,13 +1622,13 @@ function renderRoutePoints(){
     </div>`:''}
     <div style="overflow-x:auto;"><table id="rptTable" style="width:100%;border-collapse:collapse;font-size:13px;">
       <thead><tr style="background:#f6f9f7;">
-        <th style="width:28px;"></th><th style="text-align:left;padding:5px 6px;font-size:12px;color:#6b7d72;">名前（任意）</th>
-        <th style="text-align:left;padding:5px 6px;font-size:12px;color:#6b7d72;">緯度</th>
-        <th style="text-align:left;padding:5px 6px;font-size:12px;color:#6b7d72;">経度</th>
-        <th style="width:52px;padding:5px 6px;font-size:12px;color:#6b7d72;">バス停</th>
-        <th style="width:64px;text-align:left;padding:5px 6px;font-size:12px;color:#6b7d72;">区間</th>
-        <th style="width:64px;text-align:left;padding:5px 6px;font-size:12px;color:#6b7d72;">累計</th>
-        <th style="width:112px;"></th>
+        <th style="width:22px;"></th><th style="text-align:left;padding:4px 3px;font-size:11px;color:#6b7d72;">名前（任意）</th>
+        <th style="text-align:left;padding:4px 3px;font-size:11px;color:#6b7d72;width:92px;">緯度</th>
+        <th style="text-align:left;padding:4px 3px;font-size:11px;color:#6b7d72;width:92px;">経度</th>
+        <th style="width:38px;padding:4px 3px;font-size:11px;color:#6b7d72;">停</th>
+        <th style="width:48px;text-align:right;padding:4px 3px;font-size:11px;color:#6b7d72;">区間km</th>
+        <th style="width:48px;text-align:right;padding:4px 3px;font-size:11px;color:#6b7d72;">累計km</th>
+        <th style="width:92px;"></th>
       </tr></thead>
       <tbody>${rows||'<tr><td colspan="8" class="muted" style="padding:10px 6px;">まだ地点がありません。「②のバス停から並びを作る」で下書きを作れます。</td></tr>'}</tbody>
     </table></div>
