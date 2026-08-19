@@ -1798,6 +1798,23 @@ function renderRoutePoints(){
     `;
 }
 
+/** うっかり全消しを防ぐ。保存は「消してから入れ直す」作りなので、
+ *  入れ直す中身が空で、かつDBに中身があるときだけ確認をとる。
+ *  （2026-08-19 六郷コースのバス停5件が、画面が空の状態の保存で消えた） */
+async function _confirmWipe(path, newCount, label){
+  if(newCount>0) return true;                       // 入れ直す中身があるなら従来どおり
+  try{
+    const r = await fetch(`${REST_URL}/${path}&select=id&limit=1`, { headers:getH() });
+    if(!r.ok) return true;                          // 数えられないときは止めない
+    const cur = await r.json();
+    if(!Array.isArray(cur) || !cur.length) return true;   // もともと空なら確認不要
+  }catch(e){ return true; }
+  return confirm(`⚠️ ${label}が画面上で空になっています。\n\n`
+    + `このまま保存すると、保存済みの${label}がすべて消えます。\n`
+    + `画面がまだ読み込めていないだけの可能性があります。\n\n`
+    + `本当に消してよろしいですか？`);
+}
+
 async function saveCourse(){
   const c=_c(); if(!c) return;
   if(!selVerId){ _saveMsg('版がありません。まず版を作成してください。', false); return; }
@@ -1813,10 +1830,14 @@ async function saveCourse(){
     const r1 = await fetch(`${REST_URL}/courses?id=eq.${c.id}`, { method:'PATCH', headers:getH(), body:JSON.stringify({ toukou_shussha:c.toukou_shussha||null, toukou_shukko:c.toukou_shukko||null, active:c.active, after_toukou:c.after_toukou||'帰庫', after_toukou_place:(c.after_toukou==='他所移動'?(c.after_toukou_place||null):null), after_toukou_addr:(c.after_toukou==='他所移動'?(c.after_toukou_addr||null):null), after_toukou_coord:(c.after_toukou==='他所移動'?(c.after_toukou_coord||null):null), gekou_shukko_lead:(c.gekou_shukko_lead==null?null:c.gekou_shukko_lead), gekou_haisha_lead:(c.gekou_haisha_lead==null?null:c.gekou_haisha_lead) }) });
     if(!r1.ok){ const t=await r1.text(); _saveMsg('コース情報の保存に失敗：'+t.slice(0,100), false); return; }
     // 2) 下校フォーム（この年度・このコースを置き換え）
+    const formsCount = (FORMS[key]||[]).filter(f=>(f.form_name||'').trim()).length;
+    if(!(await _confirmWipe(`course_schedule_forms?version_id=eq.${selVerId}`, formsCount, '日課'))){ _saveMsg('保存を中止しました。', false); return; }
     await fetch(`${REST_URL}/course_schedule_forms?version_id=eq.${selVerId}`, { method:'DELETE', headers:getH() });
     const forms = (FORMS[key]||[]).filter(f=>(f.form_name||'').trim()).map(f=>({ course_id:c.id, version_id:selVerId, form_name:f.form_name.trim(), gekou_departures:(f.gekou_departures||[]).filter(t=>t), after_toukou:(f.after_toukou||'')||null, after_toukou_place:(f.after_toukou==='他所移動'?(f.after_toukou_place||null):null), after_toukou_addr:(f.after_toukou==='他所移動'?(f.after_toukou_addr||null):null), after_toukou_coord:(f.after_toukou==='他所移動'?(f.after_toukou_coord||null):null), dep_overrides:(f.dep_overrides&&Object.keys(f.dep_overrides).length)?f.dep_overrides:{} }));
     if(forms.length){ const r2=await fetch(`${REST_URL}/course_schedule_forms`, { method:'POST', headers:getH(), body:JSON.stringify(forms) }); if(!r2.ok){ const t=await r2.text(); _saveMsg('時程の保存に失敗：'+t.slice(0,100), false); return; } }
     // 3) バス停・ルート（このコースを置き換え）
+    const stopsCount = (STOPS[key]||[]).filter(s=>(s.name||'').trim()||(s.address||'').trim()).length;
+    if(!(await _confirmWipe(`course_locations?version_id=eq.${selVerId}`, stopsCount, 'バス停'))){ _saveMsg('保存を中止しました。', false); return; }
     await fetch(`${REST_URL}/course_locations?version_id=eq.${selVerId}`, { method:'DELETE', headers:getH() });
     let seq=0;
     const rows = (STOPS[key]||[]).filter(s=>(s.name||'').trim()||(s.address||'').trim()).map(s=>{
@@ -1827,23 +1848,25 @@ async function saveCourse(){
       return r;
     });
     if(rows.length){ const r3=await fetch(`${REST_URL}/course_locations`, { method:'POST', headers:getH(), body:JSON.stringify(rows) }); if(!r3.ok){ const t=await r3.text(); _saveMsg('バス停・ルートの保存に失敗：'+t.slice(0,100), false); return; } }
-    // 3.5) 経路点（この版の3便ぶんをまとめて置き換え）
+    // 3.5) 経路点（この版の4便ぶんをまとめて置き換え）
     rptSyncFromInputs();
-    await fetch(`${REST_URL}/course_route_points?version_id=eq.${selVerId}`, { method:'DELETE', headers:getH() });
     const rptRows=[];
     R_SEGS.forEach(seg=>{
       const list=((RPTS[key]||{})[seg]||[]).filter(p=>String(p.lat).trim()!==''&&String(p.lng).trim()!=='');
       list.forEach((p,i)=>rptRows.push({ course_id:c.id, version_id:selVerId, segment:seg, seq:i+1,
         name:(p.name||'').trim()||null, lat:Number(p.lat), lng:Number(p.lng), is_stop:!!p.is_stop, split_here:!!p.split_here, note:(p.note||'').trim()||null }));
     });
+    if(!(await _confirmWipe(`course_route_points?version_id=eq.${selVerId}`, rptRows.length, '経路の地点'))){ _saveMsg('保存を中止しました。', false); return; }
+    await fetch(`${REST_URL}/course_route_points?version_id=eq.${selVerId}`, { method:'DELETE', headers:getH() });
     if(rptRows.length){ const r35=await fetch(`${REST_URL}/course_route_points`, { method:'POST', headers:getH(), body:JSON.stringify(rptRows) }); if(!r35.ok){ const t=await r35.text(); _saveMsg('経路点の保存に失敗：'+t.slice(0,100), false); return; } }
     // 4) 送迎シナリオ（このコースを置き換え）— scenarios削除で points/settings も連動削除
-    await fetch(`${REST_URL}/course_transfer_points?course_id=eq.${c.id}`, { method:'DELETE', headers:getH() });
-    await fetch(`${REST_URL}/course_scenarios?course_id=eq.${c.id}`, { method:'DELETE', headers:getH() });
     const scenHasContent = s => s.pts.some(p=>(p.name||'').trim()||(p.address||'').trim()||(p.coord||'').trim())
       || Object.keys(s.ps||{}).some(ph=>((s.ps[ph]||{}).shussha||'').trim()||((s.ps[ph]||{}).shukko||'').trim())
       || (s.label||'').trim();
     const scens = (SCEN[key]||[]).filter(scenHasContent);
+    if(!(await _confirmWipe(`course_scenarios?course_id=eq.${c.id}`, scens.length, '添乗員送迎'))){ _saveMsg('保存を中止しました。', false); return; }
+    await fetch(`${REST_URL}/course_transfer_points?course_id=eq.${c.id}`, { method:'DELETE', headers:getH() });
+    await fetch(`${REST_URL}/course_scenarios?course_id=eq.${c.id}`, { method:'DELETE', headers:getH() });
     if(scens.length){
       const scenRows = scens.map((s,idx)=>({ course_id:c.id, segment:s.segment, label:(s.label||'').trim(), seq:idx+1 }));
       const rs = await fetch(`${REST_URL}/course_scenarios`, { method:'POST', headers:getH(), body:JSON.stringify(scenRows) });
