@@ -1583,11 +1583,14 @@ function rptCopyFrom(srcSeg){
      data=…!1b1!2b1… を付けると一般道だけの28.9kmになる */
 const RPT_MAX_VIA = 44;   // 実測で通った数。これを超えるかは未確認なので目安として警告に使う
 
-/** 区間に切り分ける。区切り方は2種類ある
- *  ・バス停（停）… その地点を前後の区間で**共有**する（バスはそこで停まって、そこから続ける）
+/** 区間に切り分ける。切り方は2通りあり、画面では両方出す。
+ *  byStop=false（通し）… 「区切」だけで切る。区切が無ければ**全体を1本**で開く
+ *  byStop=true （バス停ごと）… 「区切」に加えてバス停でも切る。運転手がバス停ごとに開く用
+ *
  *  ・区切（切）  … その地点で終わり、**次の地点から**新しい区間（地点を共有しない）。
- *                  Uターンのように、地点と地点の間をナビに任せられないときに使う  */
-function rptLegs(){
+ *                  Uターンのように、地点と地点の間をナビに任せられないときに使う
+ *  ・バス停（停）… その地点を前後の区間で**共有**する（停まって、そこから続ける）  */
+function rptLegs(byStop){
   const pts=_rpts().filter(p=>String(p.lat).trim()!==''&&String(p.lng).trim()!=='');
   if(pts.length<2) return [];
   const mk=(a,b)=>({
@@ -1602,7 +1605,7 @@ function rptLegs(){
     if(pts[i].split_here){          // 切：ここで終わって、次から仕切り直す
       if(i>start) legs.push(mk(start,i));
       start=i+1;
-    } else if(pts[i].is_stop && !last){   // バス停：ここで区切り、同じ地点から続ける
+    } else if(byStop && pts[i].is_stop && !last){   // バス停：ここで区切り、同じ地点から続ける
       if(i>start) legs.push(mk(start,i));
       start=i;
     } else if(last){
@@ -1619,9 +1622,9 @@ function rptLegUrl(leg){
   const c=leg.pts.map(p=>`${Number(p.lat)},${Number(p.lng)}`);
   return 'https://www.google.com/maps/dir/' + c.join('/') + '/data=!4m5!4m4!2m2!1b1!2b1!3e0';
 }
-function rptOpenLeg(i){
+function rptOpenLeg(i, byStop){
   rptSyncFromInputs();
-  const legs=rptLegs();
+  const legs=rptLegs(byStop);
   if(!legs[i]){ _saveMsg('地点を2つ以上入れてください。', false); return; }
   window.open(rptLegUrl(legs[i]), '_blank');
 }
@@ -1644,23 +1647,28 @@ function renderRoutePoints(){
   const copyRow = copyBtns ? `<div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">
       ${copyBtns}<span class="muted" style="font-size:13px;">下校便は原則どの便も同じ道です。コピーしてから、違うところだけ直してください。</span>
     </div>` : '';
-  // Googleマップの道案内は、バス停で区切った区間ごとに開く（経由地9か所の制限に収めるため）
-  const legs = rptLegs();
-  const legRow = legs.length ? `<div style="background:#f6faf7;border:1px solid #e2ede6;border-radius:8px;padding:9px 12px;margin-bottom:10px;">
-      <div style="font-size:13px;color:#2d4a38;font-weight:700;margin-bottom:6px;">🗺 Googleマップで道を確かめる${legs.length>1?`（バス停ごとに${legs.length}区間）`:''}</div>
-      <div class="line" style="gap:6px;flex-wrap:wrap;">
-        ${legs.map((g,i)=>{
-          const via=g.pts.length-2, over=via>RPT_MAX_VIA;
-          return `<button class="mini" onclick="rptOpenLeg(${i})" title="${escAttr(g.from)} から ${escAttr(g.to)} までをGoogleマップで開きます（目印${via}か所）"${over?' style="border-color:#c0392b;color:#c0392b;"':''}>${escHtml(g.from)} → ${escHtml(g.to)}${over?' ⚠':''}</button>`
-               + (g.cut?`<span class="muted" style="font-size:11px;align-self:center;">✂ ここで案内を切る</span>`:'');
-        }).join('')}
-      </div>
+  // Googleマップの道案内は2通りの開き方を出す：通し（区切だけで切る）と、バス停ごと
+  const legsWhole = rptLegs(false);
+  const legsStop  = rptLegs(true);
+  const legBtns = (arr, byStop) => arr.map((g,i)=>{
+    const via=g.pts.length-2, over=via>RPT_MAX_VIA;
+    return `<button class="mini" onclick="rptOpenLeg(${i},${byStop})" title="${escAttr(g.from)} から ${escAttr(g.to)} までをGoogleマップで開きます（目印${via}か所）"${over?' style="border-color:#c0392b;color:#c0392b;"':''}>${escHtml(g.from)} → ${escHtml(g.to)}${over?' ⚠':''}</button>`
+         + (g.cut?`<span class="muted" style="font-size:11px;align-self:center;">✂ ここで案内を切る</span>`:'');
+  }).join('');
+  // バス停ごとが通しと同じ並びなら、2段に分けても意味がないので1段だけにする
+  const sameAsWhole = (legsStop.length === legsWhole.length);
+  const legRow = legsWhole.length ? `<div style="background:#f6faf7;border:1px solid #e2ede6;border-radius:8px;padding:9px 12px;margin-bottom:10px;">
+      <div style="font-size:13px;color:#2d4a38;font-weight:700;margin-bottom:6px;">🗺 Googleマップで道を確かめる</div>
+      <div style="font-size:12px;color:#6b7d72;margin-bottom:4px;">${legsWhole.length===1?'通し（全区間）':`通し（${legsWhole.length}区間・「区切」で分かれています）`}</div>
+      <div class="line" style="gap:6px;flex-wrap:wrap;margin-bottom:${sameAsWhole?'0':'8px'};">${legBtns(legsWhole,false)}</div>
+      ${sameAsWhole?'':`<div style="font-size:12px;color:#6b7d72;margin-bottom:4px;">バス停ごと（${legsStop.length}区間）</div>
+      <div class="line" style="gap:6px;flex-wrap:wrap;">${legBtns(legsStop,true)}</div>`}
       <div class="muted" style="font-size:12px;margin-top:6px;">
-        「バス停」または「区切」にチェックを入れた地点で区切って開きます。<b>有料道路・高速道路は使わない</b>設定です。<br>
-        <b>「区切」は、Uターンなどナビが通してくれない場所で使います。</b>その地点で案内を終え、<b>次の地点から</b>新しい案内が始まります（間の動きは運転手が行います）。<br>
+        <b>有料道路・高速道路は使わない</b>設定で開きます。<b>「通し」は全体を1本で</b>、<b>「バス停ごと」は停留所で分けて</b>開きます（運転手がバス停ごとに開く想定）。<br>
+        <b>「区切」は、Uターンなどナビが通してくれない場所で使います。</b>その地点で案内を終え、<b>次の地点から</b>新しい案内が始まります（間の動きは運転手が行います）。どちらの開き方でも区切は必ず効きます。<br>
         <b>狙った道を通らないときは、その手前に地点を足してください。</b>
         地点は<b>曲がった直後の道の上（曲がり角から50〜100m先）</b>に置くとよく効きます。交差点そのものに置くと、どの道に付くかGoogleが決めてしまい、手前で曲がることがあります。
-        まっすぐな道には置かなくて構いません。${legs.some(g=>g.pts.length-2>RPT_MAX_VIA)?'<br><span style="color:#c0392b;font-weight:700;">⚠ の区間は地点が多すぎるかもしれません（44か所までは通ることを確認済み）。反映されているかGoogleマップ側で確かめてください。</span>':''}
+        まっすぐな道には置かなくて構いません。${legsWhole.some(g=>g.pts.length-2>RPT_MAX_VIA)?'<br><span style="color:#c0392b;font-weight:700;">⚠ の区間は地点が多すぎるかもしれません（44か所までは通ることを確認済み）。反映されているかGoogleマップ側で確かめてください。</span>':''}
       </div>
     </div>` : '';
   const rows = pts.map((p,i)=>{
