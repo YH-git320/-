@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>通勤経路マスタ — 高尾輸送サービス</title>
+<title>経路設定 — 高尾輸送サービス</title>
 <style>
 :root{--g:#4d7a5e;--g2:#2d4a38;--bg:#f5f8f4;--line:#e0e6e0;}
 *{box-sizing:border-box;}
@@ -11,77 +11,74 @@ body{margin:0;font-family:'Noto Sans JP','Hiragino Kaku Gothic Pro','Meiryo',san
 header{background:#fff;border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
 header .brand{font-size:16px;font-weight:700;color:var(--g2);}
 header nav a{color:var(--g);text-decoration:none;font-size:13px;margin-right:12px;}
-main{max-width:840px;margin:0 auto;padding:16px;}
+main{max-width:960px;margin:0 auto;padding:16px;}
 h1{font-size:19px;color:var(--g2);margin:0 0 4px;}
 .sub{font-size:13px;color:#6b7d72;margin:0 0 16px;line-height:1.6;}
 .panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px;}
-label.fld{display:block;font-size:13px;color:#6b7d72;margin-bottom:5px;}
-select,input{font-family:inherit;font-size:15px;padding:9px 10px;border:1px solid #c9d3cc;border-radius:8px;background:#fff;color:#2d3b35;}
+select,input,textarea{font-family:inherit;font-size:15px;padding:9px 10px;border:1px solid #c9d3cc;border-radius:8px;background:#fff;color:#2d3b35;}
 select,input[type=text]{width:100%;}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
 button{font-family:inherit;font-size:14px;padding:9px 14px;border:1px solid var(--g);background:#fff;color:var(--g);border-radius:8px;cursor:pointer;}
 button.primary{background:var(--g);color:#fff;}
 button.mini{font-size:12px;padding:6px 10px;}
-button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
-.courseCard{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px;background:#fff;}
-.courseHead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;}
-.courseTitle{font-size:16px;font-weight:700;color:var(--g2);}
-.tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
-.tab{font-size:13px;padding:7px 11px;border:1px solid #c9d3cc;border-radius:8px;background:#fff;color:#6b7d72;cursor:pointer;}
-.tab.active{border:2px solid var(--g);color:var(--g2);background:#eef4ef;font-weight:700;}
-.seg{border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;background:#fbfdfb;}
-.seg .line{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;}
-.seg .mode{min-width:100px;width:auto;}
-.seg .st{flex:1;min-width:110px;}
-.arrow{color:#9bb0a3;font-size:16px;}
-.total{display:flex;justify-content:space-between;align-items:center;padding-top:10px;margin-top:4px;border-top:1px solid var(--line);}
-.total .amt{font-size:18px;font-weight:700;color:var(--g2);}
+button.danger{border-color:#c0392b;color:#c0392b;}
+button:disabled{opacity:.5;cursor:default;}
 .muted{color:#9bb0a3;font-size:12px;}
 #status{font-size:13px;padding:9px 12px;border-radius:8px;margin-bottom:12px;display:none;}
 #status.ok{display:block;background:#eef7ef;color:#2f7d32;border:1px solid #bfe3c0;}
 #status.err{display:block;background:#fdeceb;color:#b5453a;border:1px solid #f3c3bf;}
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;}
+th{text-align:left;font-size:12px;color:#6b7d72;font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line);background:#f6f9f7;}
+td{padding:5px 6px;border-bottom:1px solid #eef2ef;vertical-align:middle;}
+td input{font-size:13px;padding:6px 8px;}
+td input.coord{width:110px;}
+td input.name{width:100%;min-width:120px;}
+.iconbtn{background:none;border:none;color:var(--g);cursor:pointer;font-size:15px;padding:2px 5px;}
+.iconbtn.danger{color:#c0392b;}
+.iconbtn:disabled{opacity:.3;cursor:default;}
+.tag{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;white-space:nowrap;}
+.tag.stop{background:#e6f0e9;color:var(--g2);}
+.tag.via{background:#f0f0f0;color:#777;}
+.warn{background:#fff8e8;border:1px solid #e8d9b0;border-radius:8px;padding:8px 12px;font-size:12px;color:#8a6d1a;margin-top:8px;}
 </style>
 </head>
 <body>
 <header>
-  <div class="brand">🚌 通勤経路マスタ</div>
+  <div class="brand">🗺️ 経路設定</div>
   <nav>
     <a href="index.html">ホーム</a>
-    <a href="master.html">マスタ</a>
-    <a href="tenjo.html">配置</a>
-    <a href="yotei.html">月間予定</a>
     <a href="haichi.html">配置管理</a>
+    <a href="yotei.html">月間予定</a>
     <a href="daicho.html">車両台帳</a>
+    <a href="master.html">マスタ</a>
+    <a href="unkou.html">運行時程</a>
+    <a href="jisseki.html">運行実績</a>
   </nav>
 </header>
 <main>
-  <h1>通勤経路マスタ</h1>
-  <p class="sub">添乗員ごとに、担当コースの通勤経路（登校便／下校便 × 出勤／帰宅）と運賃を登録します。ここに入れた内容が、日報の事前記入に使われます。当日の変更は日報側で上書きできます。</p>
+  <h1>経路設定</h1>
+  <p class="sub">コースごとに、<b>登校便・下校便①・下校便②</b>の通るべき地点を順番に登録します。<br>
+    ここで作った並びから<b>Googleマップの道案内リンク</b>を組み立てます。渋滞状況・到着予定時刻はGoogleマップ本体がその場で出すので、
+    こちら側では経路の計算そのものは行いません（費用は発生しません）。</p>
 
   <div id="status"></div>
 
   <div class="panel">
-    <label class="fld" for="staffSelect">① 添乗員をえらぶ</label>
-    <select id="staffSelect"><option value="">— 選択してください —</option></select>
-  </div>
-
-  <div id="coursesArea"></div>
-
-  <div id="addCourseArea" class="panel" style="display:none;">
-    <label class="fld" for="courseSelect">② 担当コースを追加</label>
     <div class="row">
-      <select id="courseSelect" style="flex:1;min-width:200px;"></select>
-      <button class="primary" onclick="addCourse()">＋ 追加</button>
+      <label class="muted" style="min-width:auto;">コース</label>
+      <select id="kCourse" style="flex:1;min-width:220px;"></select>
+      <label class="muted" style="min-width:auto;">便</label>
+      <select id="kSeg" style="width:auto;">
+        <option value="登校">登校便</option>
+        <option value="下校①">下校便①</option>
+        <option value="下校②">下校便②</option>
+      </select>
+      <button class="primary" onclick="kLoad()">読み込む</button>
     </div>
   </div>
 
-  <div id="saveBar" style="display:none;margin:16px 0;">
-    <button class="primary" style="width:100%;font-size:16px;padding:13px;" onclick="saveAll()">保存する</button>
-    <div id="saveMsg" style="text-align:center;margin-top:8px;font-weight:600;min-height:20px;"></div>
-    <p class="muted" style="text-align:center;margin-top:4px;">この添乗員の全コースをまとめて保存します。</p>
-  </div>
+  <div id="kArea"></div>
 </main>
-
 <script>
 // ===== 高尾輸送サービス 管理システム 共通認証モジュール =====
 // initAuth(['admin', 'staff'])  → 管理者・事務員どちらも可
@@ -89,6 +86,7 @@ button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
 
 const AUTH_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/auth/v1';
 const REST_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/rest/v1';
+const FUNCTIONS_URL = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/functions/v1';
 const ANON_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4ZHlxa3lxdGl6aHRrd3RwdnJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NzYxODEsImV4cCI6MjA5OTQ1MjE4MX0.yVbClXBk2JVeglevsBLY5sH2_m2ybCf71u4i_YYWyHE';
 
 const ROLE_LABEL = { super_admin: '権限付与者', admin: 'システム管理者', operator: '担当者', staff: '事務員' };
@@ -867,422 +865,177 @@ function _loadQRLib(cb) {
 
 </script>
 <script>
-/* ===== 通勤経路マスタ ページロジック ===== */
-const MODES = ['電車','バス','タクシー','徒歩','自転車','自家用車'];
-const LEGS = ['登校','下校'];
-const DIRS = ['出勤','帰宅'];
-let STAFF = [];
-let COURSES = [];
-let model = { staffId: null, courses: [] };
-let COURSE_LOCS = {};   // course_id(String) → [{id,name,address}]
-let STAFF_ADDR = {};    // staff_id(String) → 住所（権限スコープに応じた値）
-
-// 全角→半角（数字・各種ハイフン・空白）
-function toHalf(s){
-  return String(s==null?'':s)
-    .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
-    .replace(/[‐‑‒–—―ー－]/g, '-')
-    .replace(/　/g, ' ');
-}
-// 住所を「住居表示まで」に丸める（建物名・号室を落とす）。取れなければ元の住所を返す
-function jushoHyoji(addr){
-  let s = toHalf(addr).trim();
-  if (!s) return '';
-  s = s.split(' ')[0].trim();                    // 建物名がスペース区切りなら除去
-  const m = s.match(/^[^\d]*[\d\-丁目番地号]+/);   // 都道府県〜番地の数字ブロックまで
-  return (m ? m[0] : s).trim();
-}
-
+/* ===== 経路設定 ページロジック ===== */
 function getH(){
   const s = _getSession();
   const tok = (s && s.access_token) || ANON_KEY;
   return { 'apikey': ANON_KEY, 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
 }
-
+async function _fetchAll(path){
+  const out=[]; let from=0; const step=1000;
+  for(;;){
+    const sep = path.indexOf('?')>=0?'&':'?';
+    const r = await fetch(`${REST_URL}/${path}${sep}limit=${step}&offset=${from}`, {headers:getH()});
+    if(!r.ok) break;
+    const rows = await r.json();
+    out.push(...rows);
+    if(rows.length<step) break;
+    from += step;
+  }
+  return out;
+}
+const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function status(msg, ok){
   const el = document.getElementById('status');
-  el.textContent = msg;
-  el.className = ok ? 'ok' : 'err';
-  if (ok) setTimeout(() => { if (el.textContent === msg) el.className = ''; }, 4000);
+  el.className = ok ? 'ok' : 'err'; el.textContent = msg;
 }
 
-function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function escAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+let COURSES = [];
+let POINTS = [];   // 画面編集中の並び [{name,lat,lng,is_stop}]
 
-function emptySlot(){ return { '場所':'', '手段':'', '区間':[], '交通費':0, '移動時間':'' }; }
-function emptyRoutes(){ const r={}; LEGS.forEach(l=>{ r[l]={}; DIRS.forEach(d=>{ r[l][d]=emptySlot(); }); }); return r; }
-function normRoutes(routes){
-  const r = emptyRoutes();
-  if (routes && typeof routes === 'object'){
-    LEGS.forEach(l => DIRS.forEach(d => {
-      const s = routes[l] && routes[l][d];
-      if (s){
-        r[l][d]['場所'] = s['場所'] || '';
-        r[l][d]['手段'] = s['手段'] || '';
-        r[l][d]['交通費'] = Number(s['交通費']) || 0;
-        r[l][d]['移動時間'] = s['移動時間'] || '';
-        r[l][d]['区間'] = Array.isArray(s['区間']) ? s['区間'].map(x => ({
-          '手段': x['手段'] || '電車', '乗車': x['乗車'] || '', '下車': x['下車'] || '', '運賃': Number(x['運賃']) || 0
-        })) : [];
-      }
-    }));
-  }
-  return r;
+// 「35°32'39.2"N 139°42'15.8"E」→ 10進の緯度経度
+function dmsToDecimal(s){
+  const m = String(s||'').match(/(\d+)°(\d+)'([\d.]+)"([NS])\s+(\d+)°(\d+)'([\d.]+)"([EW])/);
+  if(!m) return null;
+  const lat = (Number(m[1]) + Number(m[2])/60 + Number(m[3])/3600) * (m[4]==='S'?-1:1);
+  const lng = (Number(m[5]) + Number(m[6])/60 + Number(m[7])/3600) * (m[8]==='W'?-1:1);
+  return { lat: +lat.toFixed(6), lng: +lng.toFixed(6) };
 }
 
-async function loadStaff(){
-  const res = await fetch(`${REST_URL}/staff?select=id,name,employee_code&order=name`, { headers: getH() });
-  if (!res.ok) throw new Error('staff ' + res.status);
-  STAFF = await res.json();
-  const sel = document.getElementById('staffSelect');
-  STAFF.forEach(s => {
-    const o = document.createElement('option');
-    o.value = s.id;
-    o.textContent = s.name + (s.employee_code ? ` (${s.employee_code})` : '');
-    sel.appendChild(o);
+async function kInit(){
+  COURSES = await _fetchAll('courses?select=id,school_name,course_name&active=eq.true&order=school_name,course_name');
+  const sel = document.getElementById('kCourse');
+  sel.innerHTML = COURSES.map(c=>`<option value="${c.id}">${esc(c.school_name)} ${esc(c.course_name)}</option>`).join('');
+}
+
+async function kLoad(){
+  const courseId = Number(document.getElementById('kCourse').value);
+  const segment = document.getElementById('kSeg').value;
+  if(!courseId) return;
+  const rows = await _fetchAll(`course_route_points?select=*&course_id=eq.${courseId}&segment=eq.${encodeURIComponent(segment)}&order=seq`);
+  POINTS = rows.map(r=>({ name:r.name, lat:Number(r.lat), lng:Number(r.lng), is_stop:r.is_stop }));
+  kRender();
+}
+
+/** 停留所マスタ（course_locations）から並びを作る。登校＝そのまま、下校＝逆順の目安 */
+async function kFillFromStops(){
+  const courseId = Number(document.getElementById('kCourse').value);
+  const segment = document.getElementById('kSeg').value;
+  const stops = await _fetchAll(`course_locations?select=name,coord,seq&course_id=eq.${courseId}&active=eq.true&order=seq`);
+  let pts = stops.map(s=>{
+    const c = dmsToDecimal(s.coord);
+    return c ? { name: s.name, lat: c.lat, lng: c.lng, is_stop: true } : null;
+  }).filter(Boolean);
+  if(segment !== '登校') pts = pts.slice().reverse();
+  if(!pts.length){ status('この コースの停留所には、座標が登録されていませんでした。', false); return; }
+  POINTS = pts;
+  kRender();
+  status(`停留所 ${pts.length}件から並びを作りました。曲がり角の目印などを足して調整してください。`, true);
+}
+
+function kAddPoint(){
+  POINTS.push({ name:'', lat:'', lng:'', is_stop:false });
+  kRender();
+}
+function kMove(i, dir){
+  kSyncFromInputs();   // 先に今の入力値を拾ってから並べ替える（あとで拾うと、入れ替えが打ち消されてしまう）
+  const j = i+dir;
+  if(j<0 || j>=POINTS.length) return;
+  [POINTS[i], POINTS[j]] = [POINTS[j], POINTS[i]];
+  kRender();
+}
+function kDel(i){
+  kSyncFromInputs();
+  POINTS.splice(i,1);
+  kRender();
+}
+/** 再描画前に、画面上の入力中の値をPOINTSへ拾っておく */
+function kSyncFromInputs(){
+  document.querySelectorAll('#kTable tbody tr').forEach((tr,i)=>{
+    if(!POINTS[i]) return;
+    POINTS[i].name = tr.querySelector('.f-name').value;
+    POINTS[i].lat  = tr.querySelector('.f-lat').value;
+    POINTS[i].lng  = tr.querySelector('.f-lng').value;
+    POINTS[i].is_stop = tr.querySelector('.f-stop').checked;
   });
 }
-async function loadCourses(){
-  const res = await fetch(`${REST_URL}/courses?select=id,school_name,course_name&active=eq.true&order=school_name`, { headers: getH() });
-  if (!res.ok) throw new Error('courses ' + res.status);
-  COURSES = await res.json();
-}
-function courseLabel(cid){ const c = COURSES.find(x => String(x.id) === String(cid)); return c ? `${c.school_name} ／ ${c.course_name}` : `コースID ${cid}`; }
 
-async function loadCourseLocations(){
-  COURSE_LOCS = {};
-  const res = await fetch(`${REST_URL}/course_locations?active=eq.true&select=id,course_id,name,address&order=name`, { headers: getH() });
-  if (!res.ok) return;
-  const rows = await res.json();
-  rows.forEach(r => {
-    const k = String(r.course_id);
-    (COURSE_LOCS[k] = COURSE_LOCS[k] || []).push({ id: r.id, name: r.name, address: r.address || '' });
+function kRender(){
+  const A = document.getElementById('kArea');
+  const validCount = POINTS.filter(p=>p.lat!==''&&p.lng!=='').length;
+  let h = `<div class="panel">
+    <div class="row" style="margin-bottom:10px;">
+      <button class="mini" onclick="kFillFromStops()">停留所から並びを作る</button>
+      <button class="mini" onclick="kAddPoint()">＋ 地点を追加</button>
+      <span style="flex:1;"></span>
+      <button class="mini" onclick="kOpenMaps()" ${validCount<2?'disabled':''}>📍 Googleマップで確認する</button>
+      <button class="primary" onclick="kSave()">この並びを保存する</button>
+    </div>
+    <div class="muted" style="margin-bottom:8px;">
+      緯度・経度は、Googleマップでその場所を右クリック→表示された数字（例：35.544,139.706）をコピーして貼り付けてください。<br>
+      「停留所かどうか」は記録のためのメモです（曲がり角の目印などにチェックは要りません）。
+    </div>
+    <div style="overflow:auto;"><table id="kTable"><thead><tr>
+      <th style="width:32px;"></th><th>名前（任意）</th><th>緯度</th><th>経度</th><th style="width:60px;">停留所</th><th style="width:70px;"></th>
+    </tr></thead><tbody>`;
+  POINTS.forEach((p,i)=>{
+    h += `<tr>
+      <td class="muted">${i+1}</td>
+      <td><input type="text" class="name f-name" value="${esc(p.name||'')}" placeholder="任意"></td>
+      <td><input type="text" class="coord f-lat" value="${esc(p.lat)}" placeholder="35.xxxxxx"></td>
+      <td><input type="text" class="coord f-lng" value="${esc(p.lng)}" placeholder="139.xxxxxx"></td>
+      <td style="text-align:center;"><input type="checkbox" class="f-stop" ${p.is_stop?'checked':''}></td>
+      <td style="white-space:nowrap;">
+        <button class="iconbtn" onclick="kMove(${i},-1)" ${i===0?'disabled':''} title="上へ">↑</button>
+        <button class="iconbtn" onclick="kMove(${i},1)" ${i===POINTS.length-1?'disabled':''} title="下へ">↓</button>
+        <button class="iconbtn danger" onclick="kDel(${i})" title="削除">✕</button>
+      </td>
+    </tr>`;
   });
-}
-async function loadStaffAddr(){
-  STAFF_ADDR = {};
-  const res = await fetch(`${REST_URL}/rpc/get_staff_directory`, {
-    method:'POST', headers: getH(), body: JSON.stringify({ p_filter: 'active' })
-  });
-  if (!res.ok) return;
-  const rows = await res.json();
-  rows.forEach(r => { if (r && r.id != null) STAFF_ADDR[String(r.id)] = r.address || ''; });
+  h += `</tbody></table></div>`;
+  if(validCount > 10) h += `<div class="warn">⚠️ 地点が${validCount}件あります。Googleマップの道案内リンクは、経由地の数が多いと一部しか反映されないことがあります。「Googleマップで確認する」で、実際にどこまで反映されるか確かめてください。</div>`;
+  h += `</div>`;
+  A.innerHTML = h;
 }
 
-// 経路の両端（自宅側・コース側）の参照。区間が無ければ1本作る
-function ends(c, leg, dir){
-  const s = c.routes[leg][dir];
-  if (!s['区間'].length) s['区間'].push({ '手段':'電車', '乗車':'', '下車':'', '運賃':0 });
-  const segs = s['区間'];
-  const first = segs[0], last = segs[segs.length - 1];
-  return (dir === '出勤')
-    ? { home:{seg:first, key:'乗車'}, course:{seg:last, key:'下車'} }
-    : { home:{seg:last,  key:'下車'}, course:{seg:first, key:'乗車'} };
-}
-function fillHome(ci){
-  const c = model.courses[ci]; const {leg, dir} = c._slot;
-  if (!model.homeAddr){ status('この添乗員の住所が取得できませんでした（従業員マスタで住所を登録してください）', false); return; }
-  const e = ends(c, leg, dir);
-  e.home.seg[e.home.key] = model.homeAddr;
-  render();
-}
-function pickLoc(ci, locId){
-  if (!locId) return;
-  const c = model.courses[ci]; const {leg, dir} = c._slot;
-  const list = COURSE_LOCS[String(c.course_id)] || [];
-  const loc = list.find(x => String(x.id) === String(locId));
-  if (!loc) return;
-  const e = ends(c, leg, dir);
-  e.course.seg[e.course.key] = loc.address || loc.name;
-  c.routes[leg][dir]['場所'] = loc.name;
-  render();
-}
-function toggleLocMgr(ci){ const c = model.courses[ci]; c._editLocs = !c._editLocs; render(); }
-
-// 名称欄の文字でGoogleマップ検索を開く（住所の確認用）
-function mapSearch(inputId){
-  const el = document.getElementById(inputId);
-  const q = el ? (el.value || '').trim() : '';
-  if (!q){ status('先に名称（目印）を入れてください', false); return; }
-  window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q), '_blank');
-}
-
-async function addLocInline(ci){
-  const c = model.courses[ci];
-  const name = (document.getElementById('newlocname-'+ci).value || '').trim();
-  const address = (document.getElementById('newlocaddr-'+ci).value || '').trim();
-  if (!name && !address){ status('名称か住所を入れてください', false); return; }
-  try {
-    const res = await fetch(`${REST_URL}/course_locations`, {
-      method:'POST', headers: getH(),
-      body: JSON.stringify({ course_id: c.course_id, name: name || address, address })
-    });
-    if (!res.ok){ const t = await res.text(); status('追加に失敗：' + t.slice(0,120), false); return; }
-    await loadCourseLocations();
-    c._editLocs = true;
-    status('乗車場所を追加しました', true);
-    render();
-  } catch(e){ status('追加エラー：' + e.message, false); }
-}
-async function saveLoc(ci, locId){
-  const name = (document.getElementById('locname-'+locId).value || '').trim();
-  const address = (document.getElementById('locaddr-'+locId).value || '').trim();
-  if (!name){ status('名称を入れてください', false); return; }
-  try {
-    const res = await fetch(`${REST_URL}/course_locations?id=eq.${locId}`, {
-      method:'PATCH', headers: getH(),
-      body: JSON.stringify({ name, address })
-    });
-    if (!res.ok){ const t = await res.text(); status('保存に失敗：' + t.slice(0,120), false); return; }
-    await loadCourseLocations();
-    model.courses[ci]._editLocs = true;
-    status('保存しました', true);
-    render();
-  } catch(e){ status('保存エラー：' + e.message, false); }
-}
-async function delLoc(ci, locId){
-  if (!confirm('この乗車場所を削除します。よろしいですか？（すでに組んだ経路の文字はそのまま残ります）')) return;
-  try {
-    const res = await fetch(`${REST_URL}/course_locations?id=eq.${locId}`, { method:'DELETE', headers: getH() });
-    if (!res.ok){ const t = await res.text(); status('削除に失敗：' + t.slice(0,120), false); return; }
-    await loadCourseLocations();
-    model.courses[ci]._editLocs = true;
-    status('削除しました', true);
-    render();
-  } catch(e){ status('削除エラー：' + e.message, false); }
-}
-
-async function onStaffChange(){
-  const id = document.getElementById('staffSelect').value;
-  model = { staffId: id ? Number(id) : null, courses: [] };
-  if (!id){ render(); return; }
-  model.homeAddr = jushoHyoji(STAFF_ADDR[String(id)] || '');
-  const res = await fetch(`${REST_URL}/commute_routes?staff_id=eq.${id}&select=*`, { headers: getH() });
-  if (!res.ok){ status('経路の読み込みに失敗しました', false); render(); return; }
-  const rows = await res.json();
-  model.courses = rows.map(r => ({ id: r.id, course_id: r.course_id, active: r.active, routes: normRoutes(r.routes), _slot: { leg:'登校', dir:'出勤' } }));
-  render();
-}
-
-function render(){
-  const area = document.getElementById('coursesArea');
-  const addArea = document.getElementById('addCourseArea');
-  const saveBar = document.getElementById('saveBar');
-  if (!model.staffId){ area.innerHTML=''; addArea.style.display='none'; saveBar.style.display='none'; return; }
-  addArea.style.display='block'; saveBar.style.display='block';
-  const used = new Set(model.courses.map(c => String(c.course_id)));
-  const csel = document.getElementById('courseSelect'); csel.innerHTML='';
-  COURSES.filter(c => !used.has(String(c.id))).forEach(c => {
-    const o = document.createElement('option'); o.value = c.id; o.textContent = `${c.school_name} ／ ${c.course_name}`; csel.appendChild(o);
-  });
-  if (!model.courses.length){ area.innerHTML = '<p class="muted">担当コースがありません。下の「担当コースを追加」から登録してください。</p>'; return; }
-  area.innerHTML = model.courses.map((c, ci) => courseCardHtml(c, ci)).join('');
-}
-
-function courseCardHtml(c, ci){
-  const slot = c._slot; const s = c.routes[slot.leg][slot.dir];
-  // 初回表示時、区間が空なら1本作って自宅側を既定入力（住居表示まで）
-  if (!s._init){
-    s._init = true;
-    if (!s['区間'].length && model.homeAddr){
-      const e0 = ends(c, slot.leg, slot.dir);
-      if (!e0.home.seg[e0.home.key]) e0.home.seg[e0.home.key] = model.homeAddr;
-    }
-  }
-  const tabs = [];
-  LEGS.forEach(l => DIRS.forEach(d => {
-    const on = (l === slot.leg && d === slot.dir);
-    tabs.push(`<button class="tab${on?' active':''}" onclick="setSlot(${ci},'${l}','${d}')">${l}便 ${d}</button>`);
-  }));
-  const segs = s['区間'].map((seg, si) => segHtml(ci, slot.leg, slot.dir, seg, si)).join('');
-  const total = s['区間'].reduce((a, x) => a + (Number(x['運賃'])||0), 0);
-  const locs = COURSE_LOCS[String(c.course_id)] || [];
-  const locOpts = ['<option value="">コースの乗車場所を選ぶ…</option>']
-    .concat(locs.map(l => `<option value="${l.id}">${escHtml(l.name)}${l.address?`（${escHtml(l.address)}）`:''}</option>`)).join('');
-  const homeLbl   = (slot.dir === '出勤') ? '出発地（自宅）'                : '到着地（自宅）';
-  const courseLbl = (slot.dir === '出勤') ? '到着地（コースの乗車場所）'   : '出発地（コースの乗車場所）';
-  const locMgr = c._editLocs ? `
-    <div style="border:1px dashed #cbd8d0;border-radius:8px;padding:10px;margin:0 0 12px;background:#fff;">
-      <div style="font-size:13px;color:#4a5d52;margin-bottom:8px;">乗車場所の編集（このコース）— <b>名称</b>は人が分かる目印、<b>住所</b>は乗換案内の検索に使います</div>
-      ${locs.map(l => `
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;align-items:center;">
-          <input id="locname-${l.id}" value="${escAttr(l.name)}" placeholder="名称（例：みなみ野デニーズ前）" style="flex:1;min-width:150px;">
-          <input id="locaddr-${l.id}" value="${escAttr(l.address)}" placeholder="住所（検索用）" style="flex:2;min-width:190px;">
-          <button class="mini" onclick="mapSearch('locname-${l.id}')">🗺 地図</button>
-          <button class="mini" onclick="saveLoc(${ci},${l.id})">保存</button>
-          <button class="link" onclick="delLoc(${ci},${l.id})">削除</button>
-        </div>`).join('') || '<p class="muted" style="margin:0 0 6px;">まだ登録がありません。下の欄から追加してください。</p>'}
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;border-top:1px solid #eee;padding-top:8px;align-items:center;">
-        <input id="newlocname-${ci}" placeholder="＋ 名称" style="flex:1;min-width:150px;">
-        <input id="newlocaddr-${ci}" placeholder="＋ 住所（検索用）" style="flex:2;min-width:190px;">
-        <button class="mini" onclick="mapSearch('newlocname-${ci}')">🗺 地図</button>
-        <button class="mini" onclick="addLocInline(${ci})">追加</button>
-      </div>
-    </div>` : '';
-  return `<div class="courseCard">
-    <div class="courseHead">
-      <div class="courseTitle">${escHtml(courseLabel(c.course_id))}</div>
-      <button class="link" onclick="delCourse(${ci})">コース削除</button>
-    </div>
-    <div class="tabs">${tabs.join('')}</div>
-    <div style="background:#f6faf7;border:1px solid #e2ede6;border-radius:10px;padding:12px;margin:6px 0 12px;">
-      <div style="display:flex;flex-wrap:wrap;gap:14px;">
-        <div style="flex:1;min-width:230px;">
-          <div class="fld" style="margin:0 0 4px;">🏠 ${homeLbl}</div>
-          <button class="mini" onclick="fillHome(${ci})">住所を入れる</button>
-          <span class="muted" style="font-size:12px;margin-left:6px;">${model.homeAddr ? escHtml(model.homeAddr) : '住所未登録'}</span>
-        </div>
-        <div style="flex:1;min-width:230px;">
-          <div class="fld" style="margin:0 0 4px;">📍 ${courseLbl}</div>
-          <div style="display:flex;gap:6px;">
-            <select onchange="pickLoc(${ci},this.value)" style="flex:1;">${locOpts}</select>
-            <button class="mini" onclick="toggleLocMgr(${ci})">✏️ 編集・追加</button>
-          </div>
-        </div>
-      </div>
-    </div>
-    ${locMgr}
-    <label class="fld">集合場所の名称（表示用・任意／上で選ぶと自動で入ります）</label>
-    <input type="text" value="${escAttr(s['場所'])}" placeholder="例：みなみ野デニーズ前 ／ 車庫" oninput="upd(${ci},'${slot.leg}','${slot.dir}','場所',null,this.value)">
-    <div style="margin:12px 0 6px;font-size:13px;color:#6b7d72;">行程（区間）— 自宅↔乗車場所。乗りかえや「自転車→駅」があれば区間を足してください</div>
-    ${segs || '<p class="muted" style="margin:0 0 8px;">区間がありません。上の「住所を入れる」「乗車場所を選ぶ」で自動作成、または「区間を追加」で足してください。</p>'}
-    <button class="mini" onclick="addSeg(${ci},'${slot.leg}','${slot.dir}')">＋ 区間を追加（乗りかえ）</button>
-    <div class="total"><span class="muted">この行程の運賃 合計</span><span class="amt" id="total-${ci}">¥${total}</span></div>
-    <label class="fld" style="margin-top:10px;">⏱ 移動時間（<b>時:分</b>・公共交通機関のみ）— ${slot.dir==='出勤'?'最寄り駅→乗車場所':'乗車場所→最寄り駅'}の標準所要時間（乗換案内）。<b>自宅↔駅は含めない</b>（勤怠の${slot.dir==='出勤'?'出勤前':'退勤後'}移動時間）</label>
-    <input type="text" inputmode="numeric" value="${escAttr(s['移動時間']||'')}" placeholder="例：1:10" oninput="updIdou(${ci},'${slot.leg}','${slot.dir}',this)">
-  </div>`;
-}
-
-function segHtml(ci, leg, dir, seg, si){
-  const opts = MODES.map(m => `<option ${seg['手段']===m?'selected':''}>${m}</option>`).join('');
-  return `<div class="seg">
-    <div class="line">
-      <select class="mode" onchange="upd(${ci},'${leg}','${dir}','区間',${si},this.value,'手段')">${opts}</select>
-      <input class="st" type="text" value="${escAttr(seg['乗車'])}" placeholder="乗車地" oninput="upd(${ci},'${leg}','${dir}','区間',${si},this.value,'乗車')">
-      <span class="arrow">→</span>
-      <input class="st" type="text" value="${escAttr(seg['下車'])}" placeholder="下車地" oninput="upd(${ci},'${leg}','${dir}','区間',${si},this.value,'下車')">
-    </div>
-    <div class="line">
-      <span>運賃 ¥<input type="number" min="0" step="10" style="width:96px;" value="${Number(seg['運賃'])||0}" oninput="updFare(${ci},'${leg}','${dir}',${si},this.value)"></span>
-      <button class="mini" onclick="yahoo(${ci},'${leg}','${dir}',${si})">乗換案内で調べる</button>
-      <button class="link" onclick="delSeg(${ci},'${leg}','${dir}',${si})">× 削除</button>
-    </div>
-  </div>`;
-}
-
-function setSlot(ci, leg, dir){ model.courses[ci]._slot = { leg, dir }; render(); }
-function upd(ci, leg, dir, field, si, val, subfield){
-  const s = model.courses[ci].routes[leg][dir];
-  if (field === '場所'){ s['場所'] = val; }
-  else if (field === '移動時間'){ s['移動時間'] = val; }
-  else if (field === '区間'){ s['区間'][si][subfield] = val; }
-}
-function updFare(ci, leg, dir, si, val){
-  const s = model.courses[ci].routes[leg][dir];
-  s['区間'][si]['運賃'] = Number(val) || 0;
-  const total = s['区間'].reduce((a, x) => a + (Number(x['運賃'])||0), 0);
-  const el = document.getElementById('total-' + ci); if (el) el.textContent = '¥' + total;
-}
-// 移動時間を「時:分」に統一。「1時間26分」等を貼っても 1:26 に変換し、数字とコロンだけに限定
-function updIdou(ci, leg, dir, el){
-  let v = (el.value || '')
-    .replace(/時間|時/g, ':')   // 1時間26分 → 1:26分
-    .replace(/分/g, '')          // 分 を除去
-    .replace(/[^\d:]/g, '');     // 数字とコロン以外を除去
-  const p = v.split(':');
-  if (p.length > 2) v = p[0] + ':' + p.slice(1).join('');  // コロンは1つまで
-  el.value = v;
-  upd(ci, leg, dir, '移動時間', null, v);
-}
-function addSeg(ci, leg, dir){ model.courses[ci].routes[leg][dir]['区間'].push({ '手段':'電車', '乗車':'', '下車':'', '運賃':0 }); render(); }
-function delSeg(ci, leg, dir, si){ model.courses[ci].routes[leg][dir]['区間'].splice(si, 1); render(); }
-function addCourse(){
-  const cid = Number(document.getElementById('courseSelect').value);
-  if (!cid) return;
-  model.courses.push({ course_id: cid, active: true, routes: emptyRoutes(), _slot: { leg:'登校', dir:'出勤' } });
-  render();
-}
-async function delCourse(ci){
-  const c = model.courses[ci];
-  if (!confirm('このコースの経路を削除します。よろしいですか？')) return;
-  if (c.id){
-    const res = await fetch(`${REST_URL}/commute_routes?id=eq.${c.id}`, { method:'DELETE', headers: getH() });
-    if (!res.ok){ status('削除に失敗しました', false); return; }
-  }
-  model.courses.splice(ci, 1); render(); status('コースを削除しました', true);
-}
-function yahoo(ci, leg, dir, si){
-  const seg = model.courses[ci].routes[leg][dir]['区間'][si];
-  if (!seg['乗車'] || !seg['下車']){ status('乗車地と下車地を入れてから調べてください', false); return; }
-  const url = 'https://transit.yahoo.co.jp/search/result?from=' + encodeURIComponent(seg['乗車']) + '&to=' + encodeURIComponent(seg['下車']) + '&ticket=normal';
+/** 画面の並びから、Googleマップの道案内URLを組み立てて開く */
+function kOpenMaps(){
+  kSyncFromInputs();
+  const pts = POINTS.filter(p=>p.lat!==''&&p.lng!=='').map(p=>`${Number(p.lat)},${Number(p.lng)}`);
+  if(pts.length < 2){ alert('地点を2つ以上入れてください。'); return; }
+  const origin = pts[0], destination = pts[pts.length-1], waypoints = pts.slice(1,-1);
+  let url = `https://www.google.com/maps/dir/?api=1&travelmode=driving&origin=${origin}&destination=${destination}`;
+  if(waypoints.length) url += `&waypoints=${waypoints.join('|')}`;
   window.open(url, '_blank');
 }
-function saveStatus(msg, ok){
-  const el = document.getElementById('saveMsg');
-  if (!el) return;
-  el.textContent = msg;
-  el.style.color = ok ? '#2e7d46' : '#c0392b';
-  if (ok) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 5000);
-}
-async function saveAll(){
-  if (!model.staffId) return;
-  const rows = model.courses.map(c => {
-    const routes = JSON.parse(JSON.stringify(c.routes));
-    LEGS.forEach(l => DIRS.forEach(d => {
-      const s = routes[l][d];
-      delete s._init;
-      s['交通費'] = s['区間'].reduce((a, x) => a + (Number(x['運賃'])||0), 0);
-      s['手段'] = [...new Set(s['区間'].map(x => x['手段']).filter(Boolean))].join('・');
-    }));
-    const row = { staff_id: model.staffId, course_id: c.course_id, routes };
-    if (c.id) row.id = c.id;
-    return row;
-  });
-  if (!rows.length){ status('保存する経路がありません', false); saveStatus('保存する経路がありません', false); return; }
-  try {
-    const url = `${REST_URL}/commute_routes?on_conflict=staff_id,course_id`;
-    const doPost = () => fetch(url, {
-      method: 'POST',
-      headers: { ...getH(), 'Prefer': 'resolution=merge-duplicates,return=representation' },
-      body: JSON.stringify(rows)
-    });
-    await ensureFreshToken();          // 期限が近ければ先に更新
-    let res = await doPost();
-    if (res.status === 401){           // 期限切れ → 自動更新して1回だけ再試行（入力は保持）
-      saveStatus('ログインを更新して再保存します…', true);
-      if (await refreshSession()) res = await doPost();
-    }
-    if (!res.ok){
-      const t = await res.text();
-      if (res.status === 401 || t.includes('JWT')){
-        status('ログインの有効期限が切れました。再読み込み→ログイン後にもう一度保存してください（入力はこのまま残っています）', false);
-        saveStatus('ログイン切れ：再読み込み→ログインしてください', false);
-      } else {
-        status('保存に失敗しました：' + t.slice(0,140), false);
-        saveStatus('保存に失敗しました', false);
-      }
-      return;
-    }
-    status('保存しました', true);
-    saveStatus('✅ 保存しました', true);
-    onStaffChange();
-  } catch(e){ status('保存エラー：' + e.message, false); saveStatus('保存エラー：' + e.message, false); }
+
+async function kSave(){
+  kSyncFromInputs();
+  const courseId = Number(document.getElementById('kCourse').value);
+  const segment = document.getElementById('kSeg').value;
+  const rows = POINTS.filter(p=>p.lat!==''&&p.lng!=='').map((p,i)=>({
+    course_id: courseId, segment, seq: i+1,
+    name: p.name || null, lat: Number(p.lat), lng: Number(p.lng), is_stop: !!p.is_stop,
+  }));
+  if(!rows.length){ status('保存する地点がありません。', false); return; }
+
+  // 入れ直す（一旦削除してから全件挿入。並び替え・削除も反映されるように）
+  const del = await fetch(`${REST_URL}/course_route_points?course_id=eq.${courseId}&segment=eq.${encodeURIComponent(segment)}`,
+    { method:'DELETE', headers:getH() });
+  if(!del.ok){ status('保存に失敗しました（削除段階）：' + await del.text(), false); return; }
+
+  const ins = await fetch(`${REST_URL}/course_route_points`, {
+    method:'POST', headers: Object.assign(getH(), {'Prefer':'return=minimal'}), body: JSON.stringify(rows) });
+  if(!ins.ok){ status('保存に失敗しました：' + await ins.text(), false); return; }
+
+  status(`保存しました（${rows.length}地点）。`, true);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  const ok = await initAuth(['super_admin','admin','operator','staff']);
-  if (!ok) return;
-  setInterval(() => { refreshSession(); }, 45 * 60 * 1000);  // 開いている間、定期的にトークンを更新して期限切れを防ぐ
-  document.getElementById('staffSelect').addEventListener('change', onStaffChange);
-  try {
-    await loadStaff();
-    await loadCourses();
-    await loadCourseLocations();
-    await loadStaffAddr();
-    status('準備ができました。添乗員をえらんでください。', true);
-  } catch(e){ status('データ読み込みエラー：' + e.message, false); }
+  const ok = await initAuth(['super_admin','admin','operator']);
+  if(!ok) return;
+  await kInit();
 });
-
 </script>
 </body>
 </html>
