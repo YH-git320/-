@@ -908,6 +908,7 @@ let SCEN = {};    // course_id(String) -> [{dbId?,segment,label,pts:[{phase,kind
 let RPTS = {};    // course_id(String) -> { '登校':[{name,lat,lng,is_stop}], '下校①':[...], '下校②':[...] } 経路点（版に属する）
 let selRSeg = '登校';  // ④経路タブで編集中の便
 let rptSelIdx = null;  // ④経路タブで選んでいる行（この行の上に地点を差し込む）
+let rptNoteOpen = {};  // ④経路タブで注意書きの欄を開いている行（便ごと・空でも開けるように）
 let tpOpen = false;   // ⑤パネルの開閉状態（再描画で保持）
 const SEG_PHASES = { '登校':['登校前','登校後'], '下校':['下校前','下校後'] };
 const PHASE_SETTINGS = { '登校前':['shussha','shukko'], '下校前':['shukko'], '登校後':[], '下校後':[] };
@@ -980,10 +981,10 @@ async function loadStops(){
 // 各コースの最新版の経路点をバッファへ（コースを選ぶ前の一覧表示用）
 async function loadRoutePointsLatest(){
   RPTS = {};
-  const res = await fetch(`${REST_URL}/course_route_points?select=course_id,version_id,segment,seq,name,lat,lng,is_stop,split_here&order=segment,seq`, { headers: getH() });
+  const res = await fetch(`${REST_URL}/course_route_points?select=course_id,version_id,segment,seq,name,lat,lng,is_stop,split_here,note&order=segment,seq`, { headers: getH() });
   if (res.ok){ (await res.json()).forEach(r=>{ if(r.version_id!==latestVerId(r.course_id)) return; const k=String(r.course_id);
     RPTS[k] = RPTS[k] || _emptyRpts();
-    if(RPTS[k][r.segment]) RPTS[k][r.segment].push({ name:r.name||'', lat:(r.lat==null?'':String(r.lat)), lng:(r.lng==null?'':String(r.lng)), is_stop:!!r.is_stop, split_here:!!r.split_here });
+    if(RPTS[k][r.segment]) RPTS[k][r.segment].push({ name:r.name||'', lat:(r.lat==null?'':String(r.lat)), lng:(r.lng==null?'':String(r.lng)), is_stop:!!r.is_stop, split_here:!!r.split_here, note:(r.note||'') });
   }); }
 }
 // 指定コース・指定版の内容をバッファへ（版切替・新版作成後）
@@ -993,9 +994,9 @@ async function loadVersionInto(cid, verId){
   FORMS[k] = rf.ok ? (await rf.json()).map(_mapForm) : []; FORMS[k].sort(_cmpForm);
   const rs = await fetch(`${REST_URL}/course_locations?version_id=eq.${verId}&select=name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_overrides&order=seq.nullslast,name`, { headers: getH() });
   STOPS[k] = rs.ok ? (await rs.json()).map(_mapStop) : [];
-  const rr = await fetch(`${REST_URL}/course_route_points?version_id=eq.${verId}&select=segment,seq,name,lat,lng,is_stop,split_here&order=segment,seq`, { headers: getH() });
+  const rr = await fetch(`${REST_URL}/course_route_points?version_id=eq.${verId}&select=segment,seq,name,lat,lng,is_stop,split_here,note&order=segment,seq`, { headers: getH() });
   const box = _emptyRpts();
-  if (rr.ok) (await rr.json()).forEach(r=>{ if(box[r.segment]) box[r.segment].push({ name:r.name||'', lat:(r.lat==null?'':String(r.lat)), lng:(r.lng==null?'':String(r.lng)), is_stop:!!r.is_stop, split_here:!!r.split_here }); });
+  if (rr.ok) (await rr.json()).forEach(r=>{ if(box[r.segment]) box[r.segment].push({ name:r.name||'', lat:(r.lat==null?'':String(r.lat)), lng:(r.lng==null?'':String(r.lng)), is_stop:!!r.is_stop, split_here:!!r.split_here, note:(r.note||'') }); });
   RPTS[k] = box;
 }
 async function loadScenarios(){
@@ -1085,12 +1086,12 @@ async function createVersion(){
     const [sf,ss,sr]=await Promise.all([
       fetch(`${REST_URL}/course_schedule_forms?version_id=eq.${srcVid}&select=form_name,gekou_departures,after_toukou,after_toukou_place,after_toukou_addr,after_toukou_coord,dep_overrides`, { headers:getH() }),
       fetch(`${REST_URL}/course_locations?version_id=eq.${srcVid}&select=name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_overrides`, { headers:getH() }),
-      fetch(`${REST_URL}/course_route_points?version_id=eq.${srcVid}&select=segment,seq,name,lat,lng,is_stop,split_here`, { headers:getH() })
+      fetch(`${REST_URL}/course_route_points?version_id=eq.${srcVid}&select=segment,seq,name,lat,lng,is_stop,split_here,note`, { headers:getH() })
     ]);
     const forms=(sf.ok?await sf.json():[]).map(r=>({ course_id:c.id, version_id:newId, form_name:r.form_name, gekou_departures:r.gekou_departures, after_toukou:r.after_toukou, after_toukou_place:r.after_toukou_place, after_toukou_addr:r.after_toukou_addr, after_toukou_coord:r.after_toukou_coord, dep_overrides:r.dep_overrides||{} }));
     const stops=(ss.ok?await ss.json():[]).map(r=>({ course_id:c.id, version_id:newId, name:r.name, address:r.address, seq:r.seq, toukou_time:r.toukou_time, gekou_offset:r.gekou_offset, gekou_only:r.gekou_only, coord:r.coord, gekou_overrides:r.gekou_overrides||{}, in_gekou:(r.gekou_offset!=null) }));
     if(forms.length){ const r=await fetch(`${REST_URL}/course_schedule_forms`, { method:'POST', headers:getH(), body:JSON.stringify(forms) }); if(!r.ok){ const t=await r.text(); _saveMsg('日課の複製に失敗：'+t.slice(0,120), false); return; } }
-    const rpts=(sr.ok?await sr.json():[]).map(r=>({ course_id:c.id, version_id:newId, segment:r.segment, seq:r.seq, name:r.name, lat:r.lat, lng:r.lng, is_stop:r.is_stop, split_here:r.split_here }));
+    const rpts=(sr.ok?await sr.json():[]).map(r=>({ course_id:c.id, version_id:newId, segment:r.segment, seq:r.seq, name:r.name, lat:r.lat, lng:r.lng, is_stop:r.is_stop, split_here:r.split_here, note:r.note }));
     if(stops.length){ const r=await fetch(`${REST_URL}/course_locations`, { method:'POST', headers:getH(), body:JSON.stringify(stops) }); if(!r.ok){ const t=await r.text(); _saveMsg('停留所の複製に失敗：'+t.slice(0,120), false); return; } }
     if(rpts.length){ const r=await fetch(`${REST_URL}/course_route_points`, { method:'POST', headers:getH(), body:JSON.stringify(rpts) }); if(!r.ok){ const t=await r.text(); _saveMsg('経路点の複製に失敗：'+t.slice(0,120), false); return; } }
     await loadVersions(); selVerId=newId; await loadVersionInto(c.id, newId);
@@ -1481,7 +1482,8 @@ function rptDistances(){
 }
 // 再描画の前に、画面で入力中の値を拾っておく（拾わずに描き直すと入力が消える）
 function rptSyncFromInputs(){
-  const rows=document.querySelectorAll('#rptTable tbody tr');
+  // 注意書きのサブ行が混ざると行番号がずれるので、本体の行だけを拾う
+  const rows=document.querySelectorAll('#rptTable tbody tr.rp-row');
   if(!rows.length) return;
   const pts=_rpts();
   rows.forEach((tr,i)=>{
@@ -1493,6 +1495,9 @@ function rptSyncFromInputs(){
     if(ln) pts[i].lng=ln.value;
     if(st) pts[i].is_stop=st.checked;
     if(ct) pts[i].split_here=ct.checked;
+    // 注意書きは次の行（開いているときだけ存在する）にある
+    const nt=tr.nextElementSibling && tr.nextElementSibling.querySelector('.rp-note');
+    if(nt) pts[i].note=nt.value;
   });
 }
 function setRSeg(seg){ rptSyncFromInputs(); selRSeg=seg; rptSelIdx=null; renderEditor(); }
@@ -1500,7 +1505,7 @@ function setRSeg(seg){ rptSyncFromInputs(); selRSeg=seg; rptSelIdx=null; renderE
 /** 行を選ぶ。差し込み先の目印なので、再描画はせず色とボタンの文字だけ変える（入力中の値を消さないため） */
 function rptSelect(i){
   rptSelIdx = (rptSelIdx===i) ? null : i;   // 同じ行をもう一度押すと選択解除
-  document.querySelectorAll('#rptTable tbody tr').forEach(function(tr,k){
+  document.querySelectorAll('#rptTable tbody tr.rp-row').forEach(function(tr,k){
     tr.style.background = (k===rptSelIdx) ? '#eef4ef' : '';
   });
   var b = document.getElementById('rptAddBtn');
@@ -1513,13 +1518,13 @@ function rptAdd(at){
   var pts=_rpts();
   if(at==null) at = (rptSelIdx==null) ? pts.length : rptSelIdx;
   if(at<0) at=0; if(at>pts.length) at=pts.length;
-  pts.splice(at, 0, { name:'', lat:'', lng:'', is_stop:false, split_here:false });
+  pts.splice(at, 0, { name:'', lat:'', lng:'', is_stop:false, split_here:false, note:'' });
   // 差し込んだ位置より下の行は1つずつ下がる。選んでいた行もそれに合わせて動かす
   // （選んだ行の上に足した場合は選択がその行を追い続けるので、続けて足すと進行方向どおりに並ぶ）
   if(rptSelIdx!=null && rptSelIdx>=at) rptSelIdx++;
   renderEditor();
   // 差し込んだ行の緯度欄へすぐ入力できるようにする
-  var tr = document.querySelectorAll('#rptTable tbody tr')[at];
+  var tr = document.querySelectorAll('#rptTable tbody tr.rp-row')[at];
   if(tr){ var el=tr.querySelector('.rp-lat'); if(el){ el.focus(); } }
 }
 function rptMove(i,dir){
@@ -1537,6 +1542,16 @@ function rptDel(i){
   renderEditor();
 }
 function rptRecalc(){ rptSyncFromInputs(); renderEditor(); }
+/** 注意書きの欄を開く／閉じる（中身があるときは常に開いたまま） */
+function rptNote(i){
+  rptSyncFromInputs();
+  const k=selRSeg+'|'+i;
+  if(rptNoteOpen[k]) delete rptNoteOpen[k]; else rptNoteOpen[k]=true;
+  renderEditor();
+  const tr=document.querySelectorAll('#rptTable tbody tr.rp-row')[i];
+  const el=tr && tr.nextElementSibling && tr.nextElementSibling.querySelector('.rp-note');
+  if(el) el.focus();
+}
 
 /** 緯度・経度欄に「35.5442, 139.7043」や度分秒をそのまま貼っても、2つに分けて入れる */
 function rptCoordIn(el){
@@ -1559,7 +1574,7 @@ function rptFillFromStops(){
   const pts=[], skipped=[];
   src.forEach(s=>{
     const c=dmsToDecimal(s.coord);
-    if(c) pts.push({ name:s.name||'', lat:String(c.lat), lng:String(c.lng), is_stop:true, split_here:false });
+    if(c) pts.push({ name:s.name||'', lat:String(c.lat), lng:String(c.lng), is_stop:true, split_here:false, note:'' });
     else if((s.name||'').trim()) skipped.push(s.name);
   });
   if(!pts.length){ _saveMsg('②のバス停に座標が入っていません。先にバス停の「座標」欄を埋めてください。', false); return; }
@@ -1577,7 +1592,7 @@ function rptCopyFrom(srcSeg){
   rptSyncFromInputs();
   const cur = box[selRSeg] || [];
   if(cur.length && !confirm(`いま開いている${R_SEG_LABEL[selRSeg]}の${cur.length}地点を、${R_SEG_LABEL[srcSeg]}の${src.length}地点で置き換えます。よろしいですか。`)) return;
-  box[selRSeg] = src.map(p=>({ name:p.name, lat:p.lat, lng:p.lng, is_stop:p.is_stop, split_here:p.split_here }));
+  box[selRSeg] = src.map(p=>({ name:p.name, lat:p.lat, lng:p.lng, is_stop:p.is_stop, split_here:p.split_here, note:p.note }));
   rptSelIdx = null;
   renderEditor();
   _saveMsg(`${R_SEG_LABEL[srcSeg]}から ${src.length}地点をコピーしました。違うところだけ直してください。`, true);
@@ -1709,7 +1724,9 @@ function renderRoutePoints(){
     const on=(rptSelIdx===i);
     const warn=warnIdx.has(i);
     const ib='background:none;border:none;cursor:pointer;padding:3px 5px;font-size:16px;line-height:1;';
-    return `<tr onclick="rptSelect(${i})" style="cursor:pointer;${on?'background:#eef4ef;':(warn?'background:#fff8e8;':'')}" title="${warn?'並び順が逆になっていないか確認してください':'この行を選ぶと、上に地点を差し込めます'}">
+    const hasNote=!!(p.note||'').trim();
+    const noteOpen=hasNote || rptNoteOpen[selRSeg+'|'+i];
+    return `<tr class="rp-row" onclick="rptSelect(${i})" style="cursor:pointer;${on?'background:#eef4ef;':(warn?'background:#fff8e8;':'')}" title="${warn?'並び順が逆になっていないか確認してください':'この行を選ぶと、上に地点を差し込めます'}">
       <td class="muted" style="text-align:right;padding:5px 6px;font-size:14px;${warn?'color:#8a6d1a;font-weight:700;':''}">${warn?'⚠':''}${i+1}</td>
       <td style="padding:5px 6px;"><input type="text" class="rp-name" value="${escAttr(p.name||'')}" placeholder="例：○○交差点" style="width:100%;min-width:100px;font-size:15px;padding:7px 9px;"></td>
       <td style="padding:5px 6px;"><input type="text" class="rp-lat" value="${escAttr(p.lat)}" placeholder="35.xxxxxx" onchange="rptCoordIn(this)" title="「35.5442, 139.7043」のまま貼っても分けて入ります" style="width:112px;font-size:15px;padding:7px 9px;"></td>
@@ -1719,12 +1736,18 @@ function renderRoutePoints(){
       <td class="muted" style="white-space:nowrap;padding:5px 6px;font-size:14px;text-align:right;">${d&&d.seg!=null?d.seg.toFixed(2):''}</td>
       <td class="muted" style="white-space:nowrap;padding:5px 6px;font-size:14px;text-align:right;">${d?d.cum.toFixed(2):''}</td>
       <td style="white-space:nowrap;padding:5px 4px;text-align:right;">
+        <button onclick="event.stopPropagation();rptNote(${i})" title="${hasNote?'注意書きあり':'注意書きを入れる'}" style="${ib}${hasNote?'color:#c0392b;':'color:#b9c7bd;'}">📝</button>
         <button onclick="event.stopPropagation();rptAdd(${i})" title="この行の上に地点を差し込む" style="${ib}color:var(--g);font-weight:700;">＋</button>
         <button onclick="event.stopPropagation();rptMove(${i},-1)" ${i===0?'disabled':''} title="上へ" style="${ib}color:var(--g);${i===0?'opacity:.3;cursor:default;':''}">▲</button>
         <button onclick="event.stopPropagation();rptMove(${i},1)" ${i===pts.length-1?'disabled':''} title="下へ" style="${ib}color:var(--g);${i===pts.length-1?'opacity:.3;cursor:default;':''}">▼</button>
         <button onclick="event.stopPropagation();rptDel(${i})" title="この地点を削除" style="${ib}color:#c0392b;">✕</button>
       </td>
-    </tr>`;
+    </tr>`
+    + (noteOpen?`<tr><td></td><td colspan="8" style="padding:0 6px 8px;">
+        <input type="text" class="rp-note" value="${escAttr(p.note||'')}" onchange="rptRecalc()"
+          placeholder="この地点の注意書き（例：商店街は8:00過ぎ通行禁止／裏門チェーンキー No6022）"
+          style="width:100%;font-size:14px;padding:7px 9px;border-color:#e8d9b0;background:#fffdf6;">
+      </td></tr>`:'');
   }).join('');
   return `
     <div class="muted" style="font-size:13px;margin:2px 0 10px;line-height:1.8;">
@@ -1811,7 +1834,7 @@ async function saveCourse(){
     R_SEGS.forEach(seg=>{
       const list=((RPTS[key]||{})[seg]||[]).filter(p=>String(p.lat).trim()!==''&&String(p.lng).trim()!=='');
       list.forEach((p,i)=>rptRows.push({ course_id:c.id, version_id:selVerId, segment:seg, seq:i+1,
-        name:(p.name||'').trim()||null, lat:Number(p.lat), lng:Number(p.lng), is_stop:!!p.is_stop, split_here:!!p.split_here }));
+        name:(p.name||'').trim()||null, lat:Number(p.lat), lng:Number(p.lng), is_stop:!!p.is_stop, split_here:!!p.split_here, note:(p.note||'').trim()||null }));
     });
     if(rptRows.length){ const r35=await fetch(`${REST_URL}/course_route_points`, { method:'POST', headers:getH(), body:JSON.stringify(rptRows) }); if(!r35.ok){ const t=await r35.text(); _saveMsg('経路点の保存に失敗：'+t.slice(0,100), false); return; } }
     // 4) 送迎シナリオ（このコースを置き換え）— scenarios削除で points/settings も連動削除
