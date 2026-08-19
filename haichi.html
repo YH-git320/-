@@ -94,7 +94,7 @@ button.mini{font-size:12px;padding:6px 10px;}
       <input type="month" id="hMonth" style="width:auto;">
       <input id="hFilter" type="text" placeholder="学校名・コース名でしぼり込み" style="flex:1;min-width:140px;">
       <select id="hPref" style="width:auto;"><option value="">全都県</option><option value="東京都">東京都</option><option value="神奈川県">神奈川県</option></select>
-      <button class="primary" onclick="hSave()">💾 変更を保存</button>
+      <button id="hSaveBtn" class="primary" onclick="hSave()">💾 変更を保存</button>
       <span id="hDirty" class="muted" style="font-size:12px;"></span>
     </div>
     <div class="row" style="margin-top:8px;">
@@ -1591,10 +1591,21 @@ function _dirtyView(){
 }
 
 /* ---------- 保存 ---------- */
+/* 保存が二重に走らないようにする鍵。
+   2026-08-19：unkou.html で「反応が無いので何度も押した」ことが原因の事故があったため、
+   同じ作りの保存にも、押している間が分かる表示と二重押し防止を入れる */
+let _hSaving = false;
+
 async function hSave(){
+  if(_hSaving){ status('保存中です。そのままお待ちください。', false); return; }
   const keys=Object.keys(DIRTY);
   const vkeys=Object.keys(DIRTYV);
   if(!keys.length && !vkeys.length){ status('変更はありません', true); return; }
+  _hSaving = true;
+  const _b = document.getElementById('hSaveBtn');
+  const _label = _b ? _b.textContent : '';
+  if(_b){ _b.disabled=true; _b.textContent='⏳ 保存中…'; _b.style.opacity='0.7'; }
+  status('保存しています…', true);
   try{
     // 車両（duties 側の更新）
     for(const id of vkeys){
@@ -1619,6 +1630,12 @@ async function hSave(){
     await hLoadMonth(); await hLoadHist(); hRender();
     status('保存しました', true);
   }catch(e){ status('保存に失敗しました：'+e.message, false); }
+  finally{
+    // どの抜け方をしても必ず鍵を外し、ボタンを戻す
+    _hSaving = false;
+    const b=document.getElementById('hSaveBtn');
+    if(b){ b.disabled=false; b.textContent=_label||'💾 変更を保存'; b.style.opacity=''; }
+  }
 }
 
 /* ---------- 便の生成 ---------- */
