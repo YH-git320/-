@@ -1572,15 +1572,46 @@ function rptCopyFrom(srcSeg){
   _saveMsg(`${R_SEG_LABEL[srcSeg]}から ${src.length}地点をコピーしました。違うところだけ直してください。`, true);
 }
 
-/** 今の並びからGoogleマップの道案内を開く（経路の計算はGoogleマップ側。費用はかかりません） */
-function rptOpenMaps(){
-  rptSyncFromInputs();
-  const pts=_rpts().filter(p=>String(p.lat).trim()!==''&&String(p.lng).trim()!=='').map(p=>`${Number(p.lat)},${Number(p.lng)}`);
-  if(pts.length<2){ _saveMsg('地点を2つ以上入れてください。', false); return; }
-  const origin=pts[0], destination=pts[pts.length-1], via=pts.slice(1,-1);
-  let url=`https://www.google.com/maps/dir/?api=1&travelmode=driving&origin=${origin}&destination=${destination}`;
+/* ===== Googleマップの道案内リンク =====
+   確かめたこと（2026-08-19・実際にGoogleマップへ渡して確認）：
+   ・経由地は9か所までしか受け付けない。10個以上渡すと超えた分は黙って捨てられる
+   ・指定しないと首都高を使うルートになる（六郷→大塚ろう学校で34.0km・有料区間あり）。
+     avoid=tolls,highways を付けると一般道だけの28.9kmになる。区切りは「,」で、「|」では効かない
+   → そこで、バス停ごとに区間を分けてリンクを作る。1区間あたり9か所まで目印を置ける。 */
+const RPT_MAX_VIA = 9;
+
+/** バス停（停のチェック）で区切って、区間ごとの地点の並びを返す */
+function rptLegs(){
+  const pts=_rpts().filter(p=>String(p.lat).trim()!==''&&String(p.lng).trim()!=='');
+  if(pts.length<2) return [];
+  // 区切り位置＝バス停。先頭と末尾は必ず区切りにする
+  const cuts=[0];
+  pts.forEach((p,i)=>{ if(i>0 && i<pts.length-1 && p.is_stop) cuts.push(i); });
+  cuts.push(pts.length-1);
+  const legs=[];
+  for(let k=0;k<cuts.length-1;k++){
+    const a=cuts[k], b=cuts[k+1];
+    legs.push({
+      from: pts[a].name || `${a+1}番目`,
+      to:   pts[b].name || `${b+1}番目`,
+      pts:  pts.slice(a, b+1)
+    });
+  }
+  return legs;
+}
+function rptLegUrl(leg){
+  const c=leg.pts.map(p=>`${Number(p.lat)},${Number(p.lng)}`);
+  const via=c.slice(1,-1).slice(0, RPT_MAX_VIA);   // 9か所を超えた分は渡しても捨てられる
+  let url=`https://www.google.com/maps/dir/?api=1&travelmode=driving&avoid=tolls,highways`
+        + `&origin=${c[0]}&destination=${c[c.length-1]}`;
   if(via.length) url+=`&waypoints=${via.join('|')}`;
-  window.open(url,'_blank');
+  return url;
+}
+function rptOpenLeg(i){
+  rptSyncFromInputs();
+  const legs=rptLegs();
+  if(!legs[i]){ _saveMsg('地点を2つ以上入れてください。', false); return; }
+  window.open(rptLegUrl(legs[i]), '_blank');
 }
 
 function renderRoutePoints(){
@@ -1600,6 +1631,21 @@ function renderRoutePoints(){
   }).join('');
   const copyRow = copyBtns ? `<div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">
       ${copyBtns}<span class="muted" style="font-size:13px;">下校便は原則どの便も同じ道です。コピーしてから、違うところだけ直してください。</span>
+    </div>` : '';
+  // Googleマップの道案内は、バス停で区切った区間ごとに開く（経由地9か所の制限に収めるため）
+  const legs = rptLegs();
+  const legRow = legs.length ? `<div style="background:#f6faf7;border:1px solid #e2ede6;border-radius:8px;padding:9px 12px;margin-bottom:10px;">
+      <div style="font-size:13px;color:#2d4a38;font-weight:700;margin-bottom:6px;">🗺 Googleマップで道を確かめる${legs.length>1?`（バス停ごとに${legs.length}区間）`:''}</div>
+      <div class="line" style="gap:6px;flex-wrap:wrap;">
+        ${legs.map((g,i)=>{
+          const via=g.pts.length-2, over=via>RPT_MAX_VIA;
+          return `<button class="mini" onclick="rptOpenLeg(${i})" title="${escAttr(g.from)} から ${escAttr(g.to)} までをGoogleマップで開きます（目印${via}か所）"${over?' style="border-color:#c0392b;color:#c0392b;"':''}>${escHtml(g.from)} → ${escHtml(g.to)}${over?' ⚠':''}</button>`;
+        }).join('')}
+      </div>
+      <div class="muted" style="font-size:12px;margin-top:6px;">
+        Googleマップは<b>経由地を9か所まで</b>しか受け付けないため、バス停で区切って開きます（「バス停」にチェックを入れた地点が区切りです）。
+        <b>有料道路・高速道路は使わない</b>設定で開きます。${legs.some(g=>g.pts.length-2>RPT_MAX_VIA)?'<br><span style="color:#c0392b;font-weight:700;">⚠ の区間は目印が9か所を超えています。超えた分は反映されません。バス停を挟むか、目印を減らしてください。</span>':''}
+      </div>
     </div>` : '';
   const rows = pts.map((p,i)=>{
     const d=dist.byIdx[i];
@@ -1633,9 +1679,8 @@ function renderRoutePoints(){
     <div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;">
       <button class="mini" onclick="rptFillFromStops()">②のバス停から並びを作る</button>
       <button class="mini" id="rptAddBtn" onclick="rptAdd()">${rptSelIdx==null?'＋ 最後に地点を追加':'＋ '+(rptSelIdx+1)+'番の上に差し込む'}</button>
-      <span style="flex:1;"></span>
-      <button class="mini" onclick="rptOpenMaps()" ${valid<2?'disabled':''}>🗺 Googleマップで確認する</button>
     </div>
+    ${legRow}
     <div class="muted" style="font-size:13px;margin:-4px 0 10px;line-height:1.8;">
       <b>間に差し込むには</b>：差し込みたい場所の<b>下の行をクリックして選ぶ</b>（薄い緑になります）→ 上の「◯番の上に差し込む」を押すと、その上に空欄の行が入ります。
       各行の <b>＋</b> でも同じことができます（その行の上に入ります）。<br>
@@ -1657,7 +1702,7 @@ function renderRoutePoints(){
       </tr></thead>
       <tbody>${rows||'<tr><td colspan="8" class="muted" style="padding:10px 6px;">まだ地点がありません。「②のバス停から並びを作る」で下書きを作れます。</td></tr>'}</tbody>
     </table></div>
-    ${valid>10?`<div class="muted" style="font-size:13px;margin-top:8px;color:#8a6d1a;background:#fff8e8;border:1px solid #e8d9b0;border-radius:8px;padding:7px 11px;">⚠️ 地点が${valid}件あります。Googleマップの道案内リンクは経由地が多いと一部しか反映されないことがあります。「Googleマップで確認する」で実際の反映を確かめてください。</div>`:''}`;
+    `;
 }
 
 async function saveCourse(){
