@@ -89,7 +89,7 @@ table.list tr:hover td{background:#f7faf8;}
     <div class="tab" id="tabList"   onclick="jSetTab('list')">📋 実績一覧</div>
     <div class="tab" id="tabSum"    onclick="jSetTab('sum')">📈 集計</div>
     <div class="tab" id="tabStop"   onclick="jSetTab('stop')">🚏 回送中の停車</div>
-    <div class="tab" id="tabIssue"  onclick="jSetTab('issue')">🚌 運転日報の発行</div>
+    <div class="tab" id="tabIssue"  onclick="jSetTab('issue')">🚌 運転手へのリンク発行</div>
   </div>
 
   <!-- ===== 取込 ===== -->
@@ -225,9 +225,24 @@ table.list tr:hover td{background:#f7faf8;}
         <button class="mini" onclick="uLoadCandidates()">この日の候補を読み込む</button>
       </div>
       <div class="muted" style="font-size:11px;line-height:1.8;margin-top:8px;">
-        その日に<b>運転手として乗った便</b>、または<b>デジタコの実績がある方</b>を候補として出します。<br>
-        リンクは<b>本人専用</b>です。開くと乗車人数の確認とメーターの確認ができ、送信すると運転日報として記録されます。<br>
+        その日に<b>運転手として乗る便が決まっている方</b>、または<b>デジタコの実績がある方</b>を候補として出します。<br>
+        リンクは<b>本人専用</b>です。<b>🚌 運行ボタン</b>は運転中にバス停ごとの記録と道案内に使い、<b>📝 運転日報</b>は運行のあと乗車人数とメーターを確認して送信します。<br>
         メールが登録されている方には<b>送信</b>できます。登録がない方は<b>リンクをコピー</b>して、事務所の端末等でお渡しください。
+      </div>
+      <div class="row" style="align-items:center;margin-top:10px;flex-wrap:wrap;gap:14px;">
+        <span class="muted" style="min-width:auto;">メールに入れるリンク</span>
+        <label style="font-size:13px;display:flex;align-items:center;gap:5px;white-space:nowrap;">
+          <input type="checkbox" id="uLinkBtn" style="width:auto;" checked> 🚌 運行ボタン（運転中に押す）
+        </label>
+        <label style="font-size:13px;display:flex;align-items:center;gap:5px;white-space:nowrap;">
+          <input type="checkbox" id="uLinkNip" style="width:auto;" checked> 📝 運転日報（運行のあと）
+        </label>
+      </div>
+      <div style="margin-top:10px;padding:9px 12px;border-radius:8px;background:#fdf7ee;border:1px solid #e8d9b0;font-size:12px;line-height:1.8;">
+        ⚠️ リンクは<b>運転手ひとりにつき、その日1本</b>です。運行ボタンと運転日報は<b>同じリンクの入口違い</b>なので、
+        朝に1回発行して<b>両方まとめて送る</b>のがおすすめです。<br>
+        <b>同じ人・同じ日にもう一度発行すると、前のリンクは使えなくなります。</b>運行中の発行し直しは、
+        走っているタブレットのリンクが切れるのでご注意ください。
       </div>
       <div class="row" style="align-items:center;margin-top:10px;">
         <label style="font-size:13px;display:flex;align-items:center;gap:5px;white-space:nowrap;">
@@ -1145,6 +1160,28 @@ function uRenderCandidates(){
   A.innerHTML = h;
 }
 
+/** 発行結果から2つのリンクを作る。
+ *  トークンは `unten_tokens` の UNIQUE(staff_id, work_date) により**運転手ひとり・1日1本**しかない。
+ *  つまり運行ボタンと運転日報は「同じトークンの入口違い」で、発行し直すと前のリンクは死ぬ。
+ *  土台（ドメイン・フォルダ）は発行RPCが返すURLに合わせる＝画面をどこに置いても正しくなる */
+function uLinks(info){
+  const dir = String((info && info.url) || '').replace(/[^/]*$/, '');
+  return { nip: (info && info.url) || null,
+           btn: (dir && info && info.token) ? (dir + 'unkoubtn.html#t=' + info.token) : null };
+}
+function uLinkRow(mark, url){
+  if(!url) return '';
+  return `<div style="margin-bottom:3px;"><b>${mark}</b> <a href="${esc(url)}" target="_blank">${esc(url)}</a>`
+       + `<button class="mini" style="margin-left:6px;" onclick="navigator.clipboard.writeText('${esc(url)}');this.textContent='コピーしました';">コピー</button></div>`;
+}
+/** 「メールに入れるリンク」のチェック状態。両方外れていたら知らせて止める */
+function uWant(){
+  const b = document.getElementById('uLinkBtn').checked;
+  const n = document.getElementById('uLinkNip').checked;
+  if(!b && !n){ alert('メールに入れるリンクを、少なくとも1つ選んでください。'); return null; }
+  return { btn:b, nip:n };
+}
+
 async function uIssueOne(staffId){
   const date = document.getElementById('uDate').value;
   const cell = document.getElementById('uLink'+staffId);
@@ -1154,20 +1191,41 @@ async function uIssueOne(staffId){
       body: JSON.stringify({ p_staff_id: staffId, p_work_date: date, p_valid_hours: 168 }) });
     if(!res.ok) throw new Error(await res.text());
     const info = await res.json();
-    cell.innerHTML = `<a href="${esc(info.url)}" target="_blank">${esc(info.url)}</a>
-      <button class="mini" style="margin-left:6px;" onclick="navigator.clipboard.writeText('${esc(info.url)}');this.textContent='コピーしました';">コピー</button>`;
+    info.links = uLinks(info);
+    cell.innerHTML = uLinkRow('🚌', info.links.btn) + uLinkRow('📝', info.links.nip);
     return info;
   }catch(e){ cell.innerHTML = `<span class="tag warn">失敗：${esc(e.message).slice(0,120)}</span>`; return null; }
 }
 
-function uMailHtml(name, dateJp, url){
-  return `<div style="font-family:'Hiragino Kaku Gothic ProN','Meiryo',sans-serif;font-size:14px;line-height:1.75;color:#222;">
-<p>${esc(name)} 様</p>
-<p>${esc(dateJp)}の運転日報のご確認をお願いします。</p>
-<p>乗車人数とメーターが正しいかご確認のうえ、送信してください。<br>（スマートフォンからもご入力いただけます）</p>
-<p>▼ 運転日報<br><a href="${esc(url)}">${esc(url)}</a></p>
-<p style="color:#888;">---<br>高尾輸送サービス</p>
+function uMailHtml(name, dateJp, links, want){
+  let h = `<div style="font-family:'Hiragino Kaku Gothic ProN','Meiryo',sans-serif;font-size:14px;line-height:1.75;color:#222;">
+<p>${esc(name)} 様</p>`;
+  const hasBtn = want.btn && links.btn;
+  if(hasBtn){
+    h += `<p>${esc(dateJp)}の運行をお願いいたします。</p>
+<p>下の「運行ボタン」を開いたまま運行してください。<br>
+・バス停に着いたら「着いた」、乗り降りが済んだら「出発」を押します<br>
+・乗り降りがなく通り過ぎるときは「乗降なし・通過」を押します<br>
+・乗車人数は、運行が一区切りついてから入れても構いません。あとから直せます<br>
+・「🗺 ここまでの道案内」で、次のバス停までの道順が出ます<br>
+・押し間違えたときは、同じボタンをもう一度押すと「取り消す」に変わります</p>
+<p>▼ 🚌 運行ボタン<br><a href="${esc(links.btn)}">${esc(links.btn)}</a></p>`;
+  }
+  if(want.nip){
+    h += `<p>${hasBtn ? '運行が終わりましたら、運転日報のご確認をお願いします。'
+                      : esc(dateJp)+'の運転日報のご確認をお願いします。'}<br>
+乗車人数とメーターが正しいかご確認のうえ、送信してください。<br>（スマートフォンからもご入力いただけます）</p>
+<p>▼ 📝 運転日報<br><a href="${esc(links.nip)}">${esc(links.nip)}</a></p>`;
+  }
+  h += `<p style="color:#888;">※このリンクはご本人専用です。他の方には転送しないでください。<br>
+---<br>高尾輸送サービス</p>
 </div>`;
+  return h;
+}
+function uSubject(dateJp, want){
+  if(want.btn && want.nip) return `【高尾輸送】${dateJp}の運行について（運行ボタン・運転日報）`;
+  if(want.btn)             return `【高尾輸送】${dateJp}の運行のお願い`;
+  return `【高尾輸送】${dateJp}の運転日報のご確認`;
 }
 function uDateJp(d){
   const dt = new Date(d), days=['日','月','火','水','木','金','土'];
@@ -1176,6 +1234,7 @@ function uDateJp(d){
 
 async function uMailOne(staffId){
   const date = document.getElementById('uDate').value;
+  const want = uWant(); if(!want) return;
   const testMode = document.getElementById('uTestMode').checked;
   const testAddr = document.getElementById('uTestAddr').value.trim();
   if(testMode && !testAddr){ alert('テスト送信の宛先メールを入力してください'); return; }
@@ -1183,8 +1242,8 @@ async function uMailOne(staffId){
   const info = await uIssueOne(staffId);
   if(!info) return;
   const to = testMode ? testAddr : c.email;
-  const subject = (testMode?`[テスト｜本来の宛先：${c.name}] `:'') + `【高尾輸送】${uDateJp(date)}の運転日報のご確認`;
-  const html = uMailHtml(c.name, uDateJp(date), info.url);
+  const subject = (testMode?`[テスト｜本来の宛先：${c.name}] `:'') + uSubject(uDateJp(date), want);
+  const html = uMailHtml(c.name, uDateJp(date), info.links, want);
   const res = await fetch(`${FUNCTIONS_URL}/send-email`, { method:'POST', headers:getH(),
     body: JSON.stringify({ to, subject, html }) });
   const sr = await res.json().catch(()=>({}));
@@ -1196,14 +1255,17 @@ async function uMailOne(staffId){
 async function uSendAll(){
   if(!U_CAND.length) return;
   const date = document.getElementById('uDate').value;
+  const want = uWant(); if(!want) return;
   const testMode = document.getElementById('uTestMode').checked;
   const testAddr = document.getElementById('uTestAddr').value.trim();
   if(testMode && !testAddr){ alert('テスト送信の宛先メールを入力してください'); return; }
   const targets = testMode ? U_CAND : U_CAND.filter(c=>c.email);
   const skipped = testMode ? 0 : U_CAND.length - targets.length;
+  const what = [want.btn?'🚌 運行ボタン':null, want.nip?'📝 運転日報':null].filter(Boolean).join(' と ');
   const msg = testMode
-    ? `テスト送信：${targets.length}名ぶんを ${testAddr} にまとめて送ります。運転手には届きません。よろしいですか？`
-    : `本番送信：${targets.length}名の運転手へリンクを送ります。${skipped?`（メール未登録の${skipped}名は除外）`:''}\nよろしいですか？`;
+    ? `テスト送信：${targets.length}名ぶんの「${what}」を ${testAddr} にまとめて送ります。運転手には届きません。よろしいですか？`
+    : `本番送信：${targets.length}名の運転手へ「${what}」のリンクを送ります。${skipped?`（メール未登録の${skipped}名は除外）`:''}\n`
+      + `※発行し直しになるため、この日の古いリンクは使えなくなります。\nよろしいですか？`;
   if(!confirm(msg)) return;
 
   const box = document.getElementById('uSendResult');
@@ -1215,8 +1277,8 @@ async function uSendAll(){
       const info = await uIssueOne(c.id);
       if(!info) throw new Error('リンク発行に失敗');
       const to = testMode ? testAddr : c.email;
-      const subject = (testMode?`[テスト｜本来の宛先：${c.name}] `:'') + `【高尾輸送】${uDateJp(date)}の運転日報のご確認`;
-      const html = uMailHtml(c.name, uDateJp(date), info.url);
+      const subject = (testMode?`[テスト｜本来の宛先：${c.name}] `:'') + uSubject(uDateJp(date), want);
+      const html = uMailHtml(c.name, uDateJp(date), info.links, want);
       const res = await fetch(`${FUNCTIONS_URL}/send-email`, { method:'POST', headers:getH(),
         body: JSON.stringify({ to, subject, html }) });
       const sr = await res.json().catch(()=>({}));
