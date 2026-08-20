@@ -137,21 +137,11 @@ function dateJp(s){ if(!s) return ''; const d=new Date(s+'T00:00:00');
 /* ===== Googleマップの道案内（unkou.html と同じ作り） =====
    ・地点を「/」で並べる形式。経由地は44か所まで通ることを確認済み
    ・data=!4m5!4m4!2m2!1b1!2b1!3e0 は「高速を使わない・有料を使わない・車」 */
+const MARU = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨'];
 function mapUrl(pts){
   const c = pts.filter(p=>p.lat!=null&&p.lng!=null).map(p=>Number(p.lat)+','+Number(p.lng));
   if(c.length<2) return null;
   return 'https://www.google.com/maps/dir/'+c.join('/')+'/data=!4m5!4m4!2m2!1b1!2b1!3e0';
-}
-
-/** その手順から「次のバス停まで」の道案内を作る。区切（split_here）は必ず効かせる */
-function legFrom(points, fromIdx){
-  const out=[points[fromIdx]];
-  for(let i=fromIdx+1;i<points.length;i++){
-    out.push(points[i]);
-    if(points[i].split_here) break;      // ここで案内を切る（Uターンなど）
-    if(points[i].is_stop) break;         // 次のバス停まで
-  }
-  return out.length>=2 ? out : null;
 }
 
 /* ===== ボタンの見た目 =====
@@ -285,10 +275,19 @@ function render(){
         ${actBtn(i,'到着','着いた',arr)}${pbox}${actBtn(i,'出発','出発',dep)}
       </div>
       <div class="passrow">${passBtn(i)}</div>`;
-      const leg = s.legPoints ? mapUrl(s.legPoints) : null;
       // target を名前付きにして、押すたびに新しいタブが増えないようにする
       // （_blank だと10回押せば10タブになり、運転中に戻るのが大変になる）
-      if(leg) h += `<a class="mapbtn" href="${leg}" target="unkoumap" rel="noopener">🗺 ここまでの道案内</a>`;
+      // 区切のある区間は案内が2つ以上になる。上から順に押していけばよい
+      const legs = s.legs || [];
+      legs.forEach((g,k)=>{
+        const u = mapUrl(g.pts);
+        if(!u) return;
+        const label = (legs.length===1)
+          ? '🗺 ここまでの道案内'
+          : '🗺 道案内' + (MARU[k]||(k+1)) + '　'
+            + (g.cut ? (g.toName||'区切りの地点') + 'まで' : 'その先 〜 ' + s.label);
+        h += `<a class="mapbtn" href="${u}" target="unkoumap" rel="noopener">${esc(label)}</a>`;
+      });
     } else if(i===nowIdx && s.type==='one'){
       h += `<div class="actrow">${actBtn(i,s.kind,s.btn,one)}</div>`;
     } else if(s.seq!=null){
@@ -327,7 +326,7 @@ function buildSteps(seg){
     carry = [];
     steps.push({ type:'stop', seq:p.seq, label:p.name||('地点'+p.seq),
                  note: notes.length ? notes.join('／') : null,
-                 legPoints: legTo(pts, idx) });
+                 legs: legsTo(pts, idx) });
   });
   steps.push({ type:'one', kind:'帰庫', seq:null, label:'帰庫', btn:'帰庫した',
                note: carry.length ? carry.join('／') : null });
@@ -341,12 +340,28 @@ function stepDone(s){
   return !!evOf(s.kind, s.seq);
 }
 
-/** 一つ前のバス停（または先頭）から、この地点までの道案内 */
-function legTo(pts, toIdx){
+/** 一つ前のバス停（または先頭）から、このバス停までの道案内。
+ *  途中に「区切」があれば、そこで切って**複数の案内に分ける**。
+ *  区切の地点は手前の区間の「終点」にし、次の区間は**その次の地点から**始める
+ *  （Uターンのように区切の前後をナビに任せられないため。unkou.html の rptLegs と同じ考え方）
+ *
+ *  ⚠️ 2026-08-20 まではここで `is_stop || split_here` の手前まで遡っていたため、
+ *  区切のある区間は**前半が丸ごと抜け落ち**、しかも案内の出発点が区切の地点になっていた。
+ *  Googleはそこから回り道を組み立てるので、ルートが壊れて見えた（八重樫さんが実車で発見）。 */
+function legsTo(pts, toIdx){
   let from = 0;
-  for(let i=toIdx-1;i>=0;i--){ if(pts[i].is_stop || pts[i].split_here){ from=i; break; } }
-  const out = pts.slice(from, toIdx+1);
-  return out.length>=2 ? out : null;
+  for(let i=toIdx-1;i>=0;i--){ if(pts[i].is_stop){ from=i; break; } }   // 遡るのはバス停まで
+  const seg = pts.slice(from, toIdx+1);
+  const mk = (a,b) => ({ pts: seg.slice(a,b+1), toName: seg[b].name||'', cut: !!seg[b].split_here });
+  const out = []; let start = 0;
+  for(let i=1;i<seg.length;i++){
+    if(seg[i].split_here && i<seg.length-1){
+      if(i>start) out.push(mk(start,i));
+      start = i+1;                        // 区切の地点は次の区間に入れない
+    }
+  }
+  if(seg.length-1 >= start) out.push(mk(start, seg.length-1));
+  return out.filter(g => g.pts.filter(p=>p.lat!=null&&p.lng!=null).length >= 2);
 }
 
 function evOf(kind, seq){ return EVENTS[SEG+'|'+kind+'|'+(seq==null?'':seq)] || null; }
