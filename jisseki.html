@@ -1106,6 +1106,8 @@ function jSetTab(t){
 
 /* ================= 運転日報の発行 ================= */
 let U_CAND = [];
+let U_COURSE = {};        // course_id → 「学校名／コース名」
+let U_ROUTED = new Set(); // 経路（course_route_points）が入っているコース
 
 /** その日、運転手として乗った便／デジタコ実績がある人を候補にする */
 async function uLoadCandidates(){
@@ -1114,40 +1116,78 @@ async function uLoadCandidates(){
   if(!date){ A.innerHTML = '<div class="tag warn">対象日を選んでください</div>'; return; }
   A.innerHTML = '<div class="muted" style="padding:12px;">読み込んでいます…</div>';
 
-  const dutyIds = (await _fetchAll(`duties?select=id&work_date=eq.${date}`)).map(d=>d.id);
+  const duties = await _fetchAll(`duties?select=id,course_id&work_date=eq.${date}`);
+  const dutyCourse = {}; duties.forEach(d=>{ dutyCourse[d.id] = d.course_id; });
   const byId = {};
-  if(dutyIds.length){
-    const crew = await _fetchAll(`duty_crew?select=staff_id&role=eq.運転手&duty_id=in.(${dutyIds.join(',')})`);
-    crew.forEach(c=>{ (byId[c.staff_id] ||= {duties:0,trips:0}).duties++; });
+  if(duties.length){
+    const crew = await _fetchAll(`duty_crew?select=staff_id,duty_id&role=eq.運転手&duty_id=in.(${duties.map(d=>d.id).join(',')})`);
+    crew.forEach(c=>{
+      const e = (byId[c.staff_id] ||= {duties:0,trips:0,courses:new Set(),firstDuty:null,mainCourse:null});
+      e.duties++;
+      const cid = dutyCourse[c.duty_id];
+      if(cid){
+        e.courses.add(cid);
+        // 運行ボタンの画面（unkoubtn_open）は「course_idがある便のうち一番若いid」のコースを出す。
+        // 経路の有無もそれに合わせて判定しないと、画面と食い違う
+        if(e.firstDuty==null || c.duty_id < e.firstDuty){ e.firstDuty=c.duty_id; e.mainCourse=cid; }
+      }
+    });
   }
   const trips = await _fetchAll(`trip_logs?select=driver_id&work_date=eq.${date}&driver_id=not.is.null`);
-  trips.forEach(t=>{ (byId[t.driver_id] ||= {duties:0,trips:0}).trips++; });
+  trips.forEach(t=>{ (byId[t.driver_id] ||= {duties:0,trips:0,courses:new Set(),firstDuty:null,mainCourse:null}).trips++; });
 
   const ids = Object.keys(byId).map(Number);
   if(!ids.length){ A.innerHTML = `<div class="panel" style="background:#f5f8f4;">${esc(date)} に運転手として乗った記録は見つかりませんでした。</div>`; return; }
   const staff = await _fetchAll(`staff?select=id,name,email&id=in.(${ids.join(',')})`);
-  U_CAND = staff.map(s=>({ ...s, ...byId[s.id] })).sort((a,b)=>a.name.localeCompare(b.name,'ja'));
+
+  // その日に走るコースの名前と、経路が登録されているかを調べる
+  U_COURSE = {}; U_ROUTED = new Set();
+  const cids = [...new Set(Object.values(byId).flatMap(e=>[...e.courses]))];
+  if(cids.length){
+    (await _fetchAll(`courses?select=id,school_name,course_name&id=in.(${cids.join(',')})`))
+      .forEach(c=>{ U_COURSE[c.id] = c.school_name + '／' + c.course_name; });
+    (await _fetchAll(`course_route_points?select=course_id&course_id=in.(${cids.join(',')})`))
+      .forEach(r=>U_ROUTED.add(r.course_id));
+  }
+
+  U_CAND = staff.map(s=>({ ...s, ...byId[s.id], courses:[...byId[s.id].courses] }))
+                .sort((a,b)=>a.name.localeCompare(b.name,'ja'));
   uRenderCandidates();
 }
+
+/** その運転手に運行ボタンを送れるか＝その日の主コースに経路が入っているか */
+function uHasRoute(c){ return !!(c && c.mainCourse && U_ROUTED.has(c.mainCourse)); }
 
 function uRenderCandidates(){
   const A = document.getElementById('uArea');
   const withMail = U_CAND.filter(c=>c.email).length;
+  const withRoute = U_CAND.filter(uHasRoute).length;
   let h = `<div class="panel">
     <div class="row" style="align-items:center;">
-      <span style="font-size:13px;">候補 <b>${U_CAND.length}</b>名（うちメール登録 ${withMail}名）</span>
+      <span style="font-size:13px;">候補 <b>${U_CAND.length}</b>名（うちメール登録 ${withMail}名／<b>経路あり ${withRoute}名</b>）</span>
       <button class="primary" onclick="uSendAll()">この日の候補ぜんいんに発行して送信</button>
     </div>
+    ${withRoute < U_CAND.length ? `<div class="muted" style="font-size:11px;margin-top:6px;line-height:1.8;">
+      🚌 運行ボタンは<b>経路が登録されているコース</b>でしか使えません。経路のない方には
+      <b>運行ボタンのリンクを入れずに</b>送ります（📝 運転日報だけになります）。<br>
+      経路は「運行時程マスタ」の<b>④ 経路・ナビ</b>タブで登録します。</div>` : ''}
     <div id="uSendResult" style="margin-top:8px;"></div>
   </div>
   <div style="overflow:auto;"><table><thead><tr>
-    <th>氏名</th><th>便数</th><th>運行数</th><th>メール</th><th>操作</th><th>発行したリンク</th>
+    <th>氏名</th><th>便数</th><th>運行数</th><th>コース・経路</th><th>メール</th><th>操作</th><th>発行したリンク</th>
   </tr></thead><tbody>`;
   U_CAND.forEach(c=>{
+    const others = (c.courses||[]).length - 1;
+    const courseCell = c.mainCourse
+      ? `<div style="font-size:11px;line-height:1.6;">${esc(U_COURSE[c.mainCourse]||('コース'+c.mainCourse))}`
+        + (uHasRoute(c) ? ' <span class="tag">経路あり</span>' : ' <span class="tag warn">経路未登録</span>')
+        + (others>0 ? `<br><span class="muted">ほか${others}コース</span>` : '') + '</div>'
+      : '<span class="muted" style="font-size:11px;">コース未設定</span>';
     h += `<tr id="uRow${c.id}">
       <td style="white-space:nowrap;">${esc(c.name)}</td>
       <td style="text-align:right;">${c.duties||0}</td>
       <td style="text-align:right;">${c.trips||0}</td>
+      <td>${courseCell}</td>
       <td style="font-size:12px;">${c.email?esc(c.email):'<span class="tag warn">未登録</span>'}</td>
       <td style="white-space:nowrap;">
         <button class="mini" onclick="uIssueOne(${c.id})">リンク発行</button>
@@ -1239,11 +1279,22 @@ async function uMailOne(staffId){
   const testAddr = document.getElementById('uTestAddr').value.trim();
   if(testMode && !testAddr){ alert('テスト送信の宛先メールを入力してください'); return; }
   const c = U_CAND.find(x=>x.id===staffId);
+  // 経路が無いコースに運行ボタンを送っても「経路がまだ登録されていません」と出るだけなので外す。
+  // 発行はリンクを差し替えてしまうため、送れないと分かった時点で**発行する前に**止める
+  const w = { btn: want.btn && uHasRoute(c), nip: want.nip };
+  if(!w.btn && !w.nip){
+    alert(`${c.name} さんのコース（${U_COURSE[c.mainCourse]||'コース未設定'}）は経路がまだ登録されていません。\n`
+        + `運行ボタンのリンクは送れません。\n\n「📝 運転日報」にもチェックを入れるか、先に運行時程マスタの「④ 経路・ナビ」で経路を登録してください。`);
+    return;
+  }
+  if(want.btn && !w.btn &&
+     !confirm(`${c.name} さんのコース（${U_COURSE[c.mainCourse]||'コース未設定'}）は経路が未登録です。\n`
+            + `🚌 運行ボタンのリンクを外して、📝 運転日報だけ送りますか？`)) return;
   const info = await uIssueOne(staffId);
   if(!info) return;
   const to = testMode ? testAddr : c.email;
-  const subject = (testMode?`[テスト｜本来の宛先：${c.name}] `:'') + uSubject(uDateJp(date), want);
-  const html = uMailHtml(c.name, uDateJp(date), info.links, want);
+  const subject = (testMode?`[テスト｜本来の宛先：${c.name}] `:'') + uSubject(uDateJp(date), w);
+  const html = uMailHtml(c.name, uDateJp(date), info.links, w);
   const res = await fetch(`${FUNCTIONS_URL}/send-email`, { method:'POST', headers:getH(),
     body: JSON.stringify({ to, subject, html }) });
   const sr = await res.json().catch(()=>({}));
@@ -1269,16 +1320,20 @@ async function uSendAll(){
   if(!confirm(msg)) return;
 
   const box = document.getElementById('uSendResult');
-  let sent=0; const fails=[];
+  let sent=0, btnDropped=0; const fails=[], noRoute=[];
   for(let i=0;i<targets.length;i++){
     const c = targets[i];
+    // 経路の無いコースには運行ボタンを入れない。入れるものが何も残らない人は発行もしない
+    const w = { btn: want.btn && uHasRoute(c), nip: want.nip };
+    if(!w.btn && !w.nip){ noRoute.push(c.name); continue; }
+    if(want.btn && !w.btn) btnDropped++;
     box.innerHTML = `<div class="muted" style="font-size:12px;">送信中… ${i+1}/${targets.length}（${esc(c.name)}）</div>`;
     try{
       const info = await uIssueOne(c.id);
       if(!info) throw new Error('リンク発行に失敗');
       const to = testMode ? testAddr : c.email;
-      const subject = (testMode?`[テスト｜本来の宛先：${c.name}] `:'') + uSubject(uDateJp(date), want);
-      const html = uMailHtml(c.name, uDateJp(date), info.links, want);
+      const subject = (testMode?`[テスト｜本来の宛先：${c.name}] `:'') + uSubject(uDateJp(date), w);
+      const html = uMailHtml(c.name, uDateJp(date), info.links, w);
       const res = await fetch(`${FUNCTIONS_URL}/send-email`, { method:'POST', headers:getH(),
         body: JSON.stringify({ to, subject, html }) });
       const sr = await res.json().catch(()=>({}));
@@ -1286,7 +1341,8 @@ async function uSendAll(){
     }catch(e){ fails.push(`${c.name}：${e.message}`); }
   }
   box.innerHTML = `<div style="padding:10px 12px;border-radius:8px;font-size:13px;background:${fails.length?'#fdf2f2':'#eef7ef'};border:1px solid ${fails.length?'#eeaaa4':'#bfe3c0'};">
-    ✅ ${sent}件 送信${skipped?`／⏭ 未登録 ${skipped}件 除外`:''}${fails.length?`／⚠ 失敗 ${fails.length}件`:''}
+    ✅ ${sent}件 送信${skipped?`／⏭ メール未登録 ${skipped}件 除外`:''}${btnDropped?`／🚌 経路未登録のため運行ボタンを外した ${btnDropped}件`:''}${noRoute.length?`／⏭ 経路未登録で送らなかった ${noRoute.length}件`:''}${fails.length?`／⚠ 失敗 ${fails.length}件`:''}
+    ${noRoute.length?`<div style="margin-top:6px;color:#8a6d3b;">経路が未登録のため送っていない方：${noRoute.map(esc).join('、')}</div>`:''}
     ${fails.length?`<div style="margin-top:6px;color:#b5453a;">${fails.map(esc).join('<br>')}</div>`:''}
     ${testMode?'<div style="margin-top:6px;color:#666;">※テスト送信でした。本番は「テスト送信」のチェックを外してください。</div>':''}
   </div>`;
