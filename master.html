@@ -734,7 +734,8 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
         <details class="add-form-details" id="details-offices-form">
           <summary>＋ 新規追加</summary>
           <div class="form-row" style="margin-top:12px;">
-            <div class="form-field"><label>営業所名 *</label><input type="text" id="add-offices-name" placeholder="府中車庫"></div>
+            <div class="form-field" style="max-width:90px;"><label>順</label><input type="text" id="add-offices-sort_order" placeholder="10" title="小さいほど上に出ます。空欄は末尾"></div>
+            <div class="form-field"><label>営業所名 *</label><input type="text" id="add-offices-name" placeholder="府中営業所車庫"></div>
             <div class="form-field"><label>許可(略字)</label><input type="text" id="add-offices-permit_labels" placeholder="特定・貸切 など（・区切り）"></div>
             <div class="form-field"><label>住所</label><input type="text" id="add-offices-address" placeholder="東京都府中市○○"></div>
             <div class="form-field"><label>座標</label><input type="text" id="add-offices-coord" placeholder="35.659103, 139.497391" title="Googleマップで車庫の出入口を右クリック→出てきた数字をそのまま貼れます。度分秒でも構いません"></div>
@@ -755,7 +756,7 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
         </div>
         <div style="overflow-x:auto;">
           <table class="data-table">
-            <thead><tr><th>ID</th><th>営業所名</th><th>許可(略字)</th><th>住所</th><th>座標</th><th>電話番号</th><th>備考</th><th>操作</th></tr></thead>
+            <thead><tr><th>ID</th><th>順</th><th>営業所名</th><th>許可(略字)</th><th>住所</th><th>座標</th><th>電話番号</th><th>備考</th><th>操作</th></tr></thead>
             <tbody id="tbody-offices"></tbody>
           </table>
         </div>
@@ -1675,7 +1676,7 @@ function downloadEmpTemplate() {
 const SIMPLE_DEF = {
   courses:  { table:'courses',  req:'school_name', cols:['id','prefecture','school_name','course_name'],       labels:['ID','都道府県','学校名','コース名'],                        fields:[] },
   vehicles: { table:'vehicles', req:'vehicle_number', cols:['id','vehicle_number','vehicle_type','capacity','office_name','inspection_date','note'], labels:['ID','車両番号','車種','定員','営業所','車検期限','備考'], fields:['vehicle_number','vehicle_type','capacity','office_name','inspection_date','note'] },
-  offices:  { table:'offices',  req:'name', cols:['id','name','permit_labels','address','coord','phone','note'], labels:['ID','営業所名','許可(略字)','住所','座標','電話番号','備考'], fields:['name','permit_labels','address','coord','phone','note'] },
+  offices:  { table:'offices',  req:'name', order:'sort_order.nullslast,id', cols:['id','sort_order','name','permit_labels','address','coord','phone','note'], labels:['ID','順','営業所名','許可(略字)','住所','座標','電話番号','備考'], fields:['sort_order','name','permit_labels','address','coord','phone','note'] },
   permits:  { table:'permits',  req:'permit_number', cols:['id','permit_number','permit_type','issue_date','expiry_date','issued_by','note'], labels:['ID','許可番号','種別','交付日','有効期限','交付機関','備考'], fields:['permit_number','permit_type','issue_date','expiry_date','issued_by','note'] },
 };
 const simpleCache = {};
@@ -1684,7 +1685,7 @@ async function loadSimple(key) {
   const def = SIMPLE_DEF[key];
   const fVal = document.querySelector(`input[name="${key}-filter"]:checked`)?.value || 'active';
   const activeQ = fVal === 'all' ? '' : fVal === 'inactive' ? 'active=eq.false&' : 'active=eq.true&';
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${def.table}?${activeQ}order=id`, { headers: getH() });
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${def.table}?${activeQ}order=${def.order || 'id'}`, { headers: getH() });
   simpleCache[key] = await res.json();
   renderSimpleTable(key);
   const cnt = document.getElementById('cnt-'+key);
@@ -1701,13 +1702,27 @@ function renderSimpleTable(key) {
   tbody.innerHTML = data.map(row => {
     const cells = def.cols.map(c => `<td>${esc(String(row[c]??''))}</td>`).join('');
     const req = row[def.req] || '';
+    // 営業所は地図で開けるようにする。座標があれば座標で、無ければ住所で開く
+    const mapQ = (key === 'offices') ? (row.coord || row.address || '') : '';
+    const mapBtn = mapQ
+      ? `<button class="btn btn-gray btn-small" data-q="${escAttr(mapQ)}" onclick="openOfficeMap(this)" title="${row.coord?'座標':'住所'}で地図を開く">🗺</button>`
+      : '';
     return `<tr id="sr-${key}-${row.id}">${cells}
       <td style="white-space:nowrap;">
+        ${mapBtn}
         ${_isAdminST ? `<button class="btn btn-edit btn-small" onclick="startEditSimple('${key}',${row.id})">編集</button>` : ''}
         <button class="btn btn-gray btn-small" onclick="openAuditModal('${def.table}',${row.id},'${escAttr(req)}')">変更履歴</button>
         ${_isAdminST ? `<button class="btn btn-danger btn-small" onclick="deleteSimple('${key}',${row.id},'${escAttr(req)}')">削除</button>` : ''}
       </td></tr>`;
   }).join('');
+}
+
+/** 営業所の座標（無ければ住所）をGoogleマップで開く。
+ *  タブ名を固定して、押すたびにタブが増えないようにする */
+function openOfficeMap(btn) {
+  const q = (btn && btn.dataset.q) || '';
+  if (!q) return;
+  window.open('https://www.google.com/maps/search/' + encodeURIComponent(q), 'officemap');
 }
 
 function startEditSimple(key, id) {
