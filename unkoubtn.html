@@ -51,24 +51,39 @@
   .undo{font-family:inherit;font-size:13px;font-weight:700;background:none;border:none;
     color:var(--ink-soft);text-decoration:underline;padding:6px 2px;margin-top:4px;cursor:pointer;}
 
-  /* ── 「着いた」と乗車人数を横に並べる ── */
-  .actrow{display:flex;gap:10px;align-items:stretch;margin-top:11px;}
-  .actrow .bigbtn{flex:1;min-width:0;margin-top:0;}
-  .pspacer{flex:1;min-width:0;}
-  .pbox{flex:0 0 auto;width:104px;background:#fff;border:2px solid var(--line);border-radius:14px;
-    padding:6px 8px 8px;text-align:center;}
-  .pbox .plab{font-size:12px;font-weight:700;color:var(--ink-soft);line-height:1.2;margin-bottom:2px;}
-  .pbox input{width:100%;font-size:26px;font-family:inherit;font-weight:800;text-align:center;
-    color:var(--ink);border:none;background:transparent;padding:2px 0;
+  /* ── 「着いた」／人数／「出発」を横に並べる ── */
+  .actrow{display:flex;gap:8px;align-items:stretch;margin-top:11px;}
+  .actrow .bigbtn{flex:1 1 0;min-width:0;margin-top:0;font-size:20px;padding:17px 6px;}
+  .pspacer{flex:1 1 0;min-width:0;}
+  .pbox{flex:0 0 auto;width:92px;background:#fff;border:2px solid var(--line);border-radius:14px;
+    padding:5px 6px 7px;text-align:center;}
+  .pbox .plab{font-size:11px;font-weight:700;color:var(--ink-soft);line-height:1.2;margin-bottom:1px;}
+  .pbox input{width:100%;font-size:24px;font-family:inherit;font-weight:800;text-align:center;
+    color:var(--ink);border:none;background:transparent;padding:1px 0;
     -webkit-appearance:none;appearance:none;}
   .pbox input:focus{outline:none;}
   .pbox:focus-within{border-color:var(--brand);box-shadow:0 0 0 4px var(--brand-tint);}
-  /* 画面が狭いとき（分割表示など）は縦に積む */
-  @media (max-width:420px){
-    .actrow{flex-wrap:wrap;}
-    .actrow .bigbtn{flex:1 1 100%;}
-    .pbox{width:100%;}
-    .pspacer{display:none;}
+
+  /* 押し終わったボタン（時刻を表示。もう一度タップで取り消しに入る） */
+  .donebtn{flex:1 1 0;min-width:0;font-family:inherit;font-size:19px;font-weight:800;
+    background:#eaf5ee;color:var(--ok);border:2px solid #bcdcc7;border-radius:14px;padding:15px 6px;cursor:pointer;}
+  .donebtn.arm{background:#fbe9e7;border-color:#e8b4ae;color:var(--danger);font-size:14px;line-height:1.35;}
+
+  /* 通過（乗降なし）：少し離して小さく */
+  .passrow{display:flex;justify-content:flex-end;margin-top:8px;}
+  .passbtn{font-family:inherit;font-size:14px;font-weight:700;background:#fff;
+    border:2px solid var(--line);color:var(--ink-soft);border-radius:10px;padding:9px 16px;cursor:pointer;}
+  .passbtn.arm{background:#fbe9e7;border-color:#e8b4ae;color:var(--danger);}
+
+  /* 画面が狭いとき（分割表示など）も、着いた／人数／出発は横一列を保つ */
+  @media (max-width:480px){
+    .actrow{gap:6px;}
+    .actrow .bigbtn{font-size:17px;padding:15px 2px;}
+    .donebtn{font-size:17px;padding:14px 2px;}
+    .donebtn.arm{font-size:12px;}
+    .pbox{width:74px;padding:4px 3px 6px;}
+    .pbox input{font-size:21px;}
+    .pbox .plab{font-size:10px;}
   }
 
   .hint{font-size:14px;color:var(--ink-soft);line-height:1.7;margin:8px 2px 0;}
@@ -139,6 +154,55 @@ function legFrom(points, fromIdx){
   return out.length>=2 ? out : null;
 }
 
+/* ===== ボタンの見た目 =====
+   運行中に確認の文章を読む余裕はないため、取り消しはダイアログを出さず
+   「もう一度タップ」で意思を確かめる（2026-08-20 八重樫さんの指摘）。
+   1回目のタップでボタンが赤くなり「もう一度タップで取消」に変わる。 */
+let ARM = null;                 // いま取り消し待ちのボタン 'i|kind'
+let _armTimer = null;
+function armKey(i,kind){ return i+'|'+kind; }
+function arm(i,kind){
+  ARM = armKey(i,kind);
+  clearTimeout(_armTimer);
+  _armTimer = setTimeout(()=>{ ARM=null; render(); }, 6000);   // 6秒で自動解除
+  render();
+}
+function disarm(){ ARM=null; clearTimeout(_armTimer); }
+
+/** 押す前は緑の大ボタン、押した後は時刻を出す。押した後をタップすると取り消しに入る */
+function actBtn(i, kind, label, e, small){
+  const k = armKey(i,kind);
+  if(!e){
+    return `<button class="bigbtn" onclick="onAct(${i},'${kind}')">${esc(label)}</button>`;
+  }
+  if(ARM===k){
+    return `<button class="${small?'passbtn arm':'donebtn arm'}" onclick="onAct(${i},'${kind}')">
+      もう一度タップで<br>取り消し</button>`;
+  }
+  return `<button class="${small?'passbtn':'donebtn'}" onclick="onAct(${i},'${kind}')">${
+    small ? '↩ '+esc(kindLabel(kind))+' '+hm(e.pressed_at)+' を取り消す' : hm(e.pressed_at)}</button>`;
+}
+function kindLabel(k){ return k==='到着'?'着':k==='出発'?'発':k; }
+
+/** 通過（乗降なし）。こちらも押した後はもう一度タップで取り消し */
+function passBtn(i){
+  const s=_step(i), e=evOf('通過', s.seq), k=armKey(i,'通過');
+  if(e && ARM===k) return `<button class="passbtn arm" onclick="onAct(${i},'通過')">もう一度タップで取り消し</button>`;
+  if(e)            return `<button class="passbtn" onclick="onAct(${i},'通過')">↩ 通過 ${hm(e.pressed_at)} を取り消す</button>`;
+  return `<button class="passbtn" onclick="onAct(${i},'通過')">乗降なし・通過</button>`;
+}
+
+/** ボタンが押されたとき：未記録なら記録、記録済みなら1回目で身構え・2回目で取り消し */
+async function onAct(i, kind){
+  const s=_step(i);
+  const e = evOf(kind, s.seq);
+  const k = armKey(i,kind);
+  if(!e){ disarm(); await _record(kind, s.seq, s.label); return; }
+  if(ARM!==k){ arm(i,kind); return; }        // 1回目：もう一度タップを促す
+  disarm();                                   // 2回目：取り消す
+  await _erase(kind, s.seq, s.label);
+}
+
 /* ===== 画面 ===== */
 function render(){
   const app=document.getElementById('app');
@@ -179,10 +243,14 @@ function render(){
     const one   = (s.type==='one')  ? evOf(s.kind, s.seq) : null;
 
     // 時刻の表示：バス停は「着 8:50 / 発 8:52」
+    const pas = (s.type==='stop') ? evOf('通過', s.seq) : null;
     let tm = '';
     if(s.type==='stop'){
-      if(arr) tm += '着 '+hm(arr.pressed_at);
-      if(dep) tm += (tm?' / ':'')+'発 '+hm(dep.pressed_at);
+      if(pas) tm = '通過 '+hm(pas.pressed_at);
+      else {
+        if(arr) tm += '着 '+hm(arr.pressed_at);
+        if(dep) tm += (tm?' / ':'')+'発 '+hm(dep.pressed_at);
+      }
     } else if(one) tm = hm(one.pressed_at);
 
     h += `<div class="step ${state}" id="step${i}">
@@ -198,24 +266,27 @@ function render(){
           onchange="setCount(${s.seq}, this.value)" placeholder="—"></div>` : '';
 
     if(i===nowIdx && s.type==='stop'){
-      if(!arr){
-        // まだ着いていない：着いたボタン＋人数欄（先に入れてもよい）
-        h += `<div class="actrow"><button class="bigbtn" onclick="pressStop(${i},'到着')">着いた</button>${pbox}</div>`;
-        const leg = s.legPoints ? mapUrl(s.legPoints) : null;
-        if(leg) h += `<a class="mapbtn" href="${leg}" target="_blank" rel="noopener">🗺 ここまでの道案内</a>`;
-      } else {
-        // 着いた後：乗降と人数入力の間、画面は動かない。出発で次へ進む
-        h += `<div class="actrow"><button class="bigbtn" onclick="pressStop(${i},'出発')">出発した</button>${pbox}</div>
-              <button class="undo" onclick="undoStop(${i},'到着')">「着いた」を取り消す</button>`;
-      }
+      // 「着いた」／人数／「出発」を横に並べる。押したボタンは時刻に変わり、
+      // もう一度タップで取り消しに入る（運行中に確認文を読む余裕がないため）
+      h += `<div class="actrow">
+        ${actBtn(i,'到着','着いた',arr)}${pbox}${actBtn(i,'出発','出発',dep)}
+      </div>
+      <div class="passrow">${passBtn(i)}</div>`;
+      const leg = s.legPoints ? mapUrl(s.legPoints) : null;
+      if(leg) h += `<a class="mapbtn" href="${leg}" target="_blank" rel="noopener">🗺 ここまでの道案内</a>`;
     } else if(i===nowIdx && s.type==='one'){
-      h += `<div class="actrow"><button class="bigbtn" onclick="pressOne(${i})">${esc(s.btn)}</button></div>`;
+      h += `<div class="actrow">${actBtn(i,s.kind,s.btn,one)}</div>`;
     } else if(s.seq!=null){
       // 済んだ分・これからの分も、人数はいつでも入れられる
       h += `<div class="actrow"><div class="pspacer"></div>${pbox}</div>`;
     }
+    // 済んだ手順は、もう一度タップで取り消せるボタンを出す
     if(done && i===nowIdx-1){
-      h += `<button class="undo" onclick="${s.type==='stop'?`undoStop(${i},'出発')`:`undoOne(${i})`}">押し間違えた（取り消す）</button>`;
+      h += `<div class="passrow">${
+        s.type==='stop'
+          ? actBtn(i, evOf('通過',s.seq)?'通過':'出発', '', evOf('通過',s.seq)||dep, true)
+          : actBtn(i, s.kind, '', one, true)
+      }</div>`;
     }
     h += '</div>';
   });
@@ -248,9 +319,10 @@ function buildSteps(seg){
   return steps;
 }
 
-/** その手順が済んだか。バス停は「出発」まで押して完了 */
+/** その手順が済んだか。バス停は「出発」まで押して完了。
+ *  乗降がなく停まらなかった場合は「通過」だけで完了とする */
 function stepDone(s){
-  if(s.type==='stop') return !!evOf('出発', s.seq);
+  if(s.type==='stop') return !!(evOf('出発', s.seq) || evOf('通過', s.seq));
   return !!evOf(s.kind, s.seq);
 }
 
@@ -313,18 +385,8 @@ async function _erase(kind, seq, label){
   toast('取り消しました');
 }
 
-async function pressStop(i, kind){ const s=_step(i); await _record(kind, s.seq, s.label); }
-async function pressOne(i){        const s=_step(i); await _record(s.kind, s.seq, s.label); }
-async function undoStop(i, kind){
-  const s=_step(i);
-  if(!confirm(s.label+' の「'+(kind==='到着'?'着いた':'出発した')+'」を取り消します。よろしいですか？')) return;
-  await _erase(kind, s.seq, s.label);
-}
-async function undoOne(i){
-  const s=_step(i);
-  if(!confirm(s.label+' の記録を取り消します。よろしいですか？')) return;
-  await _erase(s.kind, s.seq, s.label);
-}
+/* 押す・取り消すは onAct にまとめた（もう一度タップ方式）。
+   確認ダイアログは運行中に読めないため使わない */
 async function setCount(seq, val){
   const n = (val==='' ? null : Math.max(0, parseInt(val,10)||0));
   COUNTS[SEG+'|'+seq] = n;
