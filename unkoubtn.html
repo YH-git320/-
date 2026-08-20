@@ -355,10 +355,21 @@ function scrollToNow(nowIdx){
     if(!el) return;
     const b=document.activeElement;
     if(b && (b.tagName==='INPUT'||b.tagName==='TEXTAREA')) return;
-    // なめらかスクロール(smooth)は画面を描いていない状態では効かないため使わない。
-    // 一瞬で移動するほうが、運転手にとっても迷いが少ない
-    el.scrollIntoView({ block:'center' });
+    const before = window.scrollY;
+    // 初回はすぐ表示したいので一瞬で、それ以降は「動いたこと」が分かるようゆっくり
+    el.scrollIntoView({ behavior: wasFirst ? 'auto' : 'smooth', block:'center' });
     _lastNow = nowIdx; _firstDraw = false;
+    if(wasFirst) return;
+    // 保険：なめらか移動が効かない状況（画面を描いていないときなど）でも
+    // 置いていかれないよう、少し待って動いていなければ一瞬で移動させる
+    setTimeout(()=>{
+      const now=document.querySelector('.step.now');
+      if(!now) return;
+      const t=now.getBoundingClientRect().top;
+      const stuck = Math.abs(window.scrollY - before) < 4;
+      const off   = (t < 0 || t > window.innerHeight - 80);
+      if(stuck && off) now.scrollIntoView({ block:'center' });
+    }, 450);
   }, 0);
 }
 
