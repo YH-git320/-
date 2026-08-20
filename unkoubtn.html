@@ -167,70 +167,91 @@ function render(){
   // ── 手順（出庫 → 各バス停 → 帰庫）
   h += '<div class="sec-h">運行の記録</div>';
   const steps = buildSteps(cur);
-  const doneIdx = steps.reduce((a,s,i)=> ev(s) ? i : a, -1);   // 押し終わった最後
+  let nowIdx = steps.findIndex(s=>!stepDone(s));               // いま進めるべき手順
+  if(nowIdx<0) nowIdx = steps.length;                           // すべて済み
   steps.forEach((s,i)=>{
-    const e = ev(s);
-    const state = e ? 'done' : (i===doneIdx+1 ? 'now' : 'next');
-    const mark  = e ? '✓' : (i===doneIdx+1 ? '▶' : (i+1));
-    const hasP  = (s.seq!=null);                      // バス停なら人数欄を出す
-    const cnt   = hasP ? COUNTS[SEG+'|'+s.seq] : null;
+    const done  = stepDone(s);
+    const state = done ? 'done' : (i===nowIdx ? 'now' : 'next');
+    const mark  = done ? '✓' : (i===nowIdx ? '▶' : (i+1));
+    const cnt   = (s.seq!=null) ? COUNTS[SEG+'|'+s.seq] : null;
+    const arr   = (s.type==='stop') ? evOf('到着', s.seq) : null;
+    const dep   = (s.type==='stop') ? evOf('出発', s.seq) : null;
+    const one   = (s.type==='one')  ? evOf(s.kind, s.seq) : null;
+
+    // 時刻の表示：バス停は「着 8:50 / 発 8:52」
+    let tm = '';
+    if(s.type==='stop'){
+      if(arr) tm += '着 '+hm(arr.pressed_at);
+      if(dep) tm += (tm?' / ':'')+'発 '+hm(dep.pressed_at);
+    } else if(one) tm = hm(one.pressed_at);
+
     h += `<div class="step ${state}" id="step${i}">
       <div class="head">
         <div class="mark">${mark}</div>
         <div class="name">${esc(s.label)}</div>
-        <div class="time">${e?hm(e.pressed_at):''}</div>
+        <div class="time">${tm}</div>
       </div>`;
     if(s.note) h += `<div class="warn">⚠ ${esc(s.note).replace(/／/g,'<br>⚠ ')}</div>`;
 
-    // 「着いた」ボタンと乗車人数を横に並べる
-    if(!e && i===doneIdx+1){
-      h += `<div class="actrow">
-        <button class="bigbtn" onclick="press(${i})">${esc(s.btn)}</button>
-        ${hasP?`<div class="pbox"><div class="plab">人数</div>
-          <input type="number" inputmode="numeric" min="0" max="99" value="${cnt!=null?cnt:''}"
-            onchange="setCount(${s.seq}, this.value)" placeholder="—"></div>`:''}
-      </div>`;
-      const leg = s.legPoints ? mapUrl(s.legPoints) : null;
-      if(leg) h += `<a class="mapbtn" href="${leg}" target="_blank" rel="noopener">🗺 ここまでの道案内</a>`;
-    } else if(hasP){
-      // 押したあと・これからの分も、人数はいつでも入れられる
-      h += `<div class="actrow">
-        <div class="pspacer">${e?'':'　'}</div>
-        <div class="pbox"><div class="plab">人数</div>
-          <input type="number" inputmode="numeric" min="0" max="99" value="${cnt!=null?cnt:''}"
-            onchange="setCount(${s.seq}, this.value)" placeholder="—"></div>
-      </div>`;
+    const pbox = (s.seq!=null) ? `<div class="pbox"><div class="plab">人数</div>
+        <input type="number" inputmode="numeric" min="0" max="99" value="${cnt!=null?cnt:''}"
+          onchange="setCount(${s.seq}, this.value)" placeholder="—"></div>` : '';
+
+    if(i===nowIdx && s.type==='stop'){
+      if(!arr){
+        // まだ着いていない：着いたボタン＋人数欄（先に入れてもよい）
+        h += `<div class="actrow"><button class="bigbtn" onclick="pressStop(${i},'到着')">着いた</button>${pbox}</div>`;
+        const leg = s.legPoints ? mapUrl(s.legPoints) : null;
+        if(leg) h += `<a class="mapbtn" href="${leg}" target="_blank" rel="noopener">🗺 ここまでの道案内</a>`;
+      } else {
+        // 着いた後：乗降と人数入力の間、画面は動かない。出発で次へ進む
+        h += `<div class="actrow"><button class="bigbtn" onclick="pressStop(${i},'出発')">出発した</button>${pbox}</div>
+              <button class="undo" onclick="undoStop(${i},'到着')">「着いた」を取り消す</button>`;
+      }
+    } else if(i===nowIdx && s.type==='one'){
+      h += `<div class="actrow"><button class="bigbtn" onclick="pressOne(${i})">${esc(s.btn)}</button></div>`;
+    } else if(s.seq!=null){
+      // 済んだ分・これからの分も、人数はいつでも入れられる
+      h += `<div class="actrow"><div class="pspacer"></div>${pbox}</div>`;
     }
-    if(e && i===doneIdx) h += `<button class="undo" onclick="undo(${i})">押し間違えた（取り消す）</button>`;
+    if(done && i===nowIdx-1){
+      h += `<button class="undo" onclick="${s.type==='stop'?`undoStop(${i},'出発')`:`undoOne(${i})`}">押し間違えた（取り消す）</button>`;
+    }
     h += '</div>';
   });
   h += '<p class="hint">乗車人数は、運行が一区切りついてから入れても構いません。あとから直せます。</p>';
 
   app.innerHTML = h;
-  scrollToNow();
+  scrollToNow(nowIdx);
 }
 
-/** 手順を組み立てる：出庫 → 各バス停（到着） → 帰庫
- *  バス停でない地点（曲がり角の目印）はボタンにしないが、
- *  そこに注意書きがあれば、**次のバス停の注意書きにまとめて出す**（見落とし防止） */
+/** 手順を組み立てる：出庫 → 各バス停（着いた→出発） → 帰庫
+ *  バス停は「着いた」と「出発」の2段。着いてから出発までの間に乗降と人数入力を行う。
+ *  この間は画面を動かさず、**出発を押したときだけ次へ進む**（2026-08-20 八重樫さんの要望）。
+ *  曲がり角の目印はボタンにしないが、注意書きがあれば次のバス停にまとめて出す（見落とし防止） */
 function buildSteps(seg){
   const pts = seg.points;
   const steps = [];
-  steps.push({ kind:'出庫', seq:null, label:'出庫', btn:'出庫した', note:null });
+  steps.push({ type:'one', kind:'出庫', seq:null, label:'出庫', btn:'出庫した', note:null });
   let carry = [];                               // 手前の目印に付いていた注意書き
   pts.forEach((p,idx)=>{
     const n = (p.note||'').trim();
     if(!p.is_stop){ if(n) carry.push(n); return; }
     const notes = carry.concat(n?[n]:[]);
     carry = [];
-    steps.push({ kind:'到着', seq:p.seq, label:p.name||('地点'+p.seq), btn:'着いた',
+    steps.push({ type:'stop', seq:p.seq, label:p.name||('地点'+p.seq),
                  note: notes.length ? notes.join('／') : null,
                  legPoints: legTo(pts, idx) });
   });
-  // 最後の目印に注意書きが残っていれば、帰庫の手前に出す
-  steps.push({ kind:'帰庫', seq:null, label:'帰庫', btn:'帰庫した',
+  steps.push({ type:'one', kind:'帰庫', seq:null, label:'帰庫', btn:'帰庫した',
                note: carry.length ? carry.join('／') : null });
   return steps;
+}
+
+/** その手順が済んだか。バス停は「出発」まで押して完了 */
+function stepDone(s){
+  if(s.type==='stop') return !!evOf('出発', s.seq);
+  return !!evOf(s.kind, s.seq);
 }
 
 /** 一つ前のバス停（または先頭）から、この地点までの道案内 */
@@ -241,45 +262,68 @@ function legTo(pts, toIdx){
   return out.length>=2 ? out : null;
 }
 
-function ev(s){ return EVENTS[SEG+'|'+s.kind+'|'+(s.seq==null?'':s.seq)] || null; }
-function setSeg(s){ SEG=s; render(); }
+function evOf(kind, seq){ return EVENTS[SEG+'|'+kind+'|'+(seq==null?'':seq)] || null; }
+function setSeg(s){ SEG=s; _lastNow=-1; render(); }
 
-/** 次に押す手順を画面の中ほどへ寄せる（運転手が自分でスクロールしなくて済むように）。
- *  ただし入力中は動かさない（人数を入れている最中に飛ぶと困る） */
-let _firstDraw = true;
-function scrollToNow(){
+/** 次に押す手順を画面の中ほどへ寄せる。
+ *  **手順が進んだときだけ**動かす。「着いた」を押しても同じ手順の中なので画面は動かない
+ *  （着いた→乗降・人数入力→出発、の間に画面が飛ぶと操作しにくい・2026-08-20 八重樫さんの指摘） */
+let _firstDraw = true, _lastNow = -1;
+function scrollToNow(nowIdx){
+  if(nowIdx === _lastNow) return;          // 同じ手順の中なら動かさない
   const a=document.activeElement;
-  if(a && (a.tagName==='INPUT'||a.tagName==='TEXTAREA')) return;
-  const el=document.querySelector('.step.now');
-  if(!el) return;
-  el.scrollIntoView({ behavior: _firstDraw ? 'auto' : 'smooth', block:'center' });
-  _firstDraw = false;
+  if(a && (a.tagName==='INPUT'||a.tagName==='TEXTAREA')) return;   // 入力中は動かさない
+  // ※ここで _lastNow を更新してしまうと、入力中に中断した回が「進んだ」扱いになり
+  //   次の描画でもスクロールしなくなる。実際に動かせたときだけ更新する
+  const wasFirst = _firstDraw;
+  // 描画直後は位置がまだ確定していないので、少し待ってから動かす。
+  // （requestAnimationFrame は画面を描いていないと発火しないため使わない）
+  setTimeout(()=>{
+    const el=document.querySelector('.step.now');
+    if(!el) return;
+    const b=document.activeElement;
+    if(b && (b.tagName==='INPUT'||b.tagName==='TEXTAREA')) return;
+    // なめらかスクロール(smooth)は画面を描いていない状態では効かないため使わない。
+    // 一瞬で移動するほうが、運転手にとっても迷いが少ない
+    el.scrollIntoView({ block:'center' });
+    _lastNow = nowIdx; _firstDraw = false;
+  }, 0);
 }
 
 /* ===== 押す・取り消す・人数 ===== */
-async function press(i){
-  const seg = INFO.segments.find(x=>x.segment===SEG);
-  const s = buildSteps(seg)[i];
+function _step(i){ return buildSteps(INFO.segments.find(x=>x.segment===SEG))[i]; }
+
+async function _record(kind, seq, label){
   const now = new Date().toISOString();
-  const key = SEG+'|'+s.kind+'|'+(s.seq==null?'':s.seq);
+  const key = SEG+'|'+kind+'|'+(seq==null?'':seq);
   EVENTS[key] = { pressed_at: now };
   render();
   if(PREVIEW){ toast('見本のため記録していません'); return; }
-  const r = await call('unkoubtn_press', { p_token:TOKEN, p_segment:SEG, p_kind:s.kind,
-                                           p_seq:s.seq, p_label:s.label, p_pressed_at:now });
+  const r = await call('unkoubtn_press', { p_token:TOKEN, p_segment:SEG, p_kind:kind,
+                                           p_seq:seq, p_label:label, p_pressed_at:now });
   if(!r.ok){ delete EVENTS[key]; render(); toast('記録できませんでした。もう一度押してください'); return; }
-  toast(s.label+' '+hm(now));
+  toast(label+' '+(kind==='到着'?'着':kind==='出発'?'発':'')+' '+hm(now));
 }
-async function undo(i){
-  const seg = INFO.segments.find(x=>x.segment===SEG);
-  const s = buildSteps(seg)[i];
-  if(!confirm(s.label+' の記録を取り消します。よろしいですか？')) return;
-  const key = SEG+'|'+s.kind+'|'+(s.seq==null?'':s.seq);
+async function _erase(kind, seq, label){
+  const key = SEG+'|'+kind+'|'+(seq==null?'':seq);
   const bk = EVENTS[key]; delete EVENTS[key]; render();
   if(PREVIEW){ toast('見本のため記録していません'); return; }
-  const r = await call('unkoubtn_undo', { p_token:TOKEN, p_segment:SEG, p_kind:s.kind, p_seq:s.seq });
+  const r = await call('unkoubtn_undo', { p_token:TOKEN, p_segment:SEG, p_kind:kind, p_seq:seq });
   if(!r.ok){ EVENTS[key]=bk; render(); toast('取り消せませんでした'); return; }
   toast('取り消しました');
+}
+
+async function pressStop(i, kind){ const s=_step(i); await _record(kind, s.seq, s.label); }
+async function pressOne(i){        const s=_step(i); await _record(s.kind, s.seq, s.label); }
+async function undoStop(i, kind){
+  const s=_step(i);
+  if(!confirm(s.label+' の「'+(kind==='到着'?'着いた':'出発した')+'」を取り消します。よろしいですか？')) return;
+  await _erase(kind, s.seq, s.label);
+}
+async function undoOne(i){
+  const s=_step(i);
+  if(!confirm(s.label+' の記録を取り消します。よろしいですか？')) return;
+  await _erase(s.kind, s.seq, s.label);
 }
 async function setCount(seq, val){
   const n = (val==='' ? null : Math.max(0, parseInt(val,10)||0));
