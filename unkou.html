@@ -1066,7 +1066,12 @@ async function changeVersion(verId){ selVerId = Number(verId); await loadVersion
 function _nextApril(){ const d=new Date(); const y=d.getFullYear(); const ny=(d.getMonth()+1>=4)?y+1:y; return ny+'-04-01'; }
 // 編集タブ（主要・登校便／下校便／添乗員送迎）。再描画せず表示切替＝入力途中も保持・軽快
 function _tabBtn(k,label){ const on=(selTab===k); return `<button id="tabbtn-${k}" onclick="setTab('${k}')" style="border:1px solid ${on?'#4d7a5e':'#cfe0d5'};background:${on?'#4d7a5e':'#eef4ef'};color:${on?'#fff':'#2d4a38'};padding:7px 13px;border-radius:9px 9px 0 0;cursor:pointer;font-size:13px;font-weight:${on?'700':'500'};font-family:inherit;">${label}</button>`; }
-function setTab(t){ selTab=t; ['main','gekou','tensou','keiro'].forEach(k=>{ const el=document.getElementById('tab-'+k); if(el) el.style.display=(k===t?'':'none'); const b=document.getElementById('tabbtn-'+k); if(b){ const on=(k===t); b.style.background=on?'#4d7a5e':'#eef4ef'; b.style.color=on?'#fff':'#2d4a38'; b.style.borderColor=on?'#4d7a5e':'#cfe0d5'; b.style.fontWeight=on?'700':'500'; } }); }
+function setTab(t){ selTab=t; ['main','gekou','tensou','keiro'].forEach(k=>{ const el=document.getElementById('tab-'+k); if(el) el.style.display=(k===t?'':'none'); const b=document.getElementById('tabbtn-'+k); if(b){ const on=(k===t); b.style.background=on?'#4d7a5e':'#eef4ef'; b.style.color=on?'#fff':'#2d4a38'; b.style.borderColor=on?'#4d7a5e':'#cfe0d5'; b.style.fontWeight=on?'700':'500'; } });
+  // ④経路タブでは上の見出しの固定をやめ、作業する場所を広く取る
+  const hd=document.getElementById('stickyHead');
+  if(hd) hd.style.position = (t==='keiro' ? 'static' : 'sticky');
+  _fitRptSticky();
+}
 // 版セレクタ＋「新版をコピー作成」パネル
 function renderVersionBar(c){
   const vers=_vers(c.id), latest=latestVerId(c.id);
@@ -1194,7 +1199,7 @@ function renderEditor(){
   const refD = _refDeparture();
   const firstFormName = (forms.find(f=>(f.gekou_departures||[]).some(t=>t))||{}).form_name || '';
   area.innerHTML = `<div class="courseCard">
-    <div id="stickyHead" style="position:sticky;top:0;z-index:6;background:#fff;padding:8px 0 0;border-bottom:1px solid #e2ede6;margin-bottom:12px;">
+    <div id="stickyHead" style="position:${selTab==='keiro'?'static':'sticky'};top:0;z-index:6;background:#fff;padding:8px 0 0;border-bottom:1px solid #e2ede6;margin-bottom:12px;">
       <div class="courseHead" style="margin-bottom:8px;">
         <div class="courseTitle">${escHtml(courseLabel(c))}</div>
         <button class="${c.active?'':'primary'}" onclick="toggleActive()">${c.active?'✅ 有効（クリックで廃止）':'🚫 廃止中（クリックで有効）'}</button>
@@ -1259,11 +1264,14 @@ function renderEditor(){
   _fitRptSticky();
 }
 
-/** ④経路タブの「便・区間ボタン」を、上の固定ヘッダーのすぐ下に貼り付ける。
- *  ヘッダーの高さは版の表示などで変わるので、描画のたびに測って合わせる */
+/** ④経路タブの「便・区間ボタン」を画面の上に貼り付ける。
+ *  ④では上の見出しは固定しない（作業する場所を広く取るため）ので top=0。
+ *  ①〜③では見出しが固定なので、その高さのぶんだけ下げる（高さは版の表示などで変わるため毎回測る） */
 function _fitRptSticky(){
   const head=document.getElementById('stickyHead'), bar=document.getElementById('rptSticky');
-  if(head && bar) bar.style.top = head.offsetHeight + 'px';
+  if(!bar) return;
+  const stuck = head && getComputedStyle(head).position === 'sticky';
+  bar.style.top = (stuck ? head.offsetHeight : 0) + 'px';
 }
 window.addEventListener('resize', _fitRptSticky);
 
