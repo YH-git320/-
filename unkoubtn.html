@@ -19,8 +19,8 @@
     background:var(--bg);color:var(--ink);font-size:19px;line-height:1.7;
     display:flex;flex-direction:column;min-height:100dvh;-webkit-text-size-adjust:100%;overflow-x:hidden;}
   .pbar-wrap{background:#fff;border-bottom:1px solid var(--line);padding:12px 16px;position:sticky;top:0;z-index:10;}
-  .pbar-title{font-size:18px;font-weight:800;color:var(--brand-dark);}
-  .pbar-sub{font-size:14px;color:var(--ink-soft);margin-top:2px;}
+  .pbar-title{font-size:22px;font-weight:800;color:var(--brand-dark);line-height:1.35;}
+  .pbar-sub{font-size:13px;color:var(--ink-soft);margin-top:2px;}
   main{flex:1;padding:14px 16px 28px;max-width:680px;margin:0 auto;width:100%;}
   .sec-h{font-size:16px;font-weight:800;color:#fff;background:var(--brand);border-radius:10px;
     padding:9px 14px;margin:20px 0 12px;}
@@ -208,9 +208,9 @@ function render(){
   const app=document.getElementById('app');
   if(!INFO){ app.innerHTML=''; return; }
 
-  document.getElementById('barTitle').textContent = INFO.course_label || '運行ボタン';
-  document.getElementById('barSub').textContent =
-    dateJp(INFO.work_date) + '　' + (INFO.driver_name||'') + (PREVIEW?'　【見本】':'');
+  // 上部の固定表示は「次にすること」を大きく。
+  // マップから戻ってきたとき、どこまで進んだか一目で分かるようにする
+  const _t = document.getElementById('barTitle'), _s = document.getElementById('barSub');
 
   // 登校便を先に、次に下校便①②③の順に並べる
   const order = { '登校':0, '下校①':1, '下校②':2, '下校③':3 };
@@ -233,6 +233,19 @@ function render(){
   const steps = buildSteps(cur);
   let nowIdx = steps.findIndex(s=>!stepDone(s));               // いま進めるべき手順
   if(nowIdx<0) nowIdx = steps.length;                           // すべて済み
+
+  // 上部の固定表示：「次にすること」を大きく出す
+  const ns = steps[nowIdx];
+  if(ns){
+    let act = '着いた';
+    if(ns.type==='one') act = ns.btn;
+    else if(evOf('到着', ns.seq)) act = '出発';
+    _t.textContent = '▶ ' + ns.label + '　' + act;
+  } else {
+    _t.textContent = '✓ ' + cur.label + ' は終わりました';
+  }
+  _s.textContent = (INFO.course_label||'') + '　' + cur.label + '　'
+                 + dateJp(INFO.work_date) + (PREVIEW?'　【見本】':'');
   steps.forEach((s,i)=>{
     const done  = stepDone(s);
     const state = done ? 'done' : (i===nowIdx ? 'now' : 'next');
@@ -273,7 +286,9 @@ function render(){
       </div>
       <div class="passrow">${passBtn(i)}</div>`;
       const leg = s.legPoints ? mapUrl(s.legPoints) : null;
-      if(leg) h += `<a class="mapbtn" href="${leg}" target="_blank" rel="noopener">🗺 ここまでの道案内</a>`;
+      // target を名前付きにして、押すたびに新しいタブが増えないようにする
+      // （_blank だと10回押せば10タブになり、運転中に戻るのが大変になる）
+      if(leg) h += `<a class="mapbtn" href="${leg}" target="unkoumap" rel="noopener">🗺 ここまでの道案内</a>`;
     } else if(i===nowIdx && s.type==='one'){
       h += `<div class="actrow">${actBtn(i,s.kind,s.btn,one)}</div>`;
     } else if(s.seq!=null){
