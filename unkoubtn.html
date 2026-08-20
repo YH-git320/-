@@ -73,6 +73,16 @@
   .passrow{display:flex;justify-content:flex-end;margin-top:8px;}
   .passbtn{font-family:inherit;font-size:14px;font-weight:700;background:#fff;
     border:2px solid var(--line);color:var(--ink-soft);border-radius:10px;padding:9px 16px;cursor:pointer;}
+
+  /* ── 人数の集計（置き去り防止の確認） ── */
+  .segnote{background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 12px;
+    margin-bottom:11px;font-size:14px;line-height:1.7;color:var(--ink-soft);}
+  .remain{margin-top:7px;font-size:15px;font-weight:800;color:var(--ink-soft);text-align:right;}
+  .remain.bad{color:var(--danger);}
+  .allrow{display:flex;gap:8px;align-items:center;margin-top:11px;flex-wrap:wrap;}
+  .allinfo{flex:1 1 130px;min-width:0;font-size:16px;font-weight:800;color:var(--ink-soft);}
+  .allinfo .bad{color:var(--danger);}
+  .allrow .bigbtn,.allrow .donebtn{flex:1 1 150px;margin-top:0;font-size:19px;padding:15px 6px;}
   .passbtn.arm{background:#fbe9e7;border-color:#e8b4ae;color:var(--danger);}
 
   /* 画面が狭いとき（分割表示など）も、着いた／人数／出発は横一列を保つ */
@@ -160,7 +170,7 @@ function arm(i,kind){
 function disarm(){ ARM=null; clearTimeout(_armTimer); }
 
 /** 押す前は緑の大ボタン、押した後は時刻を出す。押した後をタップすると取り消しに入る */
-function actBtn(i, kind, label, e, small){
+function actBtn(i, kind, label, e, small, doneLabel){
   const k = armKey(i,kind);
   if(!e){
     return `<button class="bigbtn" onclick="onAct(${i},'${kind}')">${esc(label)}</button>`;
@@ -170,9 +180,10 @@ function actBtn(i, kind, label, e, small){
       もう一度タップで<br>取り消し</button>`;
   }
   return `<button class="${small?'passbtn':'donebtn'}" onclick="onAct(${i},'${kind}')">${
-    small ? '↩ '+esc(kindLabel(kind))+' '+hm(e.pressed_at)+' を取り消す' : hm(e.pressed_at)}</button>`;
+    small ? '↩ '+esc(kindLabel(kind))+' '+hm(e.pressed_at)+' を取り消す'
+          : (doneLabel ? esc(doneLabel)+' '+hm(e.pressed_at) : hm(e.pressed_at))}</button>`;
 }
-function kindLabel(k){ return k==='到着'?'着':k==='出発'?'発':k; }
+function kindLabel(k){ return k==='到着'?'着':k==='出発'?'発':k==='全員降車確認'?'全員降車':k; }
 
 /** 通過（乗降なし）。こちらも押した後はもう一度タップで取り消し */
 function passBtn(i){
@@ -225,10 +236,12 @@ function render(){
   if(nowIdx<0) nowIdx = steps.length;                           // すべて済み
 
   // 上部の固定表示：「次にすること」を大きく出す
+  const CI = countInfo(steps);
   const ns = steps[nowIdx];
   if(ns){
     let act = '着いた';
     if(ns.type==='one') act = ns.btn;
+    else if(ns.last && (evOf('出発', ns.seq)||evOf('通過', ns.seq)) && !evOf('全員降車確認', ns.seq)) act = '全員降りた';
     else if(evOf('到着', ns.seq)) act = '出発';
     _t.textContent = '▶ ' + ns.label + '　' + act;
   } else {
@@ -236,6 +249,13 @@ function render(){
   }
   _s.textContent = (INFO.course_label||'') + '　' + cur.label + '　'
                  + dateJp(INFO.work_date) + (PREVIEW?'　【見本】':'');
+
+  // 便によって人数の意味が入れ替わるので、最初に書いておく
+  h += `<div class="segnote">${ CI.mode==='登校'
+    ? '各バス停で<b>乗った人数</b>を入れます。最後の学校では、<b>全員降りたこと</b>を確認して押してください。'
+    : '最初の学校で<b>乗せた人数</b>、各バス停で<b>降りた人数</b>を入れます。最後のバス停で<b>残り0人</b>になるはずです。'
+  }</div>`;
+
   steps.forEach((s,i)=>{
     const done  = stepDone(s);
     const state = done ? 'done' : (i===nowIdx ? 'now' : 'next');
@@ -264,9 +284,19 @@ function render(){
       </div>`;
     if(s.note) h += `<div class="warn">⚠ ${esc(s.note).replace(/／/g,'<br>⚠ ')}</div>`;
 
-    const pbox = (s.seq!=null) ? `<div class="pbox"><div class="plab">人数</div>
+    // 登校便の最後（学校）は全員が降りるだけなので、人数の入力欄は出さない。
+    // かわりに「乗せた○人 → 全員降りた」の確認を出す（下の allOffRow）
+    const noBox = (CI.mode==='登校') && s.last;
+    const plab  = (CI.mode==='登校' || s.first) ? '乗車' : '降車';
+    const pbox = (s.seq!=null && !noBox) ? `<div class="pbox"><div class="plab">${plab}</div>
         <input type="number" inputmode="numeric" min="0" max="99" value="${cnt!=null?cnt:''}"
           onchange="setCount(${s.seq}, this.value)" placeholder="—"></div>` : '';
+    // 下校便は、降ろすたびに車内に何人残るかを出す
+    const rleft = (CI.mode==='下校' && s.type==='stop' && !s.first) ? CI.remain[s.seq] : null;
+    // 途中で人が残っているのは当たり前。赤くするのは「最後なのに残っている」「数が合わない」ときだけ
+    const rbad  = (rleft!=null) && (rleft < 0 || (s.last && rleft !== 0));
+    const rrow  = (rleft==null) ? ''
+      : `<div class="remain${rbad?' bad':''}">車内に残り ${rleft}人</div>`;
 
     if(i===nowIdx && s.type==='stop'){
       // 「着いた」／人数／「出発」を横に並べる。押したボタンは時刻に変わり、
@@ -290,10 +320,13 @@ function render(){
       });
     } else if(i===nowIdx && s.type==='one'){
       h += `<div class="actrow">${actBtn(i,s.kind,s.btn,one)}</div>`;
-    } else if(s.seq!=null){
+    } else if(pbox){
       // 済んだ分・これからの分も、人数はいつでも入れられる
       h += `<div class="actrow"><div class="pspacer"></div>${pbox}</div>`;
     }
+    h += rrow;
+    // 最後のバス停は「全員降りた」を押して完了。押し忘れると次へ進まない
+    if(s.type==='stop' && s.last) h += allOffRow(i, s, CI);
     // 済んだ手順は、もう一度タップで取り消せるボタンを出す
     if(done && i===nowIdx-1){
       h += `<div class="passrow">${
@@ -304,7 +337,7 @@ function render(){
     }
     h += '</div>';
   });
-  h += '<p class="hint">乗車人数は、運行が一区切りついてから入れても構いません。あとから直せます。</p>';
+  h += '<p class="hint">人数は、運行が一区切りついてから入れても構いません。あとから直せます。</p>';
 
   app.innerHTML = h;
   scrollToNow(nowIdx);
@@ -328,16 +361,68 @@ function buildSteps(seg){
                  note: notes.length ? notes.join('／') : null,
                  legs: legsTo(pts, idx) });
   });
+  // 最初と最後のバス停に印をつける。
+  // 登校便＝最後が学校（全員降りる）／下校便＝最初が学校（全員乗る）
+  const stops = steps.filter(s=>s.type==='stop');
+  if(stops.length){ stops[0].first = true; stops[stops.length-1].last = true; }
   steps.push({ type:'one', kind:'帰庫', seq:null, label:'帰庫', btn:'帰庫した',
                note: carry.length ? carry.join('／') : null });
   return steps;
 }
 
 /** その手順が済んだか。バス停は「出発」まで押して完了。
- *  乗降がなく停まらなかった場合は「通過」だけで完了とする */
+ *  乗降がなく停まらなかった場合は「通過」だけで完了とする。
+ *  最後のバス停だけは「全員降りた」の確認まで済んで完了（置き去り防止） */
 function stepDone(s){
-  if(s.type==='stop') return !!(evOf('出発', s.seq) || evOf('通過', s.seq));
+  if(s.type==='stop'){
+    const moved = !!(evOf('出発', s.seq) || evOf('通過', s.seq));
+    return s.last ? (moved && !!evOf('全員降車確認', s.seq)) : moved;
+  }
   return !!evOf(s.kind, s.seq);
+}
+
+/** 人数の意味と集計。法令（運輸規則25条）は人数の記録を求めていないが、
+ *  乗せた数と降ろした数が合うかは置き去り防止の要になるため、その場で見えるようにする。
+ *
+ *  登校便：各バス停で「乗った人数」。最後のバス停（学校）で全員降りる
+ *  下校便：最初のバス停（学校）で「乗った人数」。以降の各バス停で「降りた人数」 */
+function countInfo(steps){
+  const stops = steps.filter(s=>s.type==='stop');
+  const num = s => {
+    const v = COUNTS[SEG+'|'+s.seq];
+    return (v==null || v==='') ? null : Number(v);
+  };
+  if(SEG === '登校'){
+    const boarding = stops.slice(0, -1);          // 最後（学校）は降りるだけなので数えない
+    const filled = boarding.filter(s=>num(s)!=null);
+    return { mode:'登校', total: filled.reduce((a,s)=>a+num(s), 0),
+             known: filled.length>0 && filled.length===boarding.length, remain:{} };
+  }
+  const total = stops.length ? num(stops[0]) : null;
+  const remain = {}; let left = total;
+  stops.forEach((s,i)=>{
+    if(i===0) return;
+    const n = num(s);
+    if(left!=null && n!=null) left = left - n;
+    remain[s.seq] = (total==null) ? null : left;
+  });
+  return { mode:'下校', total, known: total!=null, remain };
+}
+
+/** 最後のバス停に出す「全員降りた」の確認。ここが置き去り防止の最終チェックになる */
+function allOffRow(i, s, CI){
+  const ev = evOf('全員降車確認', s.seq);
+  let info;
+  if(CI.mode === '登校'){
+    info = CI.known ? `乗せた <b>${CI.total}</b>人` : '乗せた人数は未入力';
+  }else{
+    const left = CI.remain[s.seq];
+    info = (left==null) ? '人数は未入力'
+         : (left===0 ? '残り <b>0</b>人'
+                     : `<span class="bad">残り ${left}人</span>`);
+  }
+  return `<div class="allrow"><div class="allinfo">${info}</div>${
+    actBtn(i, '全員降車確認', '全員降りた', ev, false, '✓ 確認')}</div>`;
 }
 
 /** 一つ前のバス停（または先頭）から、このバス停までの道案内。
