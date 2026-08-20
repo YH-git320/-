@@ -21,6 +21,7 @@
   .pbar-wrap{background:#fff;border-bottom:1px solid var(--line);padding:12px 16px;position:sticky;top:0;z-index:10;}
   .pbar-title{font-size:22px;font-weight:800;color:var(--brand-dark);line-height:1.35;}
   .pbar-sub{font-size:13px;color:var(--ink-soft);margin-top:2px;}
+  .geomark{margin-left:7px;font-size:12px;white-space:nowrap;}
   main{flex:1;padding:14px 16px 28px;max-width:680px;margin:0 auto;width:100%;}
   .sec-h{font-size:16px;font-weight:800;color:#fff;background:var(--brand);border-radius:10px;
     padding:9px 14px;margin:20px 0 12px;}
@@ -115,7 +116,7 @@
 
 <div class="pbar-wrap">
   <div class="pbar-title" id="barTitle">運行ボタン</div>
-  <div class="pbar-sub" id="barSub">読み込んでいます…</div>
+  <div class="pbar-sub"><span id="barSub">読み込んでいます…</span><span id="geoMark" class="geomark"></span></div>
 </div>
 
 <main id="app"></main>
@@ -501,6 +502,72 @@ async function _record(kind, seq, label){
                                            p_seq:seq, p_label:label, p_pressed_at:now });
   if(!r.ok){ delete EVENTS[key]; render(); toast('記録できませんでした。もう一度押してください'); return; }
   toast(label+' '+(kind==='到着'?'着':kind==='出発'?'発':'')+' '+hm(now));
+  startGeo();                 // まだ許可を聞いていなければ、押した操作をきっかけに聞く
+  _saveGeo(kind, seq);        // 位置はあとから付ける（await しない＝ボタンを待たせない）
+}
+
+/* ===== 押した場所の記録 =====
+   この構想の出発点は「デジタコの実車/空車の切替を、高齢の運転手が的確に押せていない」
+   という問題（2026-08-17 八重樫さん指摘）。押した場所が残れば、
+   **本当にそのバス停で押したか**を後から確かめられる。
+
+   ・走行中ずっと位置を追い続けることはできない（画面が消える・別アプリに移ると止まる）
+   ・画面を見て押す瞬間はアプリが前面にあるので、そこは確実に取れる
+   → 画面が見えている間だけ位置を温めておき、押した瞬間の値を使う */
+let GEO = null;            // { lat, lng, acc, at }
+let _geoWatch = null;
+
+function geoFresh(ms){ return (GEO && (Date.now() - GEO.at) <= ms) ? GEO : null; }
+function geoMark(){
+  const el = document.getElementById('geoMark');
+  if(!el) return;
+  const g = geoFresh(120000);
+  el.textContent = g ? '📍' : '';
+  el.title = g ? ('位置の精度 約' + Math.round(g.acc) + 'm') : '';
+}
+function startGeo(){
+  if(_geoWatch != null || !navigator.geolocation) return;
+  try{
+    _geoWatch = navigator.geolocation.watchPosition(
+      p => { GEO = { lat:p.coords.latitude, lng:p.coords.longitude,
+                     acc:p.coords.accuracy, at:Date.now() }; geoMark(); },
+      () => { geoMark(); },          // 断られても運行の邪魔はしない（記録は時刻だけになる）
+      { enableHighAccuracy:true, maximumAge:10000, timeout:20000 });
+  }catch(e){}
+}
+function stopGeo(){
+  if(_geoWatch == null) return;
+  try{ navigator.geolocation.clearWatch(_geoWatch); }catch(e){}
+  _geoWatch = null;
+}
+document.addEventListener('visibilitychange', ()=>{ document.hidden ? stopGeo() : startGeo(); });
+
+/** 押した瞬間の位置。温めた値が新しければそれを使い、無ければその場で1回だけ取りにいく */
+function geoNow(){
+  const warm = geoFresh(20000);
+  if(warm) return Promise.resolve(warm);
+  if(!navigator.geolocation) return Promise.resolve(null);
+  return new Promise(res=>{
+    let done = false;
+    const fin = v => { if(!done){ done = true; res(v); } };
+    try{
+      navigator.geolocation.getCurrentPosition(
+        p => fin({ lat:p.coords.latitude, lng:p.coords.longitude, acc:p.coords.accuracy, at:Date.now() }),
+        () => fin(null),
+        { enableHighAccuracy:true, maximumAge:10000, timeout:12000 });
+    }catch(e){ fin(null); }
+    setTimeout(()=>fin(null), 13000);            // 端末が黙っても必ず終わらせる
+  });
+}
+
+/** 位置は「押した記録」と別に付ける。位置が取れなくても運行の記録は残る */
+async function _saveGeo(kind, seq){
+  if(PREVIEW) return;
+  const g = await geoNow();
+  if(!g) return;
+  GEO = g; geoMark();
+  await call('unkoubtn_locate', { p_token:TOKEN, p_segment:SEG, p_kind:kind, p_seq:seq,
+                                  p_lat:g.lat, p_lng:g.lng, p_accuracy:Math.round(g.acc) });
 }
 async function _erase(kind, seq, label){
   const key = SEG+'|'+kind+'|'+(seq==null?'':seq);
@@ -556,6 +623,7 @@ async function start(){
   (INFO.events||[]).forEach(e=>{ EVENTS[e.segment+'|'+e.kind+'|'+(e.seq==null?'':e.seq)] =
     { pressed_at:e.pressed_at, id:e.id }; if(e.passengers!=null) COUNTS[e.segment+'|'+e.seq]=e.passengers; });
   render();
+  startGeo();   // 位置の許可をここで聞く。断られてもボタンはそのまま使える
 }
 
 /** 見本モード：ログインなしで中身を見せる（公開されている経路データを読むだけ） */
