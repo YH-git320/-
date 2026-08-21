@@ -2003,12 +2003,16 @@ async function saveCourse(){
       if(allPts.length){ const rp=await fetch(`${REST_URL}/course_transfer_points`, { method:'POST', headers:getH(), body:JSON.stringify(allPts) }); if(!rp.ok){ const t=await rp.text(); _saveMsg('乗降場所の保存に失敗：'+t.slice(0,100), false); return; } }
       if(allPs.length){ const rq=await fetch(`${REST_URL}/course_phase_settings`, { method:'POST', headers:getH(), body:JSON.stringify(allPs) }); if(!rq.ok){ const t=await rq.text(); _saveMsg('局面の出社出庫の保存に失敗：'+t.slice(0,100), false); return; } }
     }
-    _saveMsg('✅ 保存しました', true);
     // 保存後の読み直しは**このコースだけ**にする。
     // 以前は毎回64コース分（停留所331行・日課238行）を取り直しており、
     // 1回の保存に数秒かかって「押しても反応がない」状態になっていた（2026-08-19）
     await Promise.all([ loadVersionInto(c.id, selVerId), loadScenarios() ]);
     renderCourseList(); renderEditor();
+    // ⚠️ 「保存しました」は**画面を作り直したあと**に出す。
+    //    renderEditor() は編集欄をまるごと作り直すので、先に出すとメッセージごと消える。
+    //    2026-08-19 に読み直しを速くしたことで、見える間もなく消えるようになっていた
+    //    （2026-08-21 八重樫さんが「保存しましたが表示されませんでした」と発見）
+    _saveMsg('✅ 保存しました', true);
   }catch(e){ _saveMsg('保存エラー：'+e.message, false); }
   finally{
     // どの抜け方をしても必ず鍵を外し、ボタンを戻す
