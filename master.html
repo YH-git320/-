@@ -33,7 +33,15 @@ header a.hlink {
 }
 header a.hlink:hover { background: rgba(77,122,94,0.10); color: #4d7a5e; }
 
-.container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+.container { max-width: 1600px; margin: 0 auto; padding: 20px; }
+
+/* 営業所マスタは列が多い（ID・順・名前・許可・住所・座標・電話・備考・操作）。
+   狭いと日本語が1文字ずつ折り返して、表が縦に伸びてしまう。
+   座標は折り返さず、名前と住所は細くなりすぎないようにする */
+#sec-offices .data-table td:nth-child(3),
+#sec-offices .data-table th:nth-child(3) { min-width: 130px; }
+#sec-offices .data-table td:nth-child(5) { min-width: 210px; }
+#sec-offices .data-table td:nth-child(6) { white-space: nowrap; }
 .layout { display: flex; gap: 16px; align-items: flex-start; }
 
 .sidebar {
@@ -754,9 +762,20 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
           <label><input type="radio" name="offices-filter" value="inactive" onchange="loadSimple('offices')">廃止</label>
           <label><input type="radio" name="offices-filter" value="all" onchange="loadSimple('offices')">全部</label>
         </div>
+        <!-- 表示列トグル（車両マスタと同じ形） -->
+        <div class="col-toggle-bar" style="margin-bottom:10px;">
+          <span style="font-size:11px;color:#888;font-weight:bold;margin-right:4px;">表示列：</span>
+          <label><input type="checkbox" id="otog-id" onchange="applyOfficeColVisible()">ID</label>
+          <label><input type="checkbox" id="otog-sort_order" checked onchange="applyOfficeColVisible()">順</label>
+          <label><input type="checkbox" id="otog-permit_labels" checked onchange="applyOfficeColVisible()">置ける車両の許可</label>
+          <label><input type="checkbox" id="otog-address" checked onchange="applyOfficeColVisible()">住所</label>
+          <label><input type="checkbox" id="otog-coord" checked onchange="applyOfficeColVisible()">座標</label>
+          <label><input type="checkbox" id="otog-phone" checked onchange="applyOfficeColVisible()">電話番号</label>
+          <label><input type="checkbox" id="otog-note" onchange="applyOfficeColVisible()">備考</label>
+        </div>
         <div style="overflow-x:auto;">
           <table class="data-table">
-            <thead><tr><th>ID</th><th>順</th><th>営業所名</th><th>置ける車両の許可</th><th>住所</th><th>座標</th><th>電話番号</th><th>備考</th><th>操作</th></tr></thead>
+            <thead><tr><th data-col="id">ID</th><th data-col="sort_order">順</th><th data-col="name">営業所名</th><th data-col="permit_labels">置ける車両の許可</th><th data-col="address">住所</th><th data-col="coord">座標</th><th data-col="phone">電話番号</th><th data-col="note">備考</th><th>操作</th></tr></thead>
             <tbody id="tbody-offices"></tbody>
           </table>
         </div>
@@ -1700,7 +1719,8 @@ function renderSimpleTable(key) {
   if (data.length === 0) { tbody.innerHTML = `<tr><td colspan="${def.cols.length+1}" style="text-align:center;color:#999;padding:20px;">データがありません</td></tr>`; return; }
   const _isAdminST = ['super_admin','admin'].includes(sessionStorage.getItem('takao_role'));
   tbody.innerHTML = data.map(row => {
-    const cells = def.cols.map(c => `<td>${esc(String(row[c]??''))}</td>`).join('');
+    // data-col を付けておくと、表示列の切り替えが列名だけでできる
+    const cells = def.cols.map(c => `<td data-col="${c}">${esc(String(row[c]??''))}</td>`).join('');
     const req = row[def.req] || '';
     // 営業所は地図で開けるようにする。座標があれば座標で、無ければ住所で開く
     const mapQ = (key === 'offices') ? (row.coord || row.address || '') : '';
@@ -1715,6 +1735,20 @@ function renderSimpleTable(key) {
         ${_isAdminST ? `<button class="btn btn-danger btn-small" onclick="deleteSimple('${key}',${row.id},'${escAttr(req)}')">削除</button>` : ''}
       </td></tr>`;
   }).join('');
+  if (key === 'offices') applyOfficeColVisible();
+}
+
+/** 営業所マスタの表示列を切り替える。
+ *  列が多いと日本語が細かく折り返して表が縦に伸びるので、要らない列は隠せるようにする。
+ *  営業所名と操作は、どれがどの行か分からなくなるため常に出す */
+function applyOfficeColVisible() {
+  ['id','sort_order','permit_labels','address','coord','phone','note'].forEach(c => {
+    const cb = document.getElementById('otog-' + c);
+    const on = cb ? cb.checked : true;
+    document.querySelectorAll('#sec-offices [data-col="' + c + '"]').forEach(el => {
+      el.style.display = on ? '' : 'none';
+    });
+  });
 }
 
 /** 営業所の座標（無ければ住所）をGoogleマップで開く。
@@ -1730,13 +1764,14 @@ function startEditSimple(key, id) {
   const row = (simpleCache[key]||[]).find(r => r.id === id);
   const tr = document.getElementById(`sr-${key}-${id}`);
   const editCols = def.cols.slice(1);
-  let html = `<td>${row.id}</td>`;
-  html += editCols.map(c => `<td><input class="inline-edit" data-key="${c}" value="${esc(String(row[c]??''))}"></td>`).join('');
+  let html = `<td data-col="id">${row.id}</td>`;
+  html += editCols.map(c => `<td data-col="${c}"><input class="inline-edit" data-key="${c}" value="${esc(String(row[c]??''))}"></td>`).join('');
   html += `<td style="white-space:nowrap;">
     <button class="btn btn-success btn-small" onclick="saveEditSimple('${key}',${id})">保存</button>
     <button class="btn btn-gray btn-small" onclick="renderSimpleTable('${key}')">取消</button>
   </td>`;
   tr.innerHTML = html;
+  if (key === 'offices') applyOfficeColVisible();   // 隠している列は編集中も隠したまま
 }
 
 async function saveEditSimple(key, id) {
