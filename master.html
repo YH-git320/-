@@ -38,10 +38,12 @@ header a.hlink:hover { background: rgba(77,122,94,0.10); color: #4d7a5e; }
 /* 営業所マスタは列が多い（ID・順・名前・許可・住所・座標・電話・備考・操作）。
    狭いと日本語が1文字ずつ折り返して、表が縦に伸びてしまう。
    座標は折り返さず、名前と住所は細くなりすぎないようにする */
-#sec-offices .data-table td:nth-child(3),
-#sec-offices .data-table th:nth-child(3) { min-width: 130px; }
-#sec-offices .data-table td:nth-child(5) { min-width: 210px; }
-#sec-offices .data-table td:nth-child(6) { white-space: nowrap; }
+#sec-offices .data-table td:nth-child(4),
+#sec-offices .data-table th:nth-child(4) { min-width: 130px; }   /* 営業所名 */
+#sec-offices .data-table td:nth-child(6) { min-width: 210px; }   /* 住所 */
+#sec-offices .data-table td:nth-child(7) { white-space: nowrap; }   /* 座標（先頭に選択列がある） */
+#sec-offices .data-table .selcol { width: 34px; text-align: center; padding: 4px; }
+#sec-offices .data-table .selcol input { width: 16px; height: 16px; cursor: pointer; }
 .layout { display: flex; gap: 16px; align-items: flex-start; }
 
 .sidebar {
@@ -762,6 +764,15 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
           <label><input type="radio" name="offices-filter" value="inactive" onchange="loadSimple('offices')">廃止</label>
           <label><input type="radio" name="offices-filter" value="all" onchange="loadSimple('offices')">全部</label>
         </div>
+        <!-- 選んだ営業所をメールで送る -->
+        <div class="col-toggle-bar" style="margin-bottom:8px;">
+          <span style="font-size:11px;color:#888;font-weight:bold;margin-right:4px;">メール：</span>
+          <button class="btn btn-gray btn-small" onclick="officeSelectAll(true)">すべて選択</button>
+          <button class="btn btn-gray btn-small" onclick="officeSelectAll(false)">すべて解除</button>
+          <button class="btn btn-add btn-small" onclick="officeMailSelected()">✉️ 選んだ営業所をメールで送る</button>
+          <span id="offSelCount" style="font-size:11px;color:#888;"></span>
+          <span style="font-size:11px;color:#888;">※ お使いのメールソフトが立ち上がります</span>
+        </div>
         <!-- 表示列トグル（車両マスタと同じ形） -->
         <div class="col-toggle-bar" style="margin-bottom:10px;">
           <span style="font-size:11px;color:#888;font-weight:bold;margin-right:4px;">表示列：</span>
@@ -775,7 +786,7 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
         </div>
         <div style="overflow-x:auto;">
           <table class="data-table">
-            <thead><tr><th data-col="id">ID</th><th data-col="sort_order">順</th><th data-col="name">営業所名</th><th data-col="permit_labels">置ける車両の許可</th><th data-col="address">住所</th><th data-col="coord">座標</th><th data-col="phone">電話番号</th><th data-col="note">備考</th><th>操作</th></tr></thead>
+            <thead><tr><th class="selcol"></th><th data-col="id">ID</th><th data-col="sort_order">順</th><th data-col="name">営業所名</th><th data-col="permit_labels">置ける車両の許可</th><th data-col="address">住所</th><th data-col="coord">座標</th><th data-col="phone">電話番号</th><th data-col="note">備考</th><th>操作</th></tr></thead>
             <tbody id="tbody-offices"></tbody>
           </table>
         </div>
@@ -1721,13 +1732,16 @@ function renderSimpleTable(key) {
   tbody.innerHTML = data.map(row => {
     // data-col を付けておくと、表示列の切り替えが列名だけでできる
     const cells = def.cols.map(c => `<td data-col="${c}">${esc(String(row[c]??''))}</td>`).join('');
+    // 営業所はメール送信のために選べるようにする
+    const selCell = (key === 'offices')
+      ? `<td class="selcol"><input type="checkbox" class="off-sel" data-id="${row.id}" onchange="officeSelCount()"></td>` : '';
     const req = row[def.req] || '';
     // 営業所は地図で開けるようにする。座標があれば座標で、無ければ住所で開く
     const mapQ = (key === 'offices') ? (row.coord || row.address || '') : '';
     const mapBtn = mapQ
       ? `<button class="btn btn-gray btn-small" data-q="${escAttr(mapQ)}" onclick="openOfficeMap(this)" title="${row.coord?'座標':'住所'}で地図を開く">🗺</button>`
       : '';
-    return `<tr id="sr-${key}-${row.id}">${cells}
+    return `<tr id="sr-${key}-${row.id}">${selCell}${cells}
       <td style="white-space:nowrap;">
         ${mapBtn}
         ${_isAdminST ? `<button class="btn btn-edit btn-small" onclick="startEditSimple('${key}',${row.id})">編集</button>` : ''}
@@ -1735,7 +1749,78 @@ function renderSimpleTable(key) {
         ${_isAdminST ? `<button class="btn btn-danger btn-small" onclick="deleteSimple('${key}',${row.id},'${escAttr(req)}')">削除</button>` : ''}
       </td></tr>`;
   }).join('');
-  if (key === 'offices') applyOfficeColVisible();
+  if (key === 'offices') { applyOfficeColVisible(); officeSelCount(); }
+}
+
+/* ===== 営業所をメールで送る =====
+   選んだ営業所の情報を、お使いのメールソフトに渡す（mailto:）。
+   地図は座標から開けるURLを本文に入れる。 */
+function officeSelectAll(on) {
+  document.querySelectorAll('#sec-offices .off-sel').forEach(cb => { cb.checked = !!on; });
+  officeSelCount();
+}
+function officeSelCount() {
+  const n = document.querySelectorAll('#sec-offices .off-sel:checked').length;
+  const el = document.getElementById('offSelCount');
+  if (el) el.textContent = n ? `（${n}件を選択中）` : '';
+}
+/** 座標が「35.6286, 139.2834」の形なら地図URLを作る。
+ *  ・度分秒は空白を含み、メール本文でリンクが切れるため付けない
+ *  ・小数6桁（約0.1m）で十分。桁が多いとメールソフトに渡せる文字数を圧迫する */
+function officeMapLink(row) {
+  const m = String(row.coord || '').trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+  return m ? 'https://www.google.com/maps/search/'
+           + Number(m[1]).toFixed(6) + ',' + Number(m[2]).toFixed(6) : null;
+}
+function officeMailBody(rows) {
+  const blocks = rows.map(r => {
+    const a = ['■ ' + r.name];
+    if (r.address) a.push('　住所：' + r.address);
+    if (r.phone)   a.push('　電話：' + r.phone);
+    const m = officeMapLink(r);
+    if (m) a.push('　地図：' + m);
+    return a.join('\n');
+  });
+  return ['高尾輸送サービスの営業所は下記のとおりです。', '', blocks.join('\n\n'),
+          '', '--', '株式会社高尾輸送サービス'].join('\n');
+}
+function officeMailSelected() {
+  const ids = [...document.querySelectorAll('#sec-offices .off-sel:checked')].map(cb => Number(cb.dataset.id));
+  if (!ids.length) { alert('送りたい営業所にチェックを入れてください。'); return; }
+  const rows = (simpleCache.offices || []).filter(r => ids.includes(r.id));
+  const subject = '高尾輸送サービス　営業所のご案内';
+  const body = officeMailBody(rows);
+  const url = 'mailto:?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+  // mailto: はURLの長さに実質的な上限がある（おおむね2000文字）。
+  // 日本語は1文字が9文字ぶんに化けるため、4〜5件でこの上限に届く。
+  // 超えたときは本文をコピーして、メールに貼り付けてもらう
+  if (url.length > 2000) {
+    if (confirm(`営業所が${rows.length}件あり、メールソフトに直接渡せる長さを超えました。\n\n`
+              + `本文をコピーしますか？\nメールソフトを開いて貼り付けてください。`)) {
+      officeCopyText('件名：' + subject + '\n\n' + body);
+    }
+    return;
+  }
+  location.href = url;
+}
+/** 本文をクリップボードへ。使えない環境では選択済みの入力欄を出して手でコピーしてもらう */
+async function officeCopyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    showStatus('status-offices', 'success', '✅ 本文をコピーしました。メールに貼り付けてください');
+    return;
+  } catch (e) { /* 下の方法を試す */ }
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;left:-9999px;top:0;';
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) {}
+  ta.remove();
+  showStatus('status-offices', ok ? 'success' : 'error',
+    ok ? '✅ 本文をコピーしました。メールに貼り付けてください'
+       : 'コピーできませんでした。件数を減らしてお試しください');
 }
 
 /** 営業所マスタの表示列を切り替える。
@@ -1764,7 +1849,7 @@ function startEditSimple(key, id) {
   const row = (simpleCache[key]||[]).find(r => r.id === id);
   const tr = document.getElementById(`sr-${key}-${id}`);
   const editCols = def.cols.slice(1);
-  let html = `<td data-col="id">${row.id}</td>`;
+  let html = (key === 'offices' ? '<td class="selcol"></td>' : '') + `<td data-col="id">${row.id}</td>`;
   html += editCols.map(c => `<td data-col="${c}"><input class="inline-edit" data-key="${c}" value="${esc(String(row[c]??''))}"></td>`).join('');
   html += `<td style="white-space:nowrap;">
     <button class="btn btn-success btn-small" onclick="saveEditSimple('${key}',${id})">保存</button>
