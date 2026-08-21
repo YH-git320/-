@@ -149,6 +149,28 @@ function dateJp(s){ if(!s) return ''; const d=new Date(s+'T00:00:00');
    ・地点を「/」で並べる形式。経由地は44か所まで通ることを確認済み
    ・data=!4m5!4m4!2m2!1b1!2b1!3e0 は「高速を使わない・有料を使わない・車」 */
 const MARU = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨'];
+
+/** その手順に出す道案内リンク。
+ *  target を名前付きにして、押すたびに新しいタブが増えないようにする
+ *  （_blank だと10回押せば10タブになり、運転中に戻るのが大変になる）。
+ *  区切のある区間は案内が2つ以上になる。上から順に押していけばよい */
+function legLinks(s){
+  const legs = s.legs || [];
+  let h = '';
+  legs.forEach((g,k)=>{
+    const u = mapUrl(g.pts);
+    if(!u) return;
+    const label = (legs.length===1)
+      ? (s.type==='stop' ? '🗺 ここまでの道案内'
+                         : '🗺 ' + (s.mapTo || '次の地点') + 'までの道案内')
+      : '🗺 道案内' + (MARU[k]||(k+1)) + '　'
+        + (g.cut ? (g.toName||'区切りの地点') + 'まで'
+                 : 'その先 〜 ' + (s.mapTo || s.label));
+    h += `<a class="mapbtn" href="${u}" target="unkoumap" rel="noopener">${esc(label)}</a>`;
+  });
+  return h;
+}
+
 function mapUrl(pts){
   const c = pts.filter(p=>p.lat!=null&&p.lng!=null).map(p=>Number(p.lat)+','+Number(p.lng));
   if(c.length<2) return null;
@@ -306,21 +328,10 @@ function render(){
         ${actBtn(i,'到着','着いた',arr)}${pbox}${actBtn(i,'出発','出発',dep)}
       </div>
       <div class="passrow">${passBtn(i)}</div>`;
-      // target を名前付きにして、押すたびに新しいタブが増えないようにする
-      // （_blank だと10回押せば10タブになり、運転中に戻るのが大変になる）
-      // 区切のある区間は案内が2つ以上になる。上から順に押していけばよい
-      const legs = s.legs || [];
-      legs.forEach((g,k)=>{
-        const u = mapUrl(g.pts);
-        if(!u) return;
-        const label = (legs.length===1)
-          ? '🗺 ここまでの道案内'
-          : '🗺 道案内' + (MARU[k]||(k+1)) + '　'
-            + (g.cut ? (g.toName||'区切りの地点') + 'まで' : 'その先 〜 ' + s.label);
-        h += `<a class="mapbtn" href="${u}" target="unkoumap" rel="noopener">${esc(label)}</a>`;
-      });
+      h += legLinks(s);
     } else if(i===nowIdx && s.type==='one'){
       h += `<div class="actrow">${actBtn(i,s.kind,s.btn,one)}</div>`;
+      h += legLinks(s);              // 帰庫のときは「車庫までの道案内」が出る
     } else if(pbox){
       // 済んだ分・これからの分も、人数はいつでも入れられる
       h += `<div class="actrow"><div class="pspacer"></div>${pbox}</div>`;
@@ -350,6 +361,7 @@ function render(){
  *  曲がり角の目印はボタンにしないが、注意書きがあれば次のバス停にまとめて出す（見落とし防止） */
 function buildSteps(seg){
   const pts = seg.points;
+  const gar = garagePoint();                    // そのコースの車庫（座標が入っていれば）
   const steps = [];
   steps.push({ type:'one', kind:'出庫', seq:null, label:'出庫', btn:'出庫した', note:null });
   let carry = [];                               // 手前の目印に付いていた注意書き
@@ -360,15 +372,42 @@ function buildSteps(seg){
     carry = [];
     steps.push({ type:'stop', seq:p.seq, label:p.name||('地点'+p.seq),
                  note: notes.length ? notes.join('／') : null,
-                 legs: legsTo(pts, idx) });
+                 legs: legsTo(pts, idx, gar) });
   });
   // 最初と最後のバス停に印をつける。
   // 登校便＝最後が学校（全員降りる）／下校便＝最初が学校（全員乗る）
   const stops = steps.filter(s=>s.type==='stop');
   if(stops.length){ stops[0].first = true; stops[stops.length-1].last = true; }
+  // 帰庫は「最後の地点 → 車庫」。ここも今まで道案内が出せていなかった区間
   steps.push({ type:'one', kind:'帰庫', seq:null, label:'帰庫', btn:'帰庫した',
-               note: carry.length ? carry.join('／') : null });
+               note: carry.length ? carry.join('／') : null,
+               mapTo: gar ? gar.name : null,
+               legs: (gar && pts.length)
+                 ? [{ pts:[pts[pts.length-1], gar], toName: gar.name, cut:false }] : null });
   return steps;
+}
+
+/** 「35°44'10.0"N 139°43'58.5"E」と「35.544222, 139.704389」の両方を受ける。
+ *  ⚠️ unkou.html の dmsToDecimal と同じもの。直すときは両方直すこと */
+function parseCoord(s){
+  const t = String(s||'').trim();
+  const m = t.match(/(\d+)°(\d+)'([\d.]+)"([NS])\s*[, ]\s*(\d+)°(\d+)'([\d.]+)"([EW])/);
+  if(m){
+    const lat=(Number(m[1])+Number(m[2])/60+Number(m[3])/3600)*(m[4]==='S'?-1:1);
+    const lng=(Number(m[5])+Number(m[6])/60+Number(m[7])/3600)*(m[8]==='W'?-1:1);
+    return { lat:+lat.toFixed(6), lng:+lng.toFixed(6) };
+  }
+  const d = t.match(/^(-?\d+\.\d+)\s*[, ]\s*(-?\d+\.\d+)$/);
+  if(d) return { lat:+Number(d[1]).toFixed(6), lng:+Number(d[2]).toFixed(6) };
+  return null;
+}
+
+/** そのコースが所属する車庫を、道案内の地点として返す。座標が未登録なら null */
+function garagePoint(){
+  const g = INFO && INFO.garage;
+  if(!g || !g.coord) return null;
+  const c = parseCoord(g.coord);
+  return c ? { lat:c.lat, lng:c.lng, name:g.name || '車庫', is_stop:true, split_here:false } : null;
 }
 
 /** その手順が済んだか。バス停は「出発」まで押して完了。
@@ -434,10 +473,12 @@ function allOffRow(i, s, CI){
  *  ⚠️ 2026-08-20 まではここで `is_stop || split_here` の手前まで遡っていたため、
  *  区切のある区間は**前半が丸ごと抜け落ち**、しかも案内の出発点が区切の地点になっていた。
  *  Googleはそこから回り道を組み立てるので、ルートが壊れて見えた（八重樫さんが実車で発見）。 */
-function legsTo(pts, toIdx){
-  let from = 0;
+function legsTo(pts, toIdx, gar){
+  let from = -1;
   for(let i=toIdx-1;i>=0;i--){ if(pts[i].is_stop){ from=i; break; } }   // 遡るのはバス停まで
-  const seg = pts.slice(from, toIdx+1);
+  // 手前にバス停が無い＝この便の最初のバス停。そこは**車庫から**案内する
+  const seg = (from < 0) ? (gar ? [gar].concat(pts.slice(0, toIdx+1)) : pts.slice(0, toIdx+1))
+                         : pts.slice(from, toIdx+1);
   const mk = (a,b) => ({ pts: seg.slice(a,b+1), toName: seg[b].name||'', cut: !!seg[b].split_here });
   const out = []; let start = 0;
   for(let i=1;i<seg.length;i++){
