@@ -1237,6 +1237,20 @@ async function uIssueOne(staffId){
   }catch(e){ cell.innerHTML = `<span class="tag warn">失敗：${esc(e.message).slice(0,120)}</span>`; return null; }
 }
 
+/** メールに入れるリンク。
+ *  ⚠️ URLをそのまま文字で出すと、メールは1行76文字で折り返す決まりのため
+ *     110文字のリンクが**途中で切れる**（2026-08-21 八重樫さんが携帯で発見）。
+ *     見える文字は短くし、URL全体は `href` に入れる。
+ *     HTMLが表示できない環境のために、貼り付け用のアドレスも小さく添える。 */
+function uMailLink(url, label){
+  return `<p style="margin:18px 0;">
+<a href="${esc(url)}" style="display:inline-block;background:#4d7a5e;color:#ffffff;text-decoration:none;
+   font-weight:bold;font-size:16px;padding:14px 26px;border-radius:8px;">${esc(label)}</a></p>
+<p style="font-size:12px;color:#888888;line-height:1.6;margin:-8px 0 18px;">
+※ 上のボタンが開かないときは、下のアドレス<b>全体</b>をコピーして、ブラウザのアドレス欄に貼ってください。<br>
+<span style="word-break:break-all;">${esc(url)}</span></p>`;
+}
+
 function uMailHtml(name, dateJp, links, want){
   let h = `<div style="font-family:'Hiragino Kaku Gothic ProN','Meiryo',sans-serif;font-size:14px;line-height:1.75;color:#222;">
 <p>${esc(name)} 様</p>`;
@@ -1249,13 +1263,13 @@ function uMailHtml(name, dateJp, links, want){
 ・乗車人数は、運行が一区切りついてから入れても構いません。あとから直せます<br>
 ・「🗺 ここまでの道案内」で、次のバス停までの道順が出ます<br>
 ・押し間違えたときは、同じボタンをもう一度押すと「取り消す」に変わります</p>
-<p>▼ 🚌 運行ボタン<br><a href="${esc(links.btn)}">${esc(links.btn)}</a></p>`;
+${uMailLink(links.btn, '🚌 運行ボタンを開く')}`;
   }
   if(want.nip){
     h += `<p>${hasBtn ? '運行が終わりましたら、運転日報のご確認をお願いします。'
                       : esc(dateJp)+'の運転日報のご確認をお願いします。'}<br>
 乗車人数とメーターが正しいかご確認のうえ、送信してください。<br>（スマートフォンからもご入力いただけます）</p>
-<p>▼ 📝 運転日報<br><a href="${esc(links.nip)}">${esc(links.nip)}</a></p>`;
+${uMailLink(links.nip, '📝 運転日報を開く')}`;
   }
   h += `<p style="color:#888;">※このリンクはご本人専用です。他の方には転送しないでください。<br>
 ---<br>高尾輸送サービス</p>
