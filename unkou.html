@@ -1776,6 +1776,146 @@ function rptCopyFrom(srcSeg){
   _saveMsg(`${R_SEG_LABEL[srcSeg]}から ${src.length}地点をコピーしました。違うところだけ直してください。`, true);
 }
 
+/* ===== 経路のコピー／貼り付け（コースをまたぐ） =====
+   ・回送で途中まで同じ道を通るコース、同じ学校へ行く別の車両など、
+     一度作った道を別のコースでも使い回すためのもの（2026-08-21 八重樫さんの要望）。
+   ・控えは **1本単位**（いま開いている便・送迎・ルートの並び）。
+     コースまるごとにしないのは、車庫が違えば出庫回送は違う道になり、
+     出庫回送は行き先の**最初のバス停がコースごとに違う**ため。
+   ・RPTS は版を読み直すたび丸ごと入れ替わる（loadVersionInto）。
+     そのため控えは localStorage に置く。コースを移っても画面を読み直しても残る。
+   ・貼り付けても**保存はされない**。必ず「保存」を押してもらう。 */
+const RPT_CLIP_KEY = 'unkou_rpt_clip_v1';
+function rptClipGet(){
+  try{
+    const s = localStorage.getItem(RPT_CLIP_KEY);
+    if(!s) return null;
+    const o = JSON.parse(s);
+    return (o && Array.isArray(o.pts) && o.pts.length) ? o : null;
+  }catch(e){ return null; }
+}
+/** 控えの中身を1行で表す（どのコースのどの道か） */
+function _clipLabel(o){
+  let s = (o.course||'') + '　' + (R_SEG_LABEL[o.seg] || o.seg || '');
+  if(o.who)   s += '　' + o.who;
+  if(o.route) s += '　サブ：' + o.route;
+  return s;
+}
+/** いま開いている道を同じ形で表す（貼り付け先の確認に使う） */
+function _clipHere(){
+  const c = _c() || {};
+  const o = { course: courseLabel(c), seg: selRSeg, route: selRRoute || '', who: '' };
+  if(_isKaisou(selRSeg)){
+    const sc = _scenList().find(x=>String(x.dbId)===String(selRScen));
+    o.who = sc ? (sc.label || ('送迎'+sc.dbId)) : '送迎なし';
+  }
+  return _clipLabel(o);
+}
+function rptClipCopy(){
+  if(!selCourseId){ _saveMsg('先にコースを選んでください。', false); return; }
+  rptSyncFromInputs();
+  // 名前も緯度も経度も空の行は、控えに入れない
+  const pts = _rpts().filter(p => String(p.lat).trim()!=='' || String(p.lng).trim()!=='' || String(p.name||'').trim()!=='');
+  if(!pts.length){ _saveMsg('この道にはまだ地点がありません。', false); return; }
+  const c  = _c() || {};
+  const sc = _isKaisou(selRSeg) ? _scenList().find(x=>String(x.dbId)===String(selRScen)) : null;
+  const o = {
+    course: courseLabel(c),
+    seg:    selRSeg,
+    who:    _isKaisou(selRSeg) ? (sc ? (sc.label || ('送迎'+sc.dbId)) : '送迎なし') : '',
+    route:  selRRoute || '',
+    pts: pts.map(p=>({ name:p.name||'', lat:p.lat, lng:p.lng,
+                       is_stop:!!p.is_stop, split_here:!!p.split_here, note:p.note||'' }))
+  };
+  try{ localStorage.setItem(RPT_CLIP_KEY, JSON.stringify(o)); }
+  catch(e){ _saveMsg('控えを置けませんでした：'+e.message, false); return; }
+  renderEditor();
+  _saveMsg(`${pts.length}地点をコピーしました。貼り付けたいコースと便を開いて「📥 ここへ貼り付け」を押してください。`, true);
+}
+/** いま開いている道の、**このコース本来の**出発地と到着地（座標つき）。
+ *  貼り付けた道の両端がここと違っていないかを確かめるために使う。
+ *  ⚠️ 経路の両端は独立した項目ではなく「並びの1番目と最後」そのもの。
+ *     だから貼り付けると両端も一緒に入れ替わる（2026-08-21 八重樫さんの指摘）。 */
+function _endPtsHere(){
+  const num = p => (p && String(p.lat).trim()!=='' && String(p.lng).trim()!=='')
+    ? { name:p.name||'', lat:Number(p.lat), lng:Number(p.lng) } : null;
+  if(!_isKaisou(selRSeg)){
+    // 本線＝②のバス停の並び。登校は先頭から、下校は逆から
+    const stops = _stops();
+    const src = (selRSeg==='登校')
+      ? stops.filter(s=>!s.gekou_only)
+      : (function(){ const a=[]; for(let i=stops.length-1;i>=0;i--){ if(!stops[i].gekou_only) a.push(stops[i]); } stops.forEach(s=>{ if(s.gekou_only) a.push(s); }); return a; })();
+    const cv = src.map(s=>{ const d=dmsToDecimal(s.coord); return d ? { name:s.name||'', lat:d.lat, lng:d.lng } : null; }).filter(Boolean);
+    return cv.length ? { from:cv[0], to:cv[cv.length-1] } : { from:null, to:null };
+  }
+  const c   = _c() || {};
+  const off = OFFICES[c.office_id];
+  const gc  = off && dmsToDecimal(off.coord);
+  const gar = gc ? { name:off.name||'車庫', lat:gc.lat, lng:gc.lng } : null;
+  const ac  = (c.after_toukou==='他所移動') ? dmsToDecimal(c.after_toukou_coord) : null;
+  const away = ac ? { name:(c.after_toukou_place||'他所'), lat:ac.lat, lng:ac.lng } : null;
+  const hub = (selRSeg==='帰庫回送登校' || selRSeg==='出庫回送下校') ? (away || gar) : gar;
+  // 本線から拾う（_kaiEnds と同じ拾い方にそろえる）
+  const raw = ((RPTS[String(selCourseId)]||{})[_kaiGroup()==='登校' ? '登校' : '下校①']||[])
+    .filter(p=>String(p.lat).trim()!=='' && String(p.lng).trim()!=='');
+  const firstStop = raw.length ? num(raw.find(p=>p.is_stop) || raw[0]) : null;
+  const lastPt    = raw.length ? num(raw[raw.length-1]) : null;
+  switch(selRSeg){
+    case '出庫回送登校': return { from:gar,    to:firstStop };
+    case '帰庫回送登校': return { from:lastPt, to:hub       };
+    case '出庫回送下校': return { from:hub,    to:firstStop };
+    default:             return { from:lastPt, to:gar       };
+  }
+}
+function rptClipPaste(){
+  const o = rptClipGet();
+  if(!o){ _saveMsg('コピーされた道がありません。先に「📋 この道をコピー」を押してください。', false); return; }
+  if(!selCourseId){ _saveMsg('先にコースを選んでください。', false); return; }
+  rptSyncFromInputs();
+  const cur = _rpts();
+  // 貼り付ける道の両端と、このコース本来の両端を見比べる（250mより離れていたら知らせる）
+  const num = p => (p && String(p.lat).trim()!=='' && String(p.lng).trim()!=='')
+    ? { name:p.name||'', lat:Number(p.lat), lng:Number(p.lng) } : null;
+  const cv   = o.pts.map(num).filter(Boolean);
+  const want = _endPtsHere();
+  const nm   = p => p ? ((p.name||'名前なし')) : '（分かりません）';
+  const chk  = (got, exp) => {
+    if(!got || !exp) return { ok:true, txt:'' };
+    const km = rptHaversine(got, exp);
+    return { ok: km <= 0.25, km, txt: km<=0.25 ? '' : `${km.toFixed(2)}km 離れています` };
+  };
+  const a = chk(cv[0], want.from), b = chk(cv[cv.length-1], want.to);
+  let ends = '\n［両端］\n'
+    + '　出発地　' + nm(cv[0])              + (a.ok ? '' : '\n　　　　⚠️ このコースは「' + nm(want.from) + '」から出ます（' + a.txt + '）') + '\n'
+    + '　到着地　' + nm(cv[cv.length-1])    + (b.ok ? '' : '\n　　　　⚠️ このコースは「' + nm(want.to)   + '」に着きます（' + b.txt + '）') + '\n';
+  if(!a.ok || !b.ok){
+    ends += '\n⚠️ 経路の両端は「並びの1番目と最後」そのものです。\n'
+          + '　　貼り付けると両端も入れ替わるので、上の⚠️の行を\n'
+          + '　　このコースの地点に直してから保存してください。\n';
+  }
+  if(!confirm(
+      'コピーした道\n　　' + _clipLabel(o) + '\n　　' + o.pts.length + '地点\n'
+    + ends
+    + '\n↓ これを貼り付けます\n\n'
+    + '貼り付け先\n　　' + _clipHere() + '\n'
+    + (cur.length ? '　　いまの' + cur.length + '地点は消えます\n' : '　　いまは空です\n')
+    + '\nよろしいですか。（この時点ではまだ保存されません）')) return;
+  RPTS[String(selCourseId)][_rkey()] = o.pts.map(p=>({ name:p.name||'', lat:p.lat, lng:p.lng,
+                       is_stop:!!p.is_stop, split_here:!!p.split_here, note:p.note||'' }));
+  rptSelIdx = null;
+  renderEditor();
+  _saveMsg((a.ok && b.ok)
+    ? `${o.pts.length}地点を貼り付けました。違うところを直してから「保存」を押してください。`
+    : `${o.pts.length}地点を貼り付けました。⚠️ 両端がこのコースと違います。下の赤い枠のとおりに直してから「保存」を押してください。`,
+    a.ok && b.ok);
+}
+function rptClipClear(){
+  if(!confirm('コピーした道の控えを消します。よろしいですか。')) return;
+  try{ localStorage.removeItem(RPT_CLIP_KEY); }catch(e){}
+  renderEditor();
+  _saveMsg('控えを消しました。', true);
+}
+
 /* ===== Googleマップの道案内リンク =====
    実際にGoogleマップへ渡して確かめたこと（2026-08-19）：
    ・`?api=1&waypoints=…` の形式は経由地9か所まで。10個以上渡すと超えた分は黙って捨てられる
@@ -1917,6 +2057,44 @@ function renderRoutePoints(){
   const copyRow = copyBtns ? `<div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">
       ${copyBtns}<span class="muted" style="font-size:13px;">下校便は原則どの便も同じ道です。コピーしてから、違うところだけ直してください。</span>
     </div>` : '';
+  // コースをまたぐコピー／貼り付け。控えは localStorage にあるのでコースを移っても残る
+  const _clip = rptClipGet();
+  const clipRow = `<div class="line" style="gap:6px;margin-bottom:6px;flex-wrap:wrap;align-items:center;">
+      <button class="mini" onclick="rptClipCopy()" title="いま開いている道の並びを控えます。別のコースを開いて貼り付けられます。">📋 この道をコピー</button>
+      <button class="mini" onclick="rptClipPaste()"${_clip?'':' disabled'} title="${_clip?escAttr(_clipLabel(_clip)+' の'+_clip.pts.length+'地点を、いま開いている道へ入れます'):'先に「📋 この道をコピー」を押してください'}">📥 ここへ貼り付け</button>
+      ${_clip?`<span style="font-size:12px;color:#2d4a38;background:#f6faf7;border:1px solid #cfe0d5;border-radius:6px;padding:4px 9px;">
+        コピー中：<b>${escHtml(_clipLabel(_clip))}</b>（${_clip.pts.length}地点）
+        <a href="javascript:void(0)" onclick="rptClipClear()" style="color:#8a9c90;text-decoration:none;margin-left:8px;" title="控えを消す">✕</a></span>`:''}
+    </div>
+    <div class="muted" style="font-size:12px;margin:-2px 0 10px;line-height:1.8;">
+      <b>別のコースへも貼り付けられます。</b>途中まで同じ道を通る回送や、同じ学校へ行く別の車両で使い回せます。
+      貼り付けたあと、違うところを直して<b>「保存」を押してください</b>（貼り付けただけでは保存されません）。<br>
+      控えは<b>この端末のこのブラウザ</b>に1本だけ残ります。画面を読み直しても消えません。
+    </div>`;
+  // 両端がこのコースのものかを常に見張る。
+  // 貼り付けだけでなく、差し込む位置を間違えたときにも出る（2026-08-21）
+  const endWarn = (function(){
+    const cv = pts.map(p=>(String(p.lat).trim()!=='' && String(p.lng).trim()!=='')
+      ? { name:p.name||'', lat:Number(p.lat), lng:Number(p.lng) } : null).filter(Boolean);
+    if(cv.length < 2) return '';
+    const want = _endPtsHere();
+    const rows = [];
+    const nm = p => escHtml(p.name || '名前なし');
+    [['出発地', cv[0], want.from], ['到着地', cv[cv.length-1], want.to]].forEach(([lbl, got, exp])=>{
+      if(!got || !exp) return;
+      const km = rptHaversine(got, exp);
+      if(km <= 0.25) return;
+      rows.push(`<b>${lbl}</b>が「${nm(got)}」になっています。`
+        + `このコースは「${nm(exp)}」の<b>はず</b>です（${km.toFixed(2)}km 離れています）。`);
+    });
+    if(!rows.length) return '';
+    return `<div style="background:#fdeeee;border:1px solid #e6b8b8;border-radius:8px;padding:9px 12px;margin-bottom:8px;">
+      <div style="font-size:13px;color:#a03434;font-weight:700;margin-bottom:4px;">⚠️ 両端がこのコースのものと違います</div>
+      <div style="font-size:12px;color:#a03434;line-height:1.8;">${rows.join('<br>')}<br>
+        <span class="muted" style="font-size:11px;">経路の両端は「並びの1番目と最後」そのものです。他のコースから貼り付けると、両端も一緒に入れ替わります。その行を直してから保存してください。わざとそうしている場合は、このままで構いません。</span>
+      </div>
+    </div>`;
+  })();
   // Googleマップの道案内は2通りの開き方を出す：通し（区切だけで切る）と、バス停ごと
   const legsWhole = rptLegs(false);
   const legsStop  = rptLegs(true);
@@ -1986,6 +2164,7 @@ function renderRoutePoints(){
     </div>
     ${scenRow}
     ${copyRow}
+    ${clipRow}
     ${legNote}
     <div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;">
       ${_isKaisou(selRSeg) ? '' : '<button class="mini" onclick="rptFillFromStops()">②のバス停から並びを作る</button>'}
@@ -2000,6 +2179,7 @@ function renderRoutePoints(){
       <span style="font-size:13px;color:#2d4a38;font-weight:700;">直線距離の積み上げ　${dist.total.toFixed(2)} km</span>
       <div class="muted" style="font-size:12px;margin-top:4px;">地点が疎らな区間があると、実際の道のりより短く出ます。曲がり角ごとに地点を足すほど実際に近づきます。</div>
     </div>`:''}
+    ${endWarn}
     ${orderWarn.length?`<div style="background:#fff8e8;border:1px solid #e8d9b0;border-radius:8px;padding:9px 12px;margin-bottom:8px;">
       <div style="font-size:13px;color:#8a6d1a;font-weight:700;margin-bottom:4px;">⚠️ 並び順が逆になっていませんか</div>
       <div style="font-size:12px;color:#8a6d1a;line-height:1.8;">
