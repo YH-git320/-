@@ -402,10 +402,10 @@ function buildSteps(seg){
                note: carry.length ? carry.join('／') : null,
                mapTo: gar ? gar.name : null,
                legs: (gar && pts.length)
-                 ? chainLegs([pts[pts.length-1]].concat(
+                 ? chainLegs(dedupePts([pts[pts.length-1]].concat(
                      (kaisouPoints(seg.segment,'帰庫').length
                        ? kaisouPoints(seg.segment,'帰庫')
-                       : transferPoints(seg.segment,'後')), [gar]))
+                       : transferPoints(seg.segment,'後')), [gar])))
                  : null,
                subs: (gar && pts.length)
                  ? kaisouSubs(seg.segment, '帰庫', gar, [pts[pts.length-1]]) : null });
@@ -507,7 +507,30 @@ function legsTo(pts, toIdx, gar, segName){
   // ・入っていなければ、送迎の乗降地点だけを通す（道はナビ任せ）
   const kai = kaisouPoints(segName, '出庫');
   const head = (gar ? [gar] : []).concat(kai.length ? kai : transferPoints(segName, '前'));
-  return chainLegs(head.concat(pts.slice(0, toIdx+1)));
+  return chainLegs(dedupePts(head.concat(pts.slice(0, toIdx+1))));
+}
+
+/** 続けて同じ場所が並んだら1つにまとめる。
+ *  回送の道は**車庫と第1バス停を含んでいる**ので、そのまま前後に足すと重複する
+ *  （2026-08-21 実データで「都筑営業所車庫 → 都筑営業所車庫」が出て発覚） */
+function dedupePts(list){
+  const key = p => Number(p.lat).toFixed(6) + ',' + Number(p.lng).toFixed(6);
+  const out = [];
+  list.forEach(p=>{
+    const q = out[out.length-1];
+    if(q && key(q) === key(p)){
+      q.is_stop = q.is_stop || p.is_stop;
+      q.split_here = q.split_here || p.split_here;
+      q.brk = q.brk || p.brk;
+      q.transfer = q.transfer || p.transfer;
+      if(!q.name && p.name) q.name = p.name;
+      if(!q.kind && p.kind) q.kind = p.kind;
+      if(!q.bus_time && p.bus_time) q.bus_time = p.bus_time;
+      return;
+    }
+    out.push(Object.assign({}, p));
+  });
+  return out;
 }
 
 /** 地点の並びを、複数の道案内に分ける。
@@ -516,10 +539,13 @@ function legsTo(pts, toIdx, gar, segName){
 function chainLegs(seg){
   const mk = (a,b) => {
     const e = seg[b];
-    return { pts: seg.slice(a,b+1), toName: e.name||'', cut: !!e.split_here,
-             label: e.brk ? (e.name||'送迎地点') + '（添乗員 ' + (e.kind||'乗降')
-                            + (e.bus_time ? ' ' + String(e.bus_time).slice(0,5) : '') + '）'
-                          : null };
+    // 「添乗員 乗車 06:30」と書けるのは送迎シナリオの地点だけ。
+    // 回送の途中に置いたバス停の印は、名前をそのまま出す
+    let label = null;
+    if(e.transfer) label = (e.name||'送迎地点') + '（添乗員 ' + (e.kind||'乗降')
+                         + (e.bus_time ? ' ' + String(e.bus_time).slice(0,5) : '') + '）';
+    else if(e.brk) label = e.name || null;
+    return { pts: seg.slice(a,b+1), toName: e.name||'', cut: !!e.split_here, label };
   };
   const out = []; let start = 0;
   for(let i=1;i<seg.length-1;i++){
@@ -554,8 +580,8 @@ function kaisouPoints(segName, which){
 function kaisouSubs(segName, which, gar, tail){
   return kaisouRoutes(segName, which).slice(1).map(r => ({
     name: r.name,
-    pts: (which === '出庫') ? (gar ? [gar] : []).concat(r.pts, tail || [])
-                            : (tail || []).concat(r.pts, gar ? [gar] : [])
+    pts: dedupePts((which === '出庫') ? (gar ? [gar] : []).concat(r.pts, tail || [])
+                                      : (tail || []).concat(r.pts, gar ? [gar] : []))
   }));
 }
 
@@ -568,7 +594,7 @@ function transferPoints(segName, when){
     .map(p => {
       const c = parseCoord(p.coord);
       return c ? { lat:c.lat, lng:c.lng, name:p.name || '送迎地点', kind:p.kind,
-                   bus_time:p.bus_time, is_stop:true, split_here:false, brk:true } : null;
+                   bus_time:p.bus_time, is_stop:true, split_here:false, brk:true, transfer:true } : null;
     })
     .filter(Boolean);
 }
