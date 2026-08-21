@@ -1322,7 +1322,19 @@ function _fitRptSticky(){
   const head=document.getElementById('stickyHead'), bar=document.getElementById('rptSticky');
   if(!bar) return;
   const stuck = head && getComputedStyle(head).position === 'sticky';
-  bar.style.top = (stuck ? head.offsetHeight : 0) + 'px';
+  const t0 = (stuck ? head.offsetHeight : 0);
+  bar.style.top = t0 + 'px';
+  /* コピー・貼り付けの帯と、表の見出しも順に貼り付ける。
+     高さは画面幅で折り返して変わるので、そのつど測って積み上げる
+     （2026-08-21 八重樫さんの要望：ボタンを「全部」のすぐ上に置き、スクロールしても残す） */
+  const clip = document.getElementById('rptClipBar');
+  const t1 = t0 + bar.offsetHeight;
+  if(clip) clip.style.top = t1 + 'px';
+  const t2 = t1 + (clip ? clip.offsetHeight : 0);
+  document.querySelectorAll('#rptTable thead th').forEach(th=>{
+    th.style.position = 'sticky'; th.style.top = t2 + 'px';
+    th.style.zIndex = '3'; th.style.background = '#f6f9f7';
+  });
 }
 window.addEventListener('resize', _fitRptSticky);
 
@@ -1645,6 +1657,13 @@ function _rptAddLabel(){
 
 /** 行を選ぶ。差し込み先の目印なので、再描画はせず色とボタンの文字だけ変える（入力中の値を消さないため） */
 function rptSelect(i){
+  // 出発地は差し込み先に選べない（その上＝出発地の前になってしまうため）。
+  // 選べなくしておけば、貼り付けのときに断る場面そのものが起きない
+  // （2026-08-21 八重樫さんの指摘：警告を出すより、素直に入るほうがよい）
+  if(i===0 && _rptLockState().from){
+    _saveMsg('出発地の前には差し込めません。1つ下の行を選んでください（その上に入ります）。', false);
+    return;
+  }
   rptSelIdx = (rptSelIdx===i) ? null : i;   // 同じ行をもう一度押すと選択解除
   document.querySelectorAll('#rptTable tbody tr.rp-row').forEach(function(tr,k){
     tr.style.background = (k===rptSelIdx) ? '#eef4ef' : '';
@@ -2244,7 +2263,7 @@ function renderRoutePoints(){
     const mid = Math.max(0, pts.length - (lock.from?1:0) - (lock.to?1:0));
     const q = rptClipGet();
     const cn = q ? q.pts.length : 0;
-    return `<div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">
+    return `<div class="line" style="gap:6px;margin:0;flex-wrap:wrap;align-items:center;">
       <button class="mini" onclick="rptClipCopy()"${(n||mid)?'':' disabled'} title="${
         escAttr(n ? ('チェックした'+n+'地点をコピーします') : ('チェックがないので、中の'+mid+'地点（2番目〜最後から2番目）をまとめてコピーします'))
       }">📋 コピー${n?'（'+n+'）':(mid?'（中の'+mid+'）':'')}</button>
@@ -2351,7 +2370,6 @@ function renderRoutePoints(){
     </div>
     ${scenRow}
     ${copyRow}
-    ${clipRow}
     ${legNote}
     <div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;">
       ${_isKaisou(selRSeg) ? '' : '<button class="mini" onclick="rptFillFromStops()">②のバス停から並びを作る</button>'}
@@ -2370,6 +2388,7 @@ function renderRoutePoints(){
         <span class="muted" style="font-size:11px;">行き来する運行なら問題ありません。差し込む位置を1つ間違えたときにも出ます（「▲」で入れ替えられます）。</span>
       </div>
     </div>`:''}
+    <div id="rptClipBar" style="position:sticky;z-index:4;background:#fff;padding:6px 0 2px;">${clipRow}</div>
     <div style="overflow-x:auto;"><table id="rptTable" style="width:100%;border-collapse:collapse;font-size:13px;">
       <thead><tr style="background:#f6f9f7;">
         <th style="width:28px;"></th>
