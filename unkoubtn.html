@@ -390,7 +390,10 @@ function buildSteps(seg){
                note: carry.length ? carry.join('／') : null,
                mapTo: gar ? gar.name : null,
                legs: (gar && pts.length)
-                 ? chainLegs([pts[pts.length-1]].concat(transferPoints(seg.segment,'後'), [gar]))
+                 ? chainLegs([pts[pts.length-1]].concat(
+                     (kaisouPoints(seg.segment,'帰庫').length
+                       ? kaisouPoints(seg.segment,'帰庫')
+                       : transferPoints(seg.segment,'後')), [gar]))
                  : null });
   return steps;
 }
@@ -485,9 +488,11 @@ function legsTo(pts, toIdx, gar, segName){
   let from = -1;
   for(let i=toIdx-1;i>=0;i--){ if(pts[i].is_stop){ from=i; break; } }   // 遡るのはバス停まで
   if(from >= 0) return chainLegs(pts.slice(from, toIdx+1));
-  // 手前にバス停が無い＝この便の最初のバス停。**車庫から**、
-  // その日の配置で添乗員の送迎が選ばれていれば、その乗降地点も通って案内する
-  const head = (gar ? [gar] : []).concat(transferPoints(segName, '前'));
+  // 手前にバス停が無い＝この便の最初のバス停。ここは**車庫から**の案内になる。
+  // ・④で「出庫回送」の道が入っていれば、それを使う（通る道を会社が決めている）
+  // ・入っていなければ、送迎の乗降地点だけを通す（道はナビ任せ）
+  const kai = kaisouPoints(segName, '出庫');
+  const head = (gar ? [gar] : []).concat(kai.length ? kai : transferPoints(segName, '前'));
   return chainLegs(head.concat(pts.slice(0, toIdx+1)));
 }
 
@@ -509,6 +514,18 @@ function chainLegs(seg){
   }
   if(seg.length-1 >= start) out.push(mk(start, seg.length-1));
   return out.filter(g => g.pts.filter(p=>p.lat!=null&&p.lng!=null).length >= 2);
+}
+
+/** その便の回送の経路（運行時程マスタ④の「出庫回送」「帰庫回送」）。
+ *  その日の送迎シナリオに合う道が返ってくる。入っていなければ空。
+ *  ここに地点があるときは、**会社が決めた道**として、それを通って案内する */
+function kaisouPoints(segName, which){
+  const o = (INFO && INFO.kaisou && INFO.kaisou[segName]) || null;
+  const list = (o && o[which]) || [];
+  return list
+    .filter(p => p && p.lat != null && p.lng != null)
+    .map(p => ({ lat:Number(p.lat), lng:Number(p.lng), name:p.name || '',
+                 is_stop:!!p.is_stop, split_here:!!p.split_here, brk:!!p.is_stop }));
 }
 
 /** その便の添乗員の乗降地点。配置（duties.scenario_id）で選ばれたシナリオのもの。

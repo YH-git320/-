@@ -946,10 +946,23 @@ function curVer(){ const a=_vers(selCourseId); return a.find(v=>v.id===selVerId)
 function isLatestVer(){ return selVerId!=null && selVerId===latestVerId(selCourseId); }
 function _mapForm(r){ return { form_name:r.form_name, gekou_departures:Array.isArray(r.gekou_departures)?r.gekou_departures.slice():[], after_toukou:r.after_toukou||'', after_toukou_place:r.after_toukou_place||'', after_toukou_addr:r.after_toukou_addr||'', after_toukou_coord:r.after_toukou_coord||'', dep_overrides:(r.dep_overrides&&typeof r.dep_overrides==='object')?r.dep_overrides:{} }; }
 function _mapStop(r){ return { name:r.name||'', address:r.address||'', toukou_time:r.toukou_time||'', gekou_offset:(r.gekou_offset==null?null:r.gekou_offset), gekou_only:!!r.gekou_only, coord:r.coord||'', gekou_overrides:(r.gekou_overrides&&typeof r.gekou_overrides==='object')?r.gekou_overrides:{} }; }
-const R_SEGS = ['登校','下校①','下校②','下校③'];
-const R_SEG_LABEL = { '登校':'登校便', '下校①':'下校便①', '下校②':'下校便②', '下校③':'下校便③' };
-function _emptyRpts(){ const o={}; R_SEGS.forEach(s=>o[s]=[]); return o; }
-function _rpts(){ const k=String(selCourseId); RPTS[k] = RPTS[k] || _emptyRpts(); return RPTS[k][selRSeg] = RPTS[k][selRSeg] || []; }
+const R_SEGS = ['登校','下校①','下校②','下校③','出庫回送','帰庫回送'];
+const R_SEG_LABEL = { '登校':'登校便', '下校①':'下校便①', '下校②':'下校便②', '下校③':'下校便③',
+                      '出庫回送':'🅿 出庫→最初のバス停', '帰庫回送':'🅿 最後のバス停→帰庫' };
+/* 回送（車庫⇄バス停）は、添乗員の送迎パターンによって通る道が変わる。
+   そのためシナリオごとに別の並びを持つ。空＝送迎なしのときの道 */
+const R_KAISOU = ['出庫回送','帰庫回送'];
+let selRScen = '';                     // ④で回送を編集するとき、どのシナリオのときの道か
+function _isKaisou(seg){ return R_KAISOU.indexOf(seg) >= 0; }
+/** バッファの鍵。本線は便の名前だけ、回送は「便|シナリオid」 */
+function _rkey(seg, scen){
+  seg  = seg  || selRSeg;
+  scen = (scen === undefined) ? selRScen : scen;
+  return _isKaisou(seg) ? (seg + '|' + (scen == null ? '' : scen)) : seg;
+}
+function _emptyRpts(){ const o={}; R_SEGS.forEach(s=>{ if(!_isKaisou(s)) o[s]=[]; }); return o; }
+function _rpts(){ const k=String(selCourseId); RPTS[k] = RPTS[k] || _emptyRpts();
+  const kk=_rkey(); return RPTS[k][kk] = RPTS[k][kk] || []; }
 async function loadVersions(){
   VERS = {};
   const res = await fetch(`${REST_URL}/course_timetable_versions?select=id,course_id,valid_from,note&order=valid_from.desc,id.desc`, { headers: getH() });
@@ -986,11 +999,13 @@ async function loadStops(){
 // 各コースの最新版の経路点をバッファへ（コースを選ぶ前の一覧表示用）
 async function loadRoutePointsLatest(){
   const buf = {};
-  const res = await fetch(`${REST_URL}/course_route_points?select=course_id,version_id,segment,seq,name,lat,lng,is_stop,split_here,note&order=segment,seq`, { headers: getH() });
+  const res = await fetch(`${REST_URL}/course_route_points?select=course_id,version_id,segment,scenario_id,seq,name,lat,lng,is_stop,split_here,note&order=segment,seq`, { headers: getH() });
   if(!res.ok){ _saveMsg('経路の地点の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   (await res.json()).forEach(r=>{ if(r.version_id!==latestVerId(r.course_id)) return; const k=String(r.course_id);
+    if(R_SEGS.indexOf(r.segment) < 0) return;
     buf[k] = buf[k] || _emptyRpts();
-    if(buf[k][r.segment]) buf[k][r.segment].push({ name:r.name||'', lat:(r.lat==null?'':String(r.lat)), lng:(r.lng==null?'':String(r.lng)), is_stop:!!r.is_stop, split_here:!!r.split_here, note:(r.note||'') });
+    const kk = _rkey(r.segment, r.scenario_id);
+    (buf[k][kk] = buf[k][kk] || []).push({ name:r.name||'', lat:(r.lat==null?'':String(r.lat)), lng:(r.lng==null?'':String(r.lng)), is_stop:!!r.is_stop, split_here:!!r.split_here, note:(r.note||'') });
   });
   RPTS = buf;
 }
@@ -1005,10 +1020,14 @@ async function loadVersionInto(cid, verId){
   const rs = await fetch(`${REST_URL}/course_locations?version_id=eq.${verId}&select=name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_overrides&order=seq.nullslast,name`, { headers: getH() });
   if(rs.ok){ STOPS[k] = (await rs.json()).map(_mapStop); }
   else { _saveMsg('バス停の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
-  const rr = await fetch(`${REST_URL}/course_route_points?version_id=eq.${verId}&select=segment,seq,name,lat,lng,is_stop,split_here,note&order=segment,seq`, { headers: getH() });
+  const rr = await fetch(`${REST_URL}/course_route_points?version_id=eq.${verId}&select=segment,scenario_id,seq,name,lat,lng,is_stop,split_here,note&order=segment,seq`, { headers: getH() });
   if(!rr.ok){ _saveMsg('経路の地点の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   const box = _emptyRpts();
-  (await rr.json()).forEach(r=>{ if(box[r.segment]) box[r.segment].push({ name:r.name||'', lat:(r.lat==null?'':String(r.lat)), lng:(r.lng==null?'':String(r.lng)), is_stop:!!r.is_stop, split_here:!!r.split_here, note:(r.note||'') }); });
+  (await rr.json()).forEach(r=>{
+    if(R_SEGS.indexOf(r.segment) < 0) return;
+    const kk = _rkey(r.segment, r.scenario_id);
+    (box[kk] = box[kk] || []).push({ name:r.name||'', lat:(r.lat==null?'':String(r.lat)), lng:(r.lng==null?'':String(r.lng)), is_stop:!!r.is_stop, split_here:!!r.split_here, note:(r.note||'') });
+  });
   RPTS[k] = box;
 }
 async function loadScenarios(){
@@ -1527,6 +1546,8 @@ function rptSyncFromInputs(){
   });
 }
 function setRSeg(seg){ rptSyncFromInputs(); selRSeg=seg; rptSelIdx=null; renderEditor(); }
+/** 回送の道を、どの送迎シナリオのときのものとして編集するか */
+function setRScen(v){ rptSyncFromInputs(); selRScen = v || ''; rptSelIdx=null; renderEditor(); }
 
 /** 行を選ぶ。差し込み先の目印なので、再描画はせず色とボタンの文字だけ変える（入力中の値を消さないため） */
 function rptSelect(i){
@@ -1604,7 +1625,7 @@ function rptFillFromStops(){
     else if((s.name||'').trim()) skipped.push(s.name);
   });
   if(!pts.length){ _saveMsg('②のバス停に座標が入っていません。先にバス停の「座標」欄を埋めてください。', false); return; }
-  RPTS[String(selCourseId)][selRSeg] = pts;
+  RPTS[String(selCourseId)][_rkey()] = pts;
   rptSelIdx = null;
   renderEditor();
   _saveMsg(`バス停 ${pts.length}件から並びを作りました。${skipped.length?('（座標なしで飛ばした停：'+skipped.join('、')+'）'):''}曲がり角の目印を足して調整してください。`, true);
@@ -1707,9 +1728,25 @@ function renderRoutePoints(){
   const dist=rptDistances();
   const segBtns = R_SEGS.map(s=>{
     const on=(selRSeg===s);
-    const n=((RPTS[String(selCourseId)]||{})[s]||[]).length;
+    const n=((RPTS[String(selCourseId)]||{})[_rkey(s)]||[]).length;
     return `<button onclick="setRSeg('${s}')" style="border:1px solid ${on?'#4d7a5e':'#cfe0d5'};background:${on?'#4d7a5e':'#fff'};color:${on?'#fff':'#2d4a38'};padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:${on?'700':'500'};font-family:inherit;">${R_SEG_LABEL[s]}${n?`（${n}）`:''}</button>`;
   }).join('');
+  // 回送（車庫⇄バス停）は、添乗員の送迎パターンによって通る道が変わる。
+  // どの送迎のときの道を編集しているかを、ここで選ぶ
+  const scenRow = _isKaisou(selRSeg) ? (function(){
+    const all  = _scenList();
+    const list = all.filter(s=>s.dbId);
+    const unsaved = all.length - list.length;
+    const opts = ['<option value="">送迎なし（車庫から直行）</option>'].concat(
+      list.map(s=>`<option value="${s.dbId}"${String(selRScen)===String(s.dbId)?' selected':''}>${
+        escHtml(s.label||('送迎'+s.dbId))}（${escHtml(s.segment)}）</option>`)).join('');
+    return `<div class="line" style="gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">
+      <span class="muted" style="font-size:13px;flex:0 0 auto;">どの送迎のときの道か</span>
+      <select onchange="setRScen(this.value)" style="font-size:14px;padding:5px 8px;">${opts}</select>
+      <span class="muted" style="font-size:12px;">添乗員を乗せる日は通る道が変わるので、送迎ごとに別に持てます。</span>
+      ${unsaved?`<span style="font-size:12px;color:#c0392b;">※ まだ保存していない送迎が${unsaved}件あります。保存すると選べるようになります。</span>`:''}
+    </div>`;
+  })() : '';
   // 下校便は原則どの便も同じ道なので、前の便からコピーできるようにする
   const copySrc = { '下校②':['下校①'], '下校③':['下校①','下校②'] }[selRSeg] || [];
   const copyBtns = copySrc.map(s=>{
@@ -1784,12 +1821,13 @@ function renderRoutePoints(){
     </div>
     <div id="rptSticky" style="position:sticky;top:0;z-index:5;background:#fff;padding-top:6px;box-shadow:0 6px 8px -6px rgba(0,0,0,0.12);">
       <div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;">${segBtns}</div>
+      ${scenRow}
       ${legRow}
     </div>
     ${copyRow}
     ${legNote}
     <div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;">
-      <button class="mini" onclick="rptFillFromStops()">②のバス停から並びを作る</button>
+      ${_isKaisou(selRSeg) ? '' : '<button class="mini" onclick="rptFillFromStops()">②のバス停から並びを作る</button>'}
       <button class="mini" id="rptAddBtn" onclick="rptAdd()">${rptSelIdx==null?'＋ 最後に地点を追加':'＋ '+(rptSelIdx+1)+'番の上に差し込む'}</button>
     </div>
     <div class="muted" style="font-size:13px;margin:-4px 0 10px;line-height:1.8;">
@@ -1889,9 +1927,15 @@ async function saveCourse(){
     // 3.5) 経路点（この版の4便ぶんをまとめて置き換え）
     rptSyncFromInputs();
     const rptRows=[];
-    R_SEGS.forEach(seg=>{
-      const list=((RPTS[key]||{})[seg]||[]).filter(p=>String(p.lat).trim()!==''&&String(p.lng).trim()!=='');
-      list.forEach((p,i)=>rptRows.push({ course_id:c.id, version_id:selVerId, segment:seg, seq:i+1,
+    // 回送はシナリオごとに別の並びを持つので、鍵は「便|シナリオid」になっている
+    Object.keys(RPTS[key]||{}).forEach(kk=>{
+      const bar = kk.indexOf('|');
+      const seg = (bar<0) ? kk : kk.slice(0,bar);
+      if(R_SEGS.indexOf(seg) < 0) return;
+      const scenRaw = (bar<0) ? '' : kk.slice(bar+1);
+      const scen = scenRaw === '' ? null : Number(scenRaw);
+      const list=((RPTS[key]||{})[kk]||[]).filter(p=>String(p.lat).trim()!==''&&String(p.lng).trim()!=='');
+      list.forEach((p,i)=>rptRows.push({ course_id:c.id, version_id:selVerId, segment:seg, scenario_id:scen, seq:i+1,
         name:(p.name||'').trim()||null, lat:Number(p.lat), lng:Number(p.lng), is_stop:!!p.is_stop, split_here:!!p.split_here, note:(p.note||'').trim()||null }));
     });
     if(!(await _confirmWipe(`course_route_points?version_id=eq.${selVerId}`, rptRows.length, '経路の地点'))){ _saveMsg('保存を中止しました。', false); return; }
@@ -1903,16 +1947,50 @@ async function saveCourse(){
       || (s.label||'').trim();
     const scens = (SCEN[key]||[]).filter(scenHasContent);
     if(!(await _confirmWipe(`course_scenarios?course_id=eq.${c.id}`, scens.length, '添乗員送迎'))){ _saveMsg('保存を中止しました。', false); return; }
+
+    /* ⚠️ シナリオの id は**残す**こと（2026-08-21 判明）。
+       配置（`duties.scenario_id`）と回送の経路（`course_route_points.scenario_id`）が
+       id で参照している。毎回 削除→作成 していたため、
+       ・配置で選ばれている日があるとFK違反でDELETEが失敗し、重複が作られる
+       ・回送の経路が道連れで消える（ON DELETE CASCADE）
+       そこで「消えたものだけ削除・残るものは更新・新しいものだけ作成」に変えた */
+    const keepIds = scens.map(s=>s.dbId).filter(Boolean);
+    const delQ = keepIds.length
+      ? `course_scenarios?course_id=eq.${c.id}&id=not.in.(${keepIds.join(',')})`
+      : `course_scenarios?course_id=eq.${c.id}`;
+    const rdel = await fetch(`${REST_URL}/${delQ}`, { method:'DELETE', headers:getH() });
+    if(!rdel.ok){
+      const t = await rdel.text();
+      _saveMsg('使わなくなった添乗員送迎を消せませんでした：'+t.slice(0,120)
+             + '／配置でその送迎が選ばれている日があると消せません。先に配置管理で外してください。', false);
+      return;
+    }
+
+    const sidList = [];   // scens と同じ並びの scenario_id
+    for(let i=0;i<scens.length;i++){
+      const s = scens[i];
+      const row = { course_id:c.id, segment:s.segment, label:(s.label||'').trim(), seq:i+1 };
+      if(s.dbId){
+        const r = await fetch(`${REST_URL}/course_scenarios?id=eq.${s.dbId}`, { method:'PATCH', headers:getH(), body:JSON.stringify(row) });
+        if(!r.ok){ const t=await r.text(); _saveMsg('添乗員送迎の更新に失敗：'+t.slice(0,100), false); return; }
+        sidList.push(s.dbId);
+      }else{
+        const r = await fetch(`${REST_URL}/course_scenarios`, { method:'POST', headers:getH(), body:JSON.stringify([row]) });
+        if(!r.ok){ const t=await r.text(); _saveMsg('添乗員送迎の保存に失敗：'+t.slice(0,100), false); return; }
+        const ins = await r.json();
+        const nid = ins && ins[0] && ins[0].id;
+        if(!nid){ _saveMsg('添乗員送迎の保存に失敗しました（idが返りません）。', false); return; }
+        s.dbId = nid; sidList.push(nid);
+      }
+    }
+
+    // 乗降場所と局面の設定は入れ替える（シナリオ本体が残るので、こちらは明示的に消す）
     await fetch(`${REST_URL}/course_transfer_points?course_id=eq.${c.id}`, { method:'DELETE', headers:getH() });
-    await fetch(`${REST_URL}/course_scenarios?course_id=eq.${c.id}`, { method:'DELETE', headers:getH() });
-    if(scens.length){
-      const scenRows = scens.map((s,idx)=>({ course_id:c.id, segment:s.segment, label:(s.label||'').trim(), seq:idx+1 }));
-      const rs = await fetch(`${REST_URL}/course_scenarios`, { method:'POST', headers:getH(), body:JSON.stringify(scenRows) });
-      if(!rs.ok){ const t=await rs.text(); _saveMsg('シナリオの保存に失敗：'+t.slice(0,100), false); return; }
-      const inserted = await rs.json();
+    if(sidList.length){
+      await fetch(`${REST_URL}/course_phase_settings?scenario_id=in.(${sidList.join(',')})`, { method:'DELETE', headers:getH() });
       const allPts=[], allPs=[];
       scens.forEach((s,idx)=>{
-        const sid = inserted[idx] && inserted[idx].id; if(!sid) return;
+        const sid = sidList[idx]; if(!sid) return;
         const seqByPhase={};
         s.pts.filter(p=>(p.name||'').trim()||(p.address||'').trim()||(p.coord||'').trim()).forEach(p=>{
           seqByPhase[p.phase]=(seqByPhase[p.phase]||0)+1;
