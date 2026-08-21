@@ -2053,17 +2053,8 @@ function rptPickToggle(i, el){
   renderEditor();
 }
 function rptPickNone(){ rptPick = {}; renderEditor(); }
-/** 「全部」＝中の地点（2番目〜最後から2番目）をまとめて選ぶ／外す。
- *  出発地・到着地は①②で決まるので、はじめから対象にしない */
-function rptPickAll(el){
-  rptSyncFromInputs();
-  rptPick = {};
-  if(el.checked){
-    const pts = _rpts(), lock = _rptLockState();
-    for(let i=(lock.from?1:0); i<(lock.to?pts.length-1:pts.length); i++) rptPick[i] = true;
-  }
-  renderEditor();
-}
+/* 「全部」のチェック欄は置かない。チェックが無ければ中をまとめてコピーするので、
+   同じことが2通りあると迷うだけだった（2026-08-21 八重樫さんの指摘） */
 
 /* ===== 場所帳（①の他所移動・③の乗降場所を使い回す） =====
    同じ場所を何コースでも使う。
@@ -2267,14 +2258,10 @@ function renderRoutePoints(){
     const mid = Math.max(0, pts.length - (lock.from?1:0) - (lock.to?1:0));
     const q = rptClipGet();
     const cn = q ? q.pts.length : 0;
-    const allOn = (mid>0 && n>=mid);
     return `<div class="line" style="gap:6px;margin:0;flex-wrap:wrap;align-items:center;">
-      <label style="flex:0 0 auto;cursor:${mid?'pointer':'default'};font-size:13px;color:#2d4a38;background:#f6faf7;border:1px solid #cfe0d5;border-radius:8px;padding:5px 9px;${mid?'':'opacity:.45;'}"
-        title="中の地点（2番目〜最後から2番目）をまとめて選ぶ／外す。出発地と到着地は①②で決まるので対象外です">
-        <input type="checkbox" ${allOn?'checked':''} ${mid?'':'disabled'} onchange="rptPickAll(this)" style="width:15px;height:15px;vertical-align:-2px;"> 全部</label>
       <button class="mini" onclick="rptClipCopy()"${(n||mid)?'':' disabled'} title="${
         escAttr(n ? ('チェックした'+n+'地点をコピーします') : ('チェックがないので、中の'+mid+'地点（2番目〜最後から2番目）をまとめてコピーします'))
-      }">📋 コピー${n?'（'+n+'）':(mid?'（中の'+mid+'）':'')}</button>
+      }">📋 コピー（${n?n:'全部'}）</button>
       ${n?`<button class="mini" onclick="rptPickNone()">選択を解除</button>`:''}
       <button class="mini" id="rptPasteBtn" onclick="rptClipPaste()"${cn?'':' disabled'} title="${
         cn ? escAttr('行を選んでいればその上に差し込み、選んでいなければ中を入れ替えます（出発地・到着地は変わりません）')
