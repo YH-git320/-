@@ -389,26 +389,27 @@ function buildSteps(seg){
                  note: notes.length ? notes.join('／') : null,
                  legs: legsTo(pts, idx, gar, seg.segment),
                  // 渋滞・事故のときに選べるサブルート（会社が用意した道）
-                 subs: firstStopDone ? null : kaisouSubs(seg.segment, '出庫', gar, pts.slice(0, idx+1)) });
+                 subs: firstStopDone ? null : kaisouSubs(seg.segment, '出庫', null, pts.slice(0, idx+1)) });
     firstStopDone = true;
   });
   // 最初と最後のバス停に印をつける。
   // 登校便＝最後が学校（全員降りる）／下校便＝最初が学校（全員乗る）
   const stops = steps.filter(s=>s.type==='stop');
   if(stops.length){ stops[0].first = true; stops[stops.length-1].last = true; }
-  // 帰庫は「最後の地点 →（添乗員を降ろす地点があれば）→ 車庫」。
-  // ここも今まで道案内が出せていなかった区間
+  // 便が終わったあとの回送。行き先は車庫とは限らない（登校の後は「他所移動」もある）。
+  // ④で道が決まっていれば、その道の**最後の地点が行き先**になる
+  const kaiEnd = kaisouPoints(seg.segment, '帰庫');
+  const endPt  = kaiEnd.length ? kaiEnd[kaiEnd.length-1] : gar;
   steps.push({ type:'one', kind:'帰庫', seq:null, label:'帰庫', btn:'帰庫した',
                note: carry.length ? carry.join('／') : null,
-               mapTo: gar ? gar.name : null,
-               legs: (gar && pts.length)
+               mapTo: endPt ? (endPt.name || '車庫') : null,
+               legs: (pts.length && (kaiEnd.length || gar))
                  ? chainLegs(dedupePts([pts[pts.length-1]].concat(
-                     (kaisouPoints(seg.segment,'帰庫').length
-                       ? kaisouPoints(seg.segment,'帰庫')
-                       : transferPoints(seg.segment,'後')), [gar])))
+                     kaiEnd.length ? kaiEnd
+                                   : transferPoints(seg.segment,'後').concat([gar]))))
                  : null,
-               subs: (gar && pts.length)
-                 ? kaisouSubs(seg.segment, '帰庫', gar, [pts[pts.length-1]]) : null });
+               subs: (pts.length && gar)
+                 ? kaisouSubs(seg.segment, '帰庫', null, [pts[pts.length-1]]) : null });
   return steps;
 }
 
@@ -505,8 +506,10 @@ function legsTo(pts, toIdx, gar, segName){
   // 手前にバス停が無い＝この便の最初のバス停。ここは**車庫から**の案内になる。
   // ・④で「出庫回送」の道が入っていれば、それを使う（通る道を会社が決めている）
   // ・入っていなければ、送迎の乗降地点だけを通す（道はナビ任せ）
+  // ④で回送の道が決まっていれば、**その道が起点（車庫や他所）を持っている**ので車庫を足さない。
+  // 決まっていなければ、車庫から送迎の乗降地点を通す（道はナビ任せ）
   const kai = kaisouPoints(segName, '出庫');
-  const head = (gar ? [gar] : []).concat(kai.length ? kai : transferPoints(segName, '前'));
+  const head = kai.length ? kai : (gar ? [gar] : []).concat(transferPoints(segName, '前'));
   return chainLegs(dedupePts(head.concat(pts.slice(0, toIdx+1))));
 }
 

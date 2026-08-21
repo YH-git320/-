@@ -955,20 +955,21 @@ const R_MAIN = ['登校','下校①','下校②','下校③'];
    ・添乗員の送迎パターンによって通る道が変わる
    ・渋滞や事故に備えて、メインのほかにサブルートを持てる
    の3つが重なる。DBの segment は「出庫回送登校」のように便まで含めた4種類 */
-const R_KAISOU = ['出庫回送登校','出庫回送下校','帰庫回送登校','帰庫回送下校'];
+// ⚠️ 回送は4つ。便によって行き先が違うので、便を名前に含める
+//    （2026-08-21 八重樫さんの指摘：「出庫→最初のバス停」に下校便の選択肢が出るのは不自然）
+const R_KAISOU = ['出庫回送登校','帰庫回送登校','出庫回送下校','帰庫回送下校'];
 const R_SEGS = R_MAIN.concat(R_KAISOU);
 const R_SEG_LABEL = { '登校':'登校便', '下校①':'下校便①', '下校②':'下校便②', '下校③':'下校便③',
-                      '出庫回送登校':'🅿 出庫→最初のバス停', '出庫回送下校':'🅿 出庫→最初のバス停',
-                      '帰庫回送登校':'🅿 最後のバス停→帰庫', '帰庫回送下校':'🅿 最後のバス停→帰庫' };
-// 画面のボタンは「出庫」「帰庫」の2つだけ。便は下の選択肢で決まる
-const R_KAISOU_BASE = ['出庫回送','帰庫回送'];
-let selRBase  = '';   // '出庫回送' / '帰庫回送'（本線を見ているときは空）
-let selRGroup = '登校';   // 回送がどの便のものか（登校／下校）
+                      '出庫回送登校':'🅿 登校便の前　車庫→最初のバス停',
+                      '帰庫回送登校':'🅿 登校便の後　学校→帰庫・他所',
+                      '出庫回送下校':'🅿 下校便の前　車庫・他所→学校',
+                      '帰庫回送下校':'🅿 下校便の後　最後のバス停→帰庫' };
 let selRScen  = '';   // どの送迎シナリオのときの道か（空＝送迎なし）
 let selRRoute = '';   // ルート名（空＝メイン）
 function _isKaisou(seg){ return R_KAISOU.indexOf(seg) >= 0; }
-/** いま編集している回送の segment（便まで含めた名前） */
-function _kaiSeg(){ return selRBase ? (selRBase + selRGroup) : ''; }
+/** いま見ている回送が、どの便のものか／出庫側か帰庫側か */
+function _kaiGroup(){ return /登校$/.test(selRSeg) ? '登校' : '下校'; }
+function _kaiWhich(){ return /^出庫/.test(selRSeg) ? '出庫' : '帰庫'; }
 /** バッファの鍵。本線は便の名前だけ、回送は「便|シナリオid|ルート名」 */
 function _rkey(seg, scen, route){
   seg = seg || selRSeg;
@@ -1576,18 +1577,15 @@ function rptSyncFromInputs(){
 }
 function setRSeg(seg){
   rptSyncFromInputs();
-  if(R_KAISOU_BASE.indexOf(seg) >= 0){ selRBase = seg; selRSeg = _kaiSeg(); }
-  else { selRBase = ''; selRSeg = seg; }
+  if(selRSeg !== seg){ selRScen = ''; selRRoute = ''; }   // 便が変われば送迎もルートも選び直し
+  selRSeg = seg;
   rptSelIdx=null; renderEditor();
 }
-/** 回送の道を「どの便の・どの送迎のとき」のものとして編集するか（値は「登校|42」の形） */
+/** 回送の道を、どの送迎のときのものとして編集するか（空＝送迎なし） */
 function setRWho(v){
   rptSyncFromInputs();
-  const p = String(v||'登校|').split('|');
-  selRGroup = p[0] || '登校';
-  selRScen  = p[1] || '';
-  selRSeg   = _kaiSeg();
-  selRRoute = '';            // 組み合わせを変えたらメインに戻す
+  selRScen  = v || '';
+  selRRoute = '';            // 送迎を変えたらメインに戻す
   rptSelIdx=null; renderEditor();
 }
 /** メイン／サブの切替 */
@@ -1688,14 +1686,14 @@ function rptFillFromStops(){
  *  帰庫＝ その便の最後の地点 →（乗降地点）→ 車庫
  *  あとは曲がり角の目印を間に差し込むだけにする（②のバス停から作る下書きと同じ考え方） */
 function rptSeedKaisou(){
-  if(!selRBase) return;
+  if(!_isKaisou(selRSeg)) return;
   const c   = COURSES.find(x=>x.id===selCourseId) || {};
   const off = OFFICES[c.office_id];
   const gc  = off && dmsToDecimal(off.coord);
   if(!gc){ _saveMsg('このコースの車庫に座標が入っていません。営業所マスタ（master.html）で座標を入れてください。', false); return; }
 
   // その便の本線から、最初のバス停と最後の地点を取る
-  const mainSeg = (selRGroup === '登校') ? '登校' : '下校①';
+  const mainSeg = (_kaiGroup() === '登校') ? '登校' : '下校①';
   const line = ((RPTS[String(selCourseId)]||{})[mainSeg]||[])
     .filter(p=>String(p.lat).trim()!=='' && String(p.lng).trim()!=='');
   if(!line.length){ _saveMsg(`${R_SEG_LABEL[mainSeg]}にまだ地点がありません。先にそちらを作ってください。`, false); return; }
@@ -1704,7 +1702,7 @@ function rptSeedKaisou(){
 
   // その送迎の乗降地点（「登校前」「登校後」のように前後で分かれている）
   const sc   = _scenList().find(s=>String(s.dbId)===String(selRScen));
-  const want = (selRBase==='出庫回送') ? '前' : '後';
+  const want = (_kaiWhich()==='出庫') ? '前' : '後';
   const tps  = !sc ? [] : (sc.pts||[])
     .filter(p=>String(p.phase||'').endsWith(want))
     .map(p=>{ const d=dmsToDecimal(p.coord); return d ? {
@@ -1714,9 +1712,17 @@ function rptSeedKaisou(){
 
   const mk = (name,lat,lng) => ({ name:name||'', lat:String(lat), lng:String(lng), is_stop:true, split_here:false, note:'' });
   const gar = mk(off.name||'車庫', gc.lat, gc.lng);
-  const pts = (selRBase==='出庫回送')
-    ? [gar].concat(tps, [mk(firstStop.name||'最初のバス停', firstStop.lat, firstStop.lng)])
-    : [mk(lastPt.name||'最後の地点', lastPt.lat, lastPt.lng)].concat(tps, [gar]);
+  // 登校の後は「帰庫」だけでなく「他所移動」もある。下校の前はそこから出る。
+  // ⚠️ 他所の座標が空なら車庫で代用し、あとで直してもらう
+  const ac = (c.after_toukou==='他所移動') ? dmsToDecimal(c.after_toukou_coord) : null;
+  const away = ac ? mk((c.after_toukou_place||'他所'), ac.lat, ac.lng) : null;
+  const hub = (selRSeg==='帰庫回送登校' || selRSeg==='出庫回送下校') ? (away || gar) : gar;
+  if(!away && (selRSeg==='帰庫回送登校' || selRSeg==='出庫回送下校') && c.after_toukou==='他所移動'){
+    _saveMsg('登校の後は「他所移動」ですが、行き先の座標が空です。①のタブで入れてください。いまは車庫で下書きを作ります。', false);
+  }
+  const pts = (_kaiWhich()==='出庫')
+    ? [hub].concat(tps, [mk(firstStop.name||'最初のバス停', firstStop.lat, firstStop.lng)])
+    : [mk(lastPt.name||'最後の地点', lastPt.lat, lastPt.lng)].concat(tps, [hub]);
 
   rptSyncFromInputs();
   const cur = _rpts();
@@ -1826,27 +1832,24 @@ function renderRoutePoints(){
   const _segBtn = (val,label,on,n) =>
     `<button onclick="setRSeg('${val}')" style="border:1px solid ${on?'#4d7a5e':'#cfe0d5'};background:${on?'#4d7a5e':'#fff'};color:${on?'#fff':'#2d4a38'};padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:${on?'700':'500'};font-family:inherit;">${label}${n?`（${n}）`:''}</button>`;
   const segBtns = R_MAIN.map(s=>_segBtn(s, R_SEG_LABEL[s], selRSeg===s, (_box[s]||[]).length))
-    .concat(R_KAISOU_BASE.map(b=>{
-      // 回送は便・送迎・ルートに分かれているので、その回送に入っている総数を出す
-      let n=0; Object.keys(_box).forEach(kk=>{ if(kk.indexOf(b)===0) n+=(_box[kk]||[]).length; });
-      return _segBtn(b, R_SEG_LABEL[b+'登校'], selRBase===b, n);
+    .concat(R_KAISOU.map(s=>{
+      // 回送は送迎・ルートに分かれているので、その回送に入っている総数を出す
+      let n=0; Object.keys(_box).forEach(kk=>{ if(kk.indexOf(s+'|')===0) n+=(_box[kk]||[]).length; });
+      return _segBtn(s, R_SEG_LABEL[s], selRSeg===s, n);
     })).join('');
   // 回送（車庫⇄バス停）は、添乗員の送迎パターンによって通る道が変わる。
   // どの送迎のときの道を編集しているかを、ここで選ぶ
-  const scenRow = selRBase ? (function(){
-    const all = _scenList();
+  const scenRow = _isKaisou(selRSeg) ? (function(){
+    const grp = _kaiGroup();
+    const all = _scenList().filter(s=>s.segment===grp);
     const unsaved = all.filter(s=>!s.dbId).length;
-    // ① どの便の・どの送迎のときの道か
-    const cur = selRGroup + '|' + (selRScen || '');
+    // ① その便の送迎だけを並べる（便はタブの名前で決まっている）
+    const cur = selRScen || '';
     const mk = (v,label) => `<option value="${escAttr(v)}"${v===cur?' selected':''}>${escHtml(label)}</option>`;
-    let whoOpts = '';
-    ['登校','下校'].forEach(g=>{
-      whoOpts += mk(g+'|', '送迎なし（'+g+'便）');
-      all.filter(s=>s.dbId && s.segment===g)
-         .forEach(s=> whoOpts += mk(g+'|'+s.dbId, (s.label||('送迎'+s.dbId))+'（'+g+'便）'));
-    });
+    let whoOpts = mk('', '送迎なし');
+    all.filter(s=>s.dbId).forEach(s=> whoOpts += mk(String(s.dbId), s.label||('送迎'+s.dbId)));
     // ② メイン／サブ。いま地点が入っているルート名を拾って並べる
-    const pre = _kaiSeg() + '|' + (selRScen||'') + '|';
+    const pre = selRSeg + '|' + (selRScen||'') + '|';
     const names = {};  names[''] = true;  names[selRRoute||''] = true;
     Object.keys(_box).forEach(kk=>{ if(kk.indexOf(pre)===0) names[kk.slice(pre.length)] = true; });
     const rOpts = Object.keys(names).sort().map(nm=>{
@@ -1854,19 +1857,26 @@ function renderRoutePoints(){
       return `<option value="${escAttr(nm)}"${nm===(selRRoute||'')?' selected':''}>${
         nm ? ('サブ：'+escHtml(nm)) : 'メイン'}${n?`（${n}）`:''}</option>`;
     }).join('');
+    const c   = COURSES.find(x=>x.id===selCourseId) || {};
+    const away = (c.after_toukou === '他所移動');
+    const stay = (c.after_toukou === '学校留置き');
+    const awayName = (c.after_toukou_place||'').trim();
     return `<div class="line" style="gap:8px;margin-bottom:6px;flex-wrap:wrap;align-items:center;">
       <span class="muted" style="font-size:13px;flex:0 0 auto;">どの送迎のときの道か</span>
       <select onchange="setRWho(this.value)" style="font-size:14px;padding:5px 8px;">${whoOpts}</select>
       <span class="muted" style="font-size:13px;flex:0 0 auto;">ルート</span>
       <select onchange="setRRoute(this.value)" style="font-size:14px;padding:5px 8px;">${rOpts}</select>
       <button class="mini" onclick="rptAddRoute()">＋ サブルートを追加</button>
-      <button class="mini" onclick="rptSeedKaisou()">🅿 車庫・送迎地点・第1ポイントから下書き</button>
+      <button class="mini" onclick="rptSeedKaisou()">🅿 分かっている地点から下書き</button>
       ${unsaved?`<span style="font-size:12px;color:#c0392b;">※ まだ保存していない送迎が${unsaved}件あります。保存すると選べます。</span>`:''}
     </div>
     <div class="muted" style="font-size:12px;margin:-2px 0 8px;">
-      便によって行き先が違います（登校の出庫＝車庫→最初のバス停／下校の出庫＝車庫→学校）。
-      添乗員を乗せる日は通る道が変わるので、送迎ごとに別に持てます。
+      <b>${escHtml(R_SEG_LABEL[selRSeg])}</b> の道です。添乗員を乗せる日は通る道が変わるので、送迎ごとに別に持てます。
       <b>サブルート</b>は渋滞や事故のときの備えで、運転手がその場で選べます。
+      ${stay?'<br><b style="color:#c0392b;">このコースは「学校留置き」です。</b>登校の後は車庫へ戻らないので、この道は不要かもしれません。':''}
+      ${away?('<br>このコースは登校の後「<b>他所移動</b>」です。'
+              + (awayName ? '行き先は<b>'+escHtml(awayName)+'</b>。' :
+                 '<b style="color:#c0392b;">行き先の名前・座標がまだ空です。</b>①のタブで入れてください。')) :''}
     </div>`;
   })() : '';
   // 下校便は原則どの便も同じ道なので、前の便からコピーできるようにする
