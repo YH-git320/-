@@ -1328,13 +1328,10 @@ function _fitRptSticky(){
      高さは画面幅で折り返して変わるので、そのつど測って積み上げる
      （2026-08-21 八重樫さんの要望：ボタンを「全部」のすぐ上に置き、スクロールしても残す） */
   const clip = document.getElementById('rptClipBar');
-  const t1 = t0 + bar.offsetHeight;
-  if(clip) clip.style.top = t1 + 'px';
-  const t2 = t1 + (clip ? clip.offsetHeight : 0);
-  document.querySelectorAll('#rptTable thead th').forEach(th=>{
-    th.style.position = 'sticky'; th.style.top = t2 + 'px';
-    th.style.zIndex = '3'; th.style.background = '#f6f9f7';
-  });
+  if(clip) clip.style.top = (t0 + bar.offsetHeight) + 'px';
+  /* ⚠️ 表の見出しは固定できない。表は横スクロールの枠（overflow-x:auto）の中にあり、
+     枠の中が position:sticky の基準になるのでページのスクロールに追従しない
+     （2026-08-21 実機で確認）。そのため「全部」はこの帯の中に置いてある */
 }
 window.addEventListener('resize', _fitRptSticky);
 
@@ -2263,7 +2260,11 @@ function renderRoutePoints(){
     const mid = Math.max(0, pts.length - (lock.from?1:0) - (lock.to?1:0));
     const q = rptClipGet();
     const cn = q ? q.pts.length : 0;
+    const allOn = (mid>0 && n>=mid);
     return `<div class="line" style="gap:6px;margin:0;flex-wrap:wrap;align-items:center;">
+      <label style="flex:0 0 auto;cursor:${mid?'pointer':'default'};font-size:13px;color:#2d4a38;background:#f6faf7;border:1px solid #cfe0d5;border-radius:8px;padding:5px 9px;${mid?'':'opacity:.45;'}"
+        title="中の地点（2番目〜最後から2番目）をまとめて選ぶ／外す。出発地と到着地は①②で決まるので対象外です">
+        <input type="checkbox" ${allOn?'checked':''} ${mid?'':'disabled'} onchange="rptPickAll(this)" style="width:15px;height:15px;vertical-align:-2px;"> 全部</label>
       <button class="mini" onclick="rptClipCopy()"${(n||mid)?'':' disabled'} title="${
         escAttr(n ? ('チェックした'+n+'地点をコピーします') : ('チェックがないので、中の'+mid+'地点（2番目〜最後から2番目）をまとめてコピーします'))
       }">📋 コピー${n?'（'+n+'）':(mid?'（中の'+mid+'）':'')}</button>
@@ -2392,11 +2393,7 @@ function renderRoutePoints(){
     <div style="overflow-x:auto;"><table id="rptTable" style="width:100%;border-collapse:collapse;font-size:13px;">
       <thead><tr style="background:#f6f9f7;">
         <th style="width:28px;"></th>
-        <th style="width:56px;padding:5px 4px;font-size:11px;color:#6b7d72;line-height:1.4;" title="ここで選んだ地点だけをコピーできます。何も選ばなければ中（2番目〜最後から2番目）がまとめてコピーされます">
-          コピー<br><label style="cursor:pointer;font-size:10px;"><input type="checkbox" ${
-            (function(){ const n=Object.keys(rptPick).length, m=pts.length-(lock.from?1:0)-(lock.to?1:0);
-                         return (m>0 && n>=m) ? 'checked' : ''; })()
-          } onclick="event.stopPropagation();rptPickAll(this)" style="width:14px;height:14px;vertical-align:-2px;">全部</label></th>
+        <th style="width:44px;padding:7px 4px;font-size:11px;color:#6b7d72;" title="ここで選んだ地点だけをコピーできます。何も選ばなければ中（2番目〜最後から2番目）がまとめてコピーされます">コピー</th>
         <th style="text-align:left;padding:7px 6px;font-size:13px;color:#6b7d72;">名前（任意）</th>
         <th style="text-align:left;padding:7px 6px;font-size:13px;color:#6b7d72;width:124px;">緯度</th>
         <th style="text-align:left;padding:7px 6px;font-size:13px;color:#6b7d72;width:124px;">経度</th>
