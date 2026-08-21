@@ -2186,6 +2186,19 @@ function rptLegUrl(leg){
   const c=leg.pts.map(p=>`${Number(p.lat)},${Number(p.lng)}`);
   return 'https://www.google.com/maps/dir/' + c.join('/') + '/data=!4m5!4m4!2m2!1b1!2b1!3e0';
 }
+/** 1地点だけをGoogleマップで開く。「この座標はどこか」を確かめるため。
+ *  区間ごとの道案内（rptOpenLeg）とは別で、こちらは場所そのものを見る
+ *  （2026-08-21 八重樫さんの要望：経由地をコピーする前に場所を確かめたい） */
+function rptMapPt(i){
+  rptSyncFromInputs();
+  const p = _rpts()[i];
+  if(!p){ return; }
+  const la = Number(String(p.lat).trim()), ln = Number(String(p.lng).trim());
+  if(String(p.lat).trim()==='' || String(p.lng).trim()==='' || !isFinite(la) || !isFinite(ln)){
+    _saveMsg((i+1)+'番の座標が空か、数字になっていません。', false); return;
+  }
+  window.open('https://www.google.com/maps/search/?api=1&query=' + la + ',' + ln, '_blank');
+}
 function rptOpenLeg(i, byStop){
   rptSyncFromInputs();
   const legs=rptLegs(byStop);
@@ -2302,6 +2315,7 @@ function renderRoutePoints(){
       <b>この画面は何か</b>：運転手のタブレットで<b>Googleマップの道案内</b>を開くための地点です。バスは道幅・長さの制約で通れる道が決まっているため、<b>曲がり角の手前に目印の地点を足す</b>ほど、狙った道を通らせやすくなります。渋滞状況や到着予定時刻はGoogleマップ本体がその場で出すので、こちら側で経路の計算はしません（費用はかかりません）。この地点はこの<b>版</b>に属し、新版を作ると一緒に複製されます。<hr style="border:none;border-top:1px solid #e2ede6;margin:7px 0;">
       <b>出発地と到着地は①②で決まります。</b>灰色の行は直せません（消す・動かす・その外側に足すもできません）。変えたいときは<b>①のタブ</b>（車庫・バス停・登校後の行き先）を直してください。ここは自動でついてきます。<hr style="border:none;border-top:1px solid #e2ede6;margin:7px 0;">
       <b>地点を足す</b>：入れたい場所の<b>下の行をクリックして選ぶ</b>（薄い緑）→「＋ ◯番の上に差し込む」。各行の <b>＋</b> でも同じです。緯度・経度は、Googleマップで場所を右クリック→出てきた数字を<b>緯度の欄にそのまま貼れば</b>2つに分かれて入ります。<hr style="border:none;border-top:1px solid #e2ede6;margin:7px 0;">
+      <b>その座標がどこか確かめる</b>：各行の経度のとなりの <b>🗺</b> で、その地点だけをGoogleマップで開きます。コピーする前に場所を確かめられます。<hr style="border:none;border-top:1px solid #e2ede6;margin:7px 0;">
       <b>コピーと貼り付け</b>：「コピー」列で選んだ地点だけをコピーします。<b>何も選ばなければ、中（2番目〜最後から2番目）をまとめて</b>コピーします（「全部」でも同じです）。<br>
       貼り付けは、<b>行を選んでいればその上に差し込み</b>、<b>選んでいなければ中を入れ替えます</b>。どちらでも<b>出発地と到着地は変わりません</b>。別のコースへも貼り付けられます。貼り付けただけでは保存されません。<hr style="border:none;border-top:1px solid #e2ede6;margin:7px 0;">
       <b>Googleマップで確かめる</b>：<b>有料道路・高速道路は使わない</b>設定で開きます。「通し」は全体を1本で、「バス停ごと」は停留所で分けて開きます（運転手がバス停ごとに開く想定）。<br>
@@ -2331,7 +2345,7 @@ function renderRoutePoints(){
         :`<input type="checkbox" class="rp-pick" ${rptPick[i]?'checked':''} onclick="event.stopPropagation()" onchange="rptPickToggle(${i},this)" title="この地点をコピーの対象にする" style="width:17px;height:17px;">`}</td>
       <td style="padding:5px 6px;"><input type="text" class="rp-name" value="${escAttr(p.name||'')}"${ro} placeholder="例：○○交差点" title="${escAttr(roT)}" style="width:100%;min-width:100px;font-size:15px;padding:7px 9px;${roS}"></td>
       <td style="padding:5px 6px;"><input type="text" class="rp-lat" value="${escAttr(p.lat)}"${ro} placeholder="35.xxxxxx" onchange="rptCoordIn(this)" title="${escAttr(roT||'「35.5442, 139.7043」のまま貼っても分けて入ります')}" style="width:112px;font-size:15px;padding:7px 9px;${roS}"></td>
-      <td style="padding:5px 6px;"><input type="text" class="rp-lng" value="${escAttr(p.lng)}"${ro} placeholder="139.xxxxxx" onchange="rptCoordIn(this)" title="${escAttr(roT)}" style="width:112px;font-size:15px;padding:7px 9px;${roS}"></td>
+      <td style="padding:5px 6px;white-space:nowrap;"><input type="text" class="rp-lng" value="${escAttr(p.lng)}"${ro} placeholder="139.xxxxxx" onchange="rptCoordIn(this)" title="${escAttr(roT)}" style="width:108px;font-size:15px;padding:7px 9px;${roS}"><button onclick="event.stopPropagation();rptMapPt(${i})" title="この地点をGoogleマップで開く（どこか確かめる）" style="${ib}color:var(--g);padding:3px 2px 3px 4px;">🗺</button></td>
       <td style="text-align:center;padding:5px 6px;"><input type="checkbox" class="rp-stop" ${p.is_stop?'checked':''} onchange="rptRecalc()" title="実際に乗り降りするバス停ならチェック" style="width:18px;height:18px;"></td>
       <td style="text-align:center;padding:5px 6px;"><input type="checkbox" class="rp-cut" ${p.split_here?'checked':''} onchange="rptRecalc()" title="ここで道案内を切る（Uターンなど、次の地点まではナビに任せられない場所）" style="width:18px;height:18px;"></td>
       <td class="muted" style="white-space:nowrap;padding:5px 6px;font-size:14px;text-align:right;">${d&&d.seg!=null?d.seg.toFixed(2):''}</td>
@@ -2390,7 +2404,7 @@ function renderRoutePoints(){
         <th style="width:44px;padding:7px 4px;font-size:11px;color:#6b7d72;" title="ここで選んだ地点だけをコピーできます。何も選ばなければ中（2番目〜最後から2番目）がまとめてコピーされます">コピー</th>
         <th style="text-align:left;padding:7px 6px;font-size:13px;color:#6b7d72;">名前（任意）</th>
         <th style="text-align:left;padding:7px 6px;font-size:13px;color:#6b7d72;width:124px;">緯度</th>
-        <th style="text-align:left;padding:7px 6px;font-size:13px;color:#6b7d72;width:124px;">経度</th>
+        <th style="text-align:left;padding:7px 6px;font-size:13px;color:#6b7d72;width:150px;">経度</th>
         <th style="width:52px;padding:7px 6px;font-size:13px;color:#6b7d72;">バス停</th>
         <th style="width:52px;padding:7px 6px;font-size:13px;color:#6b7d72;" title="ここで道案内を切る（Uターンなど）">区切</th>
         <th style="width:64px;text-align:right;padding:7px 6px;font-size:13px;color:#6b7d72;">区間km</th>
