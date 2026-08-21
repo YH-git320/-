@@ -1651,6 +1651,11 @@ function _rptAddLabel(){
   if(rptSelIdx != null) return '＋ '+(rptSelIdx+1)+'番の上に差し込む';
   return _rptLockState().to ? '＋ 到着地の手前に差し込む' : '＋ 最後に地点を追加';
 }
+/** 貼り付けボタンの文字。行を選んでいるかどうかで動きが変わるので、それを出す */
+function _rptPasteLabel(){
+  if(!rptClipGet()) return '📥 貼り付け';
+  return (rptSelIdx != null) ? ('📥 貼り付け（'+(rptSelIdx+1)+'番の上へ）') : '📥 貼り付け（中を入れ替え）';
+}
 
 /** 行を選ぶ。差し込み先の目印なので、再描画はせず色とボタンの文字だけ変える（入力中の値を消さないため） */
 function rptSelect(i){
@@ -1667,6 +1672,8 @@ function rptSelect(i){
   });
   var b = document.getElementById('rptAddBtn');
   if(b) b.textContent = _rptAddLabel();
+  var p = document.getElementById('rptPasteBtn');
+  if(p) p.textContent = _rptPasteLabel();   // 「◯番の上へ」／「中を入れ替え」を合わせる
 }
 
 /** 指定位置に空欄の行を差し込む。at を省くと末尾（到着地が縛られていればその手前）に足す */
@@ -2269,10 +2276,10 @@ function renderRoutePoints(){
         escAttr(n ? ('チェックした'+n+'地点をコピーします') : ('チェックがないので、中の'+mid+'地点（2番目〜最後から2番目）をまとめてコピーします'))
       }">📋 コピー${n?'（'+n+'）':(mid?'（中の'+mid+'）':'')}</button>
       ${n?`<button class="mini" onclick="rptPickNone()">選択を解除</button>`:''}
-      <button class="mini" onclick="rptClipPaste()"${cn?'':' disabled'} title="${
+      <button class="mini" id="rptPasteBtn" onclick="rptClipPaste()"${cn?'':' disabled'} title="${
         cn ? escAttr('行を選んでいればその上に差し込み、選んでいなければ中を入れ替えます（出発地・到着地は変わりません）')
            : '先に「📋 コピー」を押してください'
-      }">📥 貼り付け${cn?(rptSelIdx!=null?'（'+(rptSelIdx+1)+'番の上へ）':'（中を入れ替え）'):''}</button>
+      }">${_rptPasteLabel()}</button>
       ${cn?`<span style="font-size:12px;color:#2d4a38;background:#f6faf7;border:1px solid #cfe0d5;border-radius:6px;padding:4px 9px;">
         控え：<b>${escHtml(_clipLabel(q))}</b>（${cn}地点）
         <a href="javascript:void(0)" onclick="clipDrop('keiro','コピーした地点')" style="color:#8a9c90;text-decoration:none;margin-left:8px;" title="控えを消す">✕</a></span>`:''}
