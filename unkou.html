@@ -1843,7 +1843,7 @@ function rptCopyFrom(srcSeg){
    ・貼り付けても**保存はされない**。必ず「保存」を押してもらう。 */
 /* 控えの置き場。④の「道まるごと」と「選んだ地点」の2つ。
    localStorage なのでコースを移っても、画面を読み直しても残る。 */
-const CLIP_KEY = { keiro:'unkou_rpt_clip_v1', pts:'unkou_clip_pts_v1' };
+const CLIP_KEY = { keiro:'unkou_rpt_clip_v1' };
 function clipGet(kind){
   try{ const s = localStorage.getItem(CLIP_KEY[kind]); return s ? (JSON.parse(s) || null) : null; }
   catch(e){ return null; }
@@ -1879,12 +1879,24 @@ function _clipHere(){
   }
   return _clipLabel(o);
 }
+/** コピーは1つ。
+ *  ・「コピー」列にチェックがあれば、その地点だけ
+ *  ・チェックが無ければ、中（2番目〜最後から2番目）をまとめて
+ *  出発地・到着地は①②で決まるので、どちらの場合も控えには入れない
+ *  （2026-08-21 八重樫さんの案で、2つあったボタンを1つにまとめた） */
 function rptClipCopy(){
   if(!selCourseId){ _saveMsg('先にコースを選んでください。', false); return; }
   rptSyncFromInputs();
+  const all  = _rpts();
+  const lock = _rptLockState();
+  const idx  = Object.keys(rptPick).map(Number).filter(i=>all[i]).sort((a,b)=>a-b);
+  const pick = idx.length
+    ? idx.map(i=>all[i])
+    : all.slice(lock.from?1:0, lock.to ? all.length-1 : all.length);
   // 名前も緯度も経度も空の行は、控えに入れない
-  const pts = _rpts().filter(p => String(p.lat).trim()!=='' || String(p.lng).trim()!=='' || String(p.name||'').trim()!=='');
-  if(!pts.length){ _saveMsg('この道にはまだ地点がありません。', false); return; }
+  const pts = pick.filter(p => String(p.lat).trim()!=='' || String(p.lng).trim()!=='' || String(p.name||'').trim()!=='');
+  if(!pts.length){
+    _saveMsg(idx.length ? '選んだ地点が空です。' : 'コピーできる地点がありません（出発地と到着地は①②で決まるのでコピーしません）。', false); return; }
   const c  = _c() || {};
   const sc = _isKaisou(selRSeg) ? _scenList().find(x=>String(x.dbId)===String(selRScen)) : null;
   const o = {
@@ -1892,12 +1904,16 @@ function rptClipCopy(){
     seg:    selRSeg,
     who:    _isKaisou(selRSeg) ? (sc ? (sc.label || ('送迎'+sc.dbId)) : '送迎なし') : '',
     route:  selRRoute || '',
+    えらんだ: !!idx.length,
     pts: pts.map(p=>({ name:p.name||'', lat:p.lat, lng:p.lng,
                        is_stop:!!p.is_stop, split_here:!!p.split_here, note:p.note||'' }))
   };
   if(!clipPut('keiro', o)) return;
+  rptPick = {};
   renderEditor();
-  _saveMsg(`${pts.length}地点をコピーしました。貼り付けたいコースと便を開いて、貼り付けのボタンを押してください。`, true);
+  _saveMsg(`${pts.length}地点をコピーしました。`
+    + (idx.length ? '差し込みたい行をクリックしてから「📥 貼り付け」を押してください。'
+                  : '貼り付けたいコース・便を開いて「📥 貼り付け」を押すと、中が入れ替わります。'), true);
 }
 /** いま開いている道の、**このコース本来の**出発地と到着地（座標つき）。
  *  貼り付けた道の両端がここと違っていないかを確かめるために使う。
@@ -1953,94 +1969,77 @@ function _pasteEnds(clipPts){
     to:   pick(want.to,   cur[cur.length-1], cv[cv.length-1])
   };
 }
-/** 道を貼り付ける。**両端は入れ替えない。**
- *  中（2番目〜最後から2番目）だけを入れ、出発地・到着地は①②から決まるものを使う。
- *  ⚠️ 回送の両端は①②で決まっている（車庫・最初のバス停・他所移動の行き先）。
- *     貼り付けで両端が変わること自体を無くす、という考え方
- *     （2026-08-21 八重樫さんの指摘。当初は「まるごと」も選べる作りにしていた） */
+/** 貼り付けも1つ。行を選んでいるかどうかで動きが変わる。
+ *  ・行を選んでいない … 中（2番目〜最後から2番目）を入れ替える。両端はそのまま
+ *  ・行を選んでいる   … その行の上に差し込む
+ *  どちらでも**出発地と到着地は変わらない**。両端は①②で決まっているため
+ *  （2026-08-21 八重樫さんの案で、2つあったボタンを1つにまとめた） */
 function rptClipPaste(){
   const o = rptClipGet();
-  if(!o){ _saveMsg('コピーされた道がありません。先に「📋 この道をコピー」を押してください。', false); return; }
+  if(!o){ _saveMsg('コピーされた地点がありません。先に「📋 コピー」を押してください。', false); return; }
   if(!selCourseId){ _saveMsg('先にコースを選んでください。', false); return; }
   rptSyncFromInputs();
-  const cur  = _rpts();
-  const ends = _pasteEnds(o.pts);
-  if(!ends.from.pt || !ends.to.pt){
-    _saveMsg('出発地か到着地が決められません。①で車庫・バス停の座標を入れてから貼り付けてください。', false); return;
-  }
+  const pts  = _rpts();
+  const lock = _rptLockState();
   const cp = p => ({ name:p.name||'', lat:p.lat, lng:p.lng,
                      is_stop:!!p.is_stop, split_here:!!p.split_here, note:p.note||'' });
+  const add = o.pts.map(cp);
+
+  /* ── 行を選んでいる＝その上に差し込む ── */
+  if(rptSelIdx != null){
+    const at = Math.max(0, Math.min(rptSelIdx, pts.length));
+    if(lock.from && at === 0){
+      _saveMsg('出発地の前には差し込めません。ここは出発地「' + (pts[0].name||'名前なし') + '」です。'
+        + '出発地は①②（車庫・バス停・登校後の行き先）で決まります。'
+        + '入れたい場所の行をクリックしてから押してください。', false); return; }
+    pts.splice(at, 0, ...add);
+    rptSelIdx = null; rptPick = {};
+    renderEditor();
+    _saveMsg(add.length + '地点を ' + (at+1) + '番から差し込みました。地図で道を確かめてから「保存」を押してください。', true);
+    return;
+  }
+
+  /* ── 行を選んでいない＝中を入れ替える ── */
+  const ends = _pasteEnds(o.pts);
+  if(!ends.from.pt || !ends.to.pt){
+    _saveMsg('出発地か到着地が決められません。①で車庫・バス停の座標を入れてから貼り付けてください。'
+      + '（入れたい場所の行をクリックしてから押すと、差し込みになります）', false); return;
+  }
   const mk = p => ({ name:p.name||'', lat:String(p.lat), lng:String(p.lng),
                      is_stop:true, split_here:false, note:'' });
-  const mid = o.pts.slice(1, -1).map(cp);
-  const pts = [mk(ends.from.pt)].concat(mid, [mk(ends.to.pt)]);
+  const now = pts.length;
+  const next = [mk(ends.from.pt)].concat(add, [mk(ends.to.pt)]);
   if(!confirm(
-      'コピーした道\n　　' + _clipLabel(o) + '\n　　' + o.pts.length + '地点\n'
+      'コピーした地点　' + add.length + '地点\n　　' + _clipLabel(o) + '\n'
     + '\n貼り付け先\n　　' + _clipHere() + '\n'
-    + '\n　出発地　' + (ends.from.pt.name || '名前なし') + '（このコースのまま）\n'
-    + '　中の道　' + mid.length + '地点を入れます\n'
-    + '　到着地　' + (ends.to.pt.name   || '名前なし') + '（このコースのまま）\n'
-    + (cur.length ? '\n　いまの' + cur.length + '地点は消えます\n' : '\n　いまは空です\n')
+    + '\n　出発地　' + (ends.from.pt.name || '名前なし') + '（変わりません）\n'
+    + '　中の道　' + add.length + '地点に入れ替えます'
+    + (now ? '（いまの中の' + Math.max(0, now-(lock.from?1:0)-(lock.to?1:0)) + '地点は消えます）' : '') + '\n'
+    + '　到着地　' + (ends.to.pt.name || '名前なし') + '（変わりません）\n'
+    + '\n差し込みたいだけなら「いいえ」を押し、入れたい場所の行をクリックしてから押し直してください。\n'
     + '\nよろしいですか。（この時点ではまだ保存されません）')) return;
-  RPTS[String(selCourseId)][_rkey()] = pts;
+  RPTS[String(selCourseId)][_rkey()] = next;
   rptSelIdx = null; rptPick = {};
   renderEditor();
-  _saveMsg(`中の${mid.length}地点を入れました（出発地と到着地はこのコースのまま）。地図で道を確かめてから「保存」を押してください。`, true);
+  _saveMsg('中を' + add.length + '地点に入れ替えました（出発地と到着地はこのコースのまま）。地図で道を確かめてから「保存」を押してください。', true);
 }
 
-/* ===== 途中の地点だけのコピー／差し込み =====
-   道まるごとではなく、**同じ抜け道を通る何地点か**を写したいときに使う。
-   ・コピー列のチェックで選ぶ → 「選んだ地点をコピー」
-   ・差し込み先で行を選ぶ（薄い緑）→ 「選んだ地点をここに差し込む」
-   ・出発地の前・到着地の後ろに入れようとしたときだけ知らせる
-     （2026-08-21 八重樫さんの案） */
 function rptPickToggle(i, el){
   rptSyncFromInputs();
   if(el.checked) rptPick[i] = true; else delete rptPick[i];
   renderEditor();
 }
 function rptPickNone(){ rptPick = {}; renderEditor(); }
-function rptPickCopy(){
+/** 「全部」＝中の地点（2番目〜最後から2番目）をまとめて選ぶ／外す。
+ *  出発地・到着地は①②で決まるので、はじめから対象にしない */
+function rptPickAll(el){
   rptSyncFromInputs();
-  const pts = _rpts();
-  const idx = Object.keys(rptPick).map(Number).filter(i=>pts[i]).sort((a,b)=>a-b);
-  if(!idx.length){ _saveMsg('「コピー」の列にチェックを入れて、コピーしたい地点を選んでください。', false); return; }
-  const c = _c() || {};
-  const o = { course: courseLabel(c), seg: selRSeg,
-    pts: idx.map(i=>({ name:pts[i].name||'', lat:pts[i].lat, lng:pts[i].lng,
-                       is_stop:!!pts[i].is_stop, split_here:!!pts[i].split_here, note:pts[i].note||'' })) };
-  if(!clipPut('pts', o)) return;
-  renderEditor();
-  _saveMsg(`${o.pts.length}地点をコピーしました。差し込みたい行を選んでから「📥 選んだ地点をここに差し込む」を押してください。`, true);
-}
-function rptPickPaste(){
-  const o = clipGet('pts');
-  if(!o || !(o.pts||[]).length){ _saveMsg('コピーされた地点がありません。先に「📋 選んだ地点をコピー」を押してください。', false); return; }
-  if(!selCourseId){ _saveMsg('先にコースを選んでください。', false); return; }
-  rptSyncFromInputs();
-  const pts = _rpts();
-  const at  = (rptSelIdx == null) ? pts.length : rptSelIdx;
-  const nm  = (o.pts[0].name || '名前なし') + (o.pts.length>1 ? ' 〜 ' + (o.pts[o.pts.length-1].name || '名前なし') : '');
-  /* 出発地の前・到着地の後ろには入れさせない。
-     両端は①②（車庫・バス停・登校後の行き先）で決まっていて、
-     ④の操作で動かしてよいものではないため。
-     ④から①②③へ書き戻す筋道は作らない（2026-08-21 八重樫さんと確認）。 */
-  if(pts.length >= 2 && at === 0){
-    _saveMsg('出発地の前には差し込めません。ここは出発地「' + (pts[0].name||'名前なし') + '」です。'
-      + '出発地は①②（車庫・バス停・登校後の行き先）で決まります。'
-      + '入れたい場所の行をクリックしてから押してください。', false); return;
+  rptPick = {};
+  if(el.checked){
+    const pts = _rpts(), lock = _rptLockState();
+    for(let i=(lock.from?1:0); i<(lock.to?pts.length-1:pts.length); i++) rptPick[i] = true;
   }
-  if(pts.length >= 2 && at >= pts.length){
-    _saveMsg('到着地の後ろには足せません。ここは到着地「' + (pts[pts.length-1].name||'名前なし') + '」の後ろです。'
-      + '到着地は①②（車庫・バス停・登校後の行き先）で決まります。'
-      + '入れたい場所の行をクリックしてから押してください。', false); return;
-  }
-  const add = o.pts.map(p=>({ name:p.name||'', lat:p.lat, lng:p.lng,
-                              is_stop:!!p.is_stop, split_here:!!p.split_here, note:p.note||'' }));
-  pts.splice(at, 0, ...add);
-  rptSelIdx = null; rptPick = {};
   renderEditor();
-  _saveMsg(`${add.length}地点（${nm}）を ${at+1}番から差し込みました。地図で道を確かめてから「保存」を押してください。`, true);
 }
 
 /* ===== 場所帳（①の他所移動・③の乗降場所を使い回す） =====
@@ -2228,12 +2227,6 @@ function renderRoutePoints(){
       <button class="mini" onclick="rptAddRoute()">＋ サブルートを追加</button>
       <button class="mini" onclick="rptSeedKaisou()">🅿 分かっている地点から下書き</button>
       ${unsaved?`<span style="font-size:12px;color:#c0392b;">※ まだ保存していない送迎が${unsaved}件あります。保存すると選べます。</span>`:''}
-    </div>
-    <div class="muted" style="font-size:12px;margin:-2px 0 8px;">
-      ふだんは<b>「送迎なし」のまま</b>で構いません。ここで入れた道が、その便の回送に使われます。<br>
-      添乗員の送迎があって<b>通る道が変わる日だけ</b>、その送迎を選んで別の道を入れてください。
-      入れなければ「送迎なし」の道が使われます。<br>
-      <b>サブルート</b>は渋滞や事故のときの備えで、運転手がその場で選べます。
     </div>`;
   })() : '';
   // 下校便は原則どの便も同じ道なので、前の便からコピーできるようにする
@@ -2245,38 +2238,26 @@ function renderRoutePoints(){
   const copyRow = copyBtns ? `<div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">
       ${copyBtns}<span class="muted" style="font-size:13px;">下校便は原則どの便も同じ道です。コピーしてから、違うところだけ直してください。</span>
     </div>` : '';
-  // コースをまたぐコピー／貼り付け。控えは localStorage にあるのでコースを移っても残る
-  const _clip = rptClipGet();
-  const clipRow = `<div class="line" style="gap:6px;margin-bottom:6px;flex-wrap:wrap;align-items:center;">
-      <button class="mini" onclick="rptClipCopy()" title="いま開いている道の並びを控えます。別のコースを開いて貼り付けられます。">📋 この道をコピー</button>
-      <button class="mini" onclick="rptClipPaste()"${_clip?'':' disabled'} title="${_clip?escAttr('中の'+Math.max(0,_clip.pts.length-2)+'地点を入れます。出発地・到着地は①②から決まるものを使い、入れ替えません'):'先に「📋 この道をコピー」を押してください'}">📥 ここへ貼り付け（中だけ）</button>
-      ${_clip?`<span style="font-size:12px;color:#2d4a38;background:#f6faf7;border:1px solid #cfe0d5;border-radius:6px;padding:4px 9px;">
-        コピー中：<b>${escHtml(_clipLabel(_clip))}</b>（${_clip.pts.length}地点）
-        <a href="javascript:void(0)" onclick="clipDrop('keiro','この道')" style="color:#8a9c90;text-decoration:none;margin-left:8px;" title="控えを消す">✕</a></span>`:''}
-    </div>
-    <div class="muted" style="font-size:12px;margin:-2px 0 8px;line-height:1.8;">
-      <b>別のコースへも貼り付けられます。</b>入るのは<b>中（2番目〜最後から2番目）だけ</b>で、
-      <b>出発地と到着地は入れ替わりません</b>。両端は①②（車庫・バス停・登校後の行き先）から決まるものを使います。<br>
-      貼り付けただけでは保存されません。<b>地図で道を確かめてから「保存」を押してください</b>。
-    </div>
-    ${(function(){
-      const n = Object.keys(rptPick).length;
-      const q = clipGet('pts');
-      const qn = q && (q.pts||[]).length;
-      return `<div class="line" style="gap:6px;margin-bottom:6px;flex-wrap:wrap;align-items:center;">
-        <button class="mini" onclick="rptPickCopy()"${n?'':' disabled'} title="${n?escAttr('選んだ'+n+'地点をコピーします'):'表の「コピー」の列にチェックを入れてください'}">📋 選んだ地点をコピー${n?'（'+n+'）':''}</button>
-        ${n?`<button class="mini" onclick="rptPickNone()">選択を解除</button>`:''}
-        <button class="mini" onclick="rptPickPaste()"${qn?'':' disabled'} title="${qn?escAttr(qn+'地点を、選んだ行の上に差し込みます'):'先に「📋 選んだ地点をコピー」を押してください'}">📥 選んだ地点をここに差し込む</button>
-        ${qn?`<span style="font-size:12px;color:#2d4a38;background:#f6faf7;border:1px solid #cfe0d5;border-radius:6px;padding:4px 9px;">
-          控え：<b>${escHtml((q.course||'')+'　'+(R_SEG_LABEL[q.seg]||q.seg||''))}</b>（${qn}地点）
-          <a href="javascript:void(0)" onclick="clipDrop('pts','選んだ地点')" style="color:#8a9c90;text-decoration:none;margin-left:8px;" title="控えを消す">✕</a></span>`:''}
-      </div>
-      <div class="muted" style="font-size:12px;margin:-2px 0 10px;line-height:1.8;">
-        <b>道の途中だけをコピーするとき</b>に使います。同じ抜け道を通るコースなどで、必要な数地点だけを運べます。<br>
-        <b>コピー</b>の列でチェック → コピー → 差し込みたいコース・便を開き、<b>入れたい場所の下の行をクリック</b>（薄い緑）→ 差し込む。
-        <b>出発地の前・到着地の後ろには入りません。</b>そこは①②（車庫・バス停・登校後の行き先）で決まっているためです。
-      </div>`;
-    })()}`;
+  // コピーと貼り付けは1つずつ。控えは localStorage にあるのでコースを移っても残る
+  const clipRow = (function(){
+    const n = Object.keys(rptPick).length;
+    const mid = Math.max(0, pts.length - (lock.from?1:0) - (lock.to?1:0));
+    const q = rptClipGet();
+    const cn = q ? q.pts.length : 0;
+    return `<div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">
+      <button class="mini" onclick="rptClipCopy()"${(n||mid)?'':' disabled'} title="${
+        escAttr(n ? ('チェックした'+n+'地点をコピーします') : ('チェックがないので、中の'+mid+'地点（2番目〜最後から2番目）をまとめてコピーします'))
+      }">📋 コピー${n?'（'+n+'）':(mid?'（中の'+mid+'）':'')}</button>
+      ${n?`<button class="mini" onclick="rptPickNone()">選択を解除</button>`:''}
+      <button class="mini" onclick="rptClipPaste()"${cn?'':' disabled'} title="${
+        cn ? escAttr('行を選んでいればその上に差し込み、選んでいなければ中を入れ替えます（出発地・到着地は変わりません）')
+           : '先に「📋 コピー」を押してください'
+      }">📥 貼り付け${cn?(rptSelIdx!=null?'（'+(rptSelIdx+1)+'番の上へ）':'（中を入れ替え）'):''}</button>
+      ${cn?`<span style="font-size:12px;color:#2d4a38;background:#f6faf7;border:1px solid #cfe0d5;border-radius:6px;padding:4px 9px;">
+        控え：<b>${escHtml(_clipLabel(q))}</b>（${cn}地点）
+        <a href="javascript:void(0)" onclick="clipDrop('keiro','コピーした地点')" style="color:#8a9c90;text-decoration:none;margin-left:8px;" title="控えを消す">✕</a></span>`:''}
+    </div>`;
+  })();
   // Googleマップの道案内は2通りの開き方を出す：通し（区切だけで切る）と、バス停ごと
   const legsWhole = rptLegs(false);
   const legsStop  = rptLegs(true);
@@ -2294,13 +2275,28 @@ function renderRoutePoints(){
       ${sameAsWhole?'':`<div style="font-size:12px;color:#6b7d72;margin-bottom:4px;">バス停ごと（${legsStop.length}区間）</div>
       <div class="line" style="gap:6px;flex-wrap:wrap;">${legBtns(legsStop,true)}</div>`}
     </div>` : '';
-  const legNote = legsWhole.length ? `<div class="muted" style="font-size:12px;margin:0 0 10px;">
-        <b>有料道路・高速道路は使わない</b>設定で開きます。<b>「通し」は全体を1本で</b>、<b>「バス停ごと」は停留所で分けて</b>開きます（運転手がバス停ごとに開く想定）。<br>
-        <b>「区切」は、Uターンなどナビが通してくれない場所で使います。</b>その地点で案内を終え、<b>次の地点から</b>新しい案内が始まります（間の動きは運転手が行います）。どちらの開き方でも区切は必ず効きます。<br>
-        <b>狙った道を通らないときは、その手前に地点を足してください。</b>
-        地点は<b>曲がった直後の道の上（曲がり角から50〜100m先）</b>に置くとよく効きます。交差点そのものに置くと、どの道に付くかGoogleが決めてしまい、手前で曲がることがあります。
-        まっすぐな道には置かなくて構いません。${legsWhole.some(g=>g.pts.length-2>RPT_MAX_VIA)?'<br><span style="color:#c0392b;font-weight:700;">⚠ の区間は地点が多すぎるかもしれません（44か所までは通ることを確認済み）。反映されているかGoogleマップ側で確かめてください。</span>':''}
+  // 地点が多すぎる区間だけは、たたまずに出す（見落とすと運転手に届かないため）
+  const legNote = (legsWhole.length && legsWhole.some(g=>g.pts.length-2>RPT_MAX_VIA))
+    ? `<div style="background:#fdeeee;border:1px solid #e6b8b8;border-radius:8px;padding:8px 12px;margin:0 0 10px;font-size:12px;color:#a03434;font-weight:700;">
+        ⚠ の区間は地点が多すぎるかもしれません（44か所までは通ることを確認済み）。反映されているかGoogleマップ側で確かめてください。
       </div>` : '';
+  /* 説明は長いので、ふだんは閉じておく（入力までのスクロールを減らす。2026-08-21 八重樫さんの指摘）。
+     ここに④の説明をすべてまとめてある */
+  const helpBox = `<details style="margin:0 0 10px;border:1px solid #e2ede6;border-radius:8px;background:#fbfdfc;">
+    <summary style="cursor:pointer;padding:7px 12px;font-size:13px;color:#2d4a38;font-weight:700;list-style:none;">▸ 使い方（クリックで開く）</summary>
+    <div class="muted" style="font-size:12px;line-height:1.9;padding:2px 12px 10px;">
+      <b>この画面は何か</b>：運転手のタブレットで<b>Googleマップの道案内</b>を開くための地点です。バスは道幅・長さの制約で通れる道が決まっているため、<b>曲がり角の手前に目印の地点を足す</b>ほど、狙った道を通らせやすくなります。渋滞状況や到着予定時刻はGoogleマップ本体がその場で出すので、こちら側で経路の計算はしません（費用はかかりません）。この地点はこの<b>版</b>に属し、新版を作ると一緒に複製されます。<hr style="border:none;border-top:1px solid #e2ede6;margin:7px 0;">
+      <b>出発地と到着地は①②で決まります。</b>灰色の行は直せません（消す・動かす・その外側に足すもできません）。変えたいときは<b>①のタブ</b>（車庫・バス停・登校後の行き先）を直してください。ここは自動でついてきます。<hr style="border:none;border-top:1px solid #e2ede6;margin:7px 0;">
+      <b>地点を足す</b>：入れたい場所の<b>下の行をクリックして選ぶ</b>（薄い緑）→「＋ ◯番の上に差し込む」。各行の <b>＋</b> でも同じです。緯度・経度は、Googleマップで場所を右クリック→出てきた数字を<b>緯度の欄にそのまま貼れば</b>2つに分かれて入ります。<hr style="border:none;border-top:1px solid #e2ede6;margin:7px 0;">
+      <b>コピーと貼り付け</b>：「コピー」列で選んだ地点だけをコピーします。<b>何も選ばなければ、中（2番目〜最後から2番目）をまとめて</b>コピーします（「全部」でも同じです）。<br>
+      貼り付けは、<b>行を選んでいればその上に差し込み</b>、<b>選んでいなければ中を入れ替えます</b>。どちらでも<b>出発地と到着地は変わりません</b>。別のコースへも貼り付けられます。貼り付けただけでは保存されません。<hr style="border:none;border-top:1px solid #e2ede6;margin:7px 0;">
+      <b>Googleマップで確かめる</b>：<b>有料道路・高速道路は使わない</b>設定で開きます。「通し」は全体を1本で、「バス停ごと」は停留所で分けて開きます（運転手がバス停ごとに開く想定）。<br>
+      <b>「区切」は、Uターンなどナビが通してくれない場所で使います。</b>その地点で案内を終え、<b>次の地点から</b>新しい案内が始まります（間の動きは運転手が行います）。どちらの開き方でも区切は必ず効きます。<br>
+      <b>狙った道を通らないときは、その手前に地点を足してください。</b>地点は<b>曲がった直後の道の上（曲がり角から50〜100m先）</b>に置くとよく効きます。交差点そのものに置くと、どの道に付くかGoogleが決めてしまい、手前で曲がることがあります。まっすぐな道には置かなくて構いません。${
+      _isKaisou(selRSeg)?`<hr style="border:none;border-top:1px solid #e2ede6;margin:7px 0;">
+      <b>送迎とサブルート</b>：ふだんは「送迎なし」のままで構いません。ここで入れた道が、その便の回送に使われます。添乗員の送迎があって<b>通る道が変わる日だけ</b>、その送迎を選んで別の道を入れてください。入れなければ「送迎なし」の道が使われます。<b>サブルート</b>は渋滞や事故のときの備えで、運転手がその場で選べます。`:''}
+    </div>
+  </details>`;
   const orderWarn = rptOrderWarnings();
   const warnIdx = new Set(orderWarn.flatMap(w=>[w.a-1, w.b-1]));   // 0起点に直す
   const rows = pts.map((p,i)=>{
@@ -2317,7 +2313,8 @@ function renderRoutePoints(){
     const roT = isEnd ? (i===0?'出発地':'到着地')+'です。①②（車庫・バス停・登校後の行き先）で決まるので、ここでは直せません。' : '';
     return `<tr class="rp-row" onclick="rptSelect(${i})" style="cursor:pointer;${on?'background:#eef4ef;':(warn?'background:#fff8e8;':'')}" title="${warn?'並び順が逆になっていないか確認してください':(roT||'この行を選ぶと、上に地点を差し込めます')}">
       <td class="muted" style="text-align:right;padding:5px 6px;font-size:14px;${warn?'color:#8a6d1a;font-weight:700;':''}">${warn?'⚠':''}${i+1}</td>
-      <td style="text-align:center;padding:5px 4px;"><input type="checkbox" class="rp-pick" ${rptPick[i]?'checked':''} onclick="event.stopPropagation()" onchange="rptPickToggle(${i},this)" title="この地点をコピーの対象にする" style="width:17px;height:17px;"></td>
+      <td style="text-align:center;padding:5px 4px;">${isEnd?'<span class="muted" style="font-size:11px;" title="出発地・到着地は①②で決まるのでコピーしません">—</span>'
+        :`<input type="checkbox" class="rp-pick" ${rptPick[i]?'checked':''} onclick="event.stopPropagation()" onchange="rptPickToggle(${i},this)" title="この地点をコピーの対象にする" style="width:17px;height:17px;">`}</td>
       <td style="padding:5px 6px;"><input type="text" class="rp-name" value="${escAttr(p.name||'')}"${ro} placeholder="例：○○交差点" title="${escAttr(roT)}" style="width:100%;min-width:100px;font-size:15px;padding:7px 9px;${roS}"></td>
       <td style="padding:5px 6px;"><input type="text" class="rp-lat" value="${escAttr(p.lat)}"${ro} placeholder="35.xxxxxx" onchange="rptCoordIn(this)" title="${escAttr(roT||'「35.5442, 139.7043」のまま貼っても分けて入ります')}" style="width:112px;font-size:15px;padding:7px 9px;${roS}"></td>
       <td style="padding:5px 6px;"><input type="text" class="rp-lng" value="${escAttr(p.lng)}"${ro} placeholder="139.xxxxxx" onchange="rptCoordIn(this)" title="${escAttr(roT)}" style="width:112px;font-size:15px;padding:7px 9px;${roS}"></td>
@@ -2348,12 +2345,6 @@ function renderRoutePoints(){
       </td></tr>`:'');
   }).join('');
   return `
-    <div class="muted" style="font-size:13px;margin:2px 0 10px;line-height:1.8;">
-      運転手のタブレットで<b>Googleマップの道案内</b>を開くための地点です。バスは道幅・長さの制約で通れる道が決まっているため、
-      <b>曲がり角の手前に目印の地点を足す</b>ほど、狙った道を通らせやすくなります。<br>
-      渋滞状況や到着予定時刻はGoogleマップ本体がその場で出すので、こちら側で経路の計算はしません（費用はかかりません）。
-      この地点はこの<b>版</b>に属し、新版を作ると一緒に複製されます。
-    </div>
     <div id="rptSticky" style="position:sticky;top:0;z-index:5;background:#fff;padding-top:6px;box-shadow:0 6px 8px -6px rgba(0,0,0,0.12);">
       <div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;">${segBtns}</div>
       ${legRow}
@@ -2365,17 +2356,9 @@ function renderRoutePoints(){
     <div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;">
       ${_isKaisou(selRSeg) ? '' : '<button class="mini" onclick="rptFillFromStops()">②のバス停から並びを作る</button>'}
       <button class="mini" id="rptAddBtn" onclick="rptAdd()">${_rptAddLabel()}</button>
+      ${(lock.from||lock.to)?`<span class="muted" style="font-size:12px;">🔒 ${lock.from&&lock.to?'出発地と到着地':(lock.from?'出発地':'到着地')}（灰色の行）は①②で決まります</span>`:''}
     </div>
-    ${(lock.from||lock.to)?`<div class="muted" style="font-size:12px;margin:-4px 0 8px;line-height:1.8;background:#f6faf7;border:1px solid #e2ede6;border-radius:8px;padding:8px 12px;">
-      🔒 <b>${lock.from&&lock.to?'出発地と到着地':(lock.from?'出発地':'到着地')}は①②で決まります。</b>
-      灰色の行（${[lock.from?'1番':'',lock.to?(pts.length+'番'):''].filter(Boolean).join('と')}）は直せません。
-      変えたいときは<b>①のタブ</b>（車庫・バス停・登校後の行き先）を直してください。ここは自動でついてきます。
-    </div>`:''}
-    <div class="muted" style="font-size:13px;margin:-4px 0 10px;line-height:1.8;">
-      <b>間に差し込むには</b>：差し込みたい場所の<b>下の行をクリックして選ぶ</b>（薄い緑になります）→ 上の「◯番の上に差し込む」を押すと、その上に空欄の行が入ります。
-      各行の <b>＋</b> でも同じことができます（その行の上に入ります）。<br>
-      緯度・経度は、Googleマップで場所を右クリック→出てきた数字をコピーし、<b>緯度の欄にそのまま貼れば</b>2つに分かれて入ります。
-    </div>
+    ${helpBox}
     ${valid>=2?`<div style="background:#f6faf7;border:1px solid #e2ede6;border-radius:8px;padding:9px 12px;margin-bottom:8px;">
       <span style="font-size:13px;color:#2d4a38;font-weight:700;">直線距離の積み上げ　${dist.total.toFixed(2)} km</span>
       <div class="muted" style="font-size:12px;margin-top:4px;">地点が疎らな区間があると、実際の道のりより短く出ます。曲がり角ごとに地点を足すほど実際に近づきます。</div>
@@ -2390,7 +2373,11 @@ function renderRoutePoints(){
     <div style="overflow-x:auto;"><table id="rptTable" style="width:100%;border-collapse:collapse;font-size:13px;">
       <thead><tr style="background:#f6f9f7;">
         <th style="width:28px;"></th>
-        <th style="width:52px;padding:7px 4px;font-size:12px;color:#6b7d72;" title="ここで選んだ地点だけをコピーできます">コピー</th>
+        <th style="width:56px;padding:5px 4px;font-size:11px;color:#6b7d72;line-height:1.4;" title="ここで選んだ地点だけをコピーできます。何も選ばなければ中（2番目〜最後から2番目）がまとめてコピーされます">
+          コピー<br><label style="cursor:pointer;font-size:10px;"><input type="checkbox" ${
+            (function(){ const n=Object.keys(rptPick).length, m=pts.length-(lock.from?1:0)-(lock.to?1:0);
+                         return (m>0 && n>=m) ? 'checked' : ''; })()
+          } onclick="event.stopPropagation();rptPickAll(this)" style="width:14px;height:14px;vertical-align:-2px;">全部</label></th>
         <th style="text-align:left;padding:7px 6px;font-size:13px;color:#6b7d72;">名前（任意）</th>
         <th style="text-align:left;padding:7px 6px;font-size:13px;color:#6b7d72;width:124px;">緯度</th>
         <th style="text-align:left;padding:7px 6px;font-size:13px;color:#6b7d72;width:124px;">経度</th>
