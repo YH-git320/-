@@ -1178,6 +1178,7 @@ function renderEditor(){
   if (!selCourseId){ area.innerHTML = '<div class="panel"><p class="muted">左からコースを選んでください。</p></div>'; return; }
   const c = _c(); if (!c){ area.innerHTML=''; return; }
   const key = String(c.id);
+  PLACEBOOK = placeBook();   // 場所の一覧は毎回作り直す（保存前の入力もそのまま出る）
   const forms = FORMS[key] = FORMS[key] || [];
   const stops = _stops();
   selRefD = _refDeparture() || '14:00';   // 基準は常に「最初の日課の最初の下校便」
@@ -1259,7 +1260,6 @@ function renderEditor(){
     </div>
 
     <div id="tab-main" style="display:${selTab==='main'?'':'none'};">
-    ${clipBarMain()}
     <label class="fld">① 【登校便】出社・出庫の時刻（コース共通）</label>
     <div class="line" style="margin-bottom:16px;">
       <span class="muted" style="min-width:44px;">出社</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(c.toukou_shussha))}" onchange="updToukou('toukou_shussha',tnorm(this))" style="width:64px;text-align:center;">
@@ -1272,11 +1272,10 @@ function renderEditor(){
     <div class="line" style="margin-top:8px;flex-wrap:wrap;"><span class="muted">登校後の車両（既定）</span>
       <select onchange="updAfterToukou(this.value)" style="font-size:12px;"><option value="帰庫"${(c.after_toukou||'帰庫')==='帰庫'?' selected':''}>帰庫</option><option value="他所移動"${c.after_toukou==='他所移動'?' selected':''}>他所移動</option><option value="学校留置き"${c.after_toukou==='学校留置き'?' selected':''}>学校留置き</option></select>
       <span class="muted" style="font-size:11px;">（日課ごとに上書きできます）</span></div>
-    ${c.after_toukou==='他所移動'?`<div class="line" style="flex-wrap:wrap;margin:2px 0 0;"><input type="text" value="${escAttr(c.after_toukou_place||'')}" placeholder="移動先の名称" oninput="updToukou('after_toukou_place',this.value)" style="flex:1;min-width:120px;"><input type="text" value="${escAttr(c.after_toukou_addr||'')}" placeholder="住所" oninput="updToukou('after_toukou_addr',this.value)" style="flex:1;min-width:120px;"><input type="text" value="${escAttr(c.after_toukou_coord||'')}" placeholder="座標(任意)" oninput="updToukou('after_toukou_coord',this.value)" style="flex:0 0 120px;"><button class="mini" onclick="mapAfterC()" title="グーグルマップで開く">🗺</button></div>`:''}
+    ${c.after_toukou==='他所移動'?`<div class="line" style="flex-wrap:wrap;margin:2px 0 0;"><input type="text" value="${escAttr(c.after_toukou_place||'')}" placeholder="移動先の名称" oninput="updToukou('after_toukou_place',this.value)" style="flex:1;min-width:120px;"><input type="text" value="${escAttr(c.after_toukou_addr||'')}" placeholder="住所" oninput="updToukou('after_toukou_addr',this.value)" style="flex:1;min-width:120px;"><input type="text" value="${escAttr(c.after_toukou_coord||'')}" placeholder="座標(任意)" oninput="updToukou('after_toukou_coord',this.value)" style="flex:0 0 120px;">${placePickHtml('pickPlaceAfter(this)')}<button class="mini" onclick="mapAfterC()" title="グーグルマップで開く">🗺</button></div>`:''}
     </div>
 
     <div id="tab-gekou" style="display:${selTab==='gekou'?'':'none'};">
-    ${clipBarGekou()}
     <label class="fld" style="margin-top:2px;">③ 【下校便（時程）】${(function(){const v=curVer();return v?('適用 '+escHtml(String(v.valid_from))+'〜'):'';})()} — 日課ごとの下校便の学校出発時刻</label>
     <div class="muted" style="font-size:11px;margin:-4px 0 6px;">最初の日課が基準になります。次の日課の出発時刻を入れると、下の「自動生成」に各停の時刻が自動で入ります（あとで手修正も可）。</div>
     <div class="line" style="margin:0 0 4px;flex-wrap:wrap;font-size:12px;align-items:center;gap:4px;">
@@ -1302,7 +1301,6 @@ function renderEditor(){
     </div>
 
     <div id="tab-tensou" style="display:${selTab==='tensou'?'':'none'};">
-      ${clipBarTensou()}
       <div class="muted" style="font-size:11px;margin:2px 0 8px;">添乗員の送迎パターンを、登校用・下校用それぞれ複数持てます（人・日付は入れません）。配置画面で登校便と下校便に別々のシナリオを選べる＝途中交代に対応。各場所には「バスがそこに到着する時刻」を入れ、添乗員の到着は配置側で「その○分前」として扱います。登校後／下校後は「前からコピー」で複製できます。</div>
       ${renderScenarios()}
     </div>
@@ -1497,6 +1495,7 @@ function renderScenPhase(si, s, ph){
       <input type="text" value="${escAttr(r.name)}" placeholder="場所名" oninput="scenPtUpd(${si},${pi},'name',this.value)" style="flex:1;min-width:100px;">
       <input type="text" value="${escAttr(r.address)}" placeholder="住所" oninput="scenPtUpd(${si},${pi},'address',this.value)" style="flex:1;min-width:100px;">
       <input type="text" value="${escAttr(r.coord||'')}" placeholder="座標(任意)" oninput="scenPtUpd(${si},${pi},'coord',this.value)" style="flex:0 0 100px;">
+      ${placePickHtml(`pickPlaceScen(${si},${pi},this)`)}
       <button class="mini" onclick="scenMap(${si},${pi})" title="グーグルマップで開く">🗺</button>
       ${timeCell}
       <button class="link" onclick="scenPtDel(${si},${pi})">削除</button>
@@ -1842,10 +1841,9 @@ function rptCopyFrom(srcSeg){
    ・RPTS は版を読み直すたび丸ごと入れ替わる（loadVersionInto）。
      そのため控えは localStorage に置く。コースを移っても画面を読み直しても残る。
    ・貼り付けても**保存はされない**。必ず「保存」を押してもらう。 */
-/* 控えの置き場。タブごとに1本ずつ持つ。
+/* 控えの置き場。④の「道まるごと」と「選んだ地点」の2つ。
    localStorage なのでコースを移っても、画面を読み直しても残る。 */
-const CLIP_KEY = { keiro:'unkou_rpt_clip_v1', main:'unkou_clip_main_v1',
-                   gekou:'unkou_clip_gekou_v1', tensou:'unkou_clip_tensou_v1' };
+const CLIP_KEY = { keiro:'unkou_rpt_clip_v1', pts:'unkou_clip_pts_v1' };
 function clipGet(kind){
   try{ const s = localStorage.getItem(CLIP_KEY[kind]); return s ? (JSON.parse(s) || null) : null; }
   catch(e){ return null; }
@@ -1858,20 +1856,6 @@ function clipDrop(kind, what){
   if(!confirm(what+'の控えを消します。よろしいですか。')) return;
   try{ localStorage.removeItem(CLIP_KEY[kind]); }catch(e){}
   renderEditor(); _saveMsg('控えを消しました。', true);
-}
-/** どのタブでも同じ形の「コピー／貼り付け」の帯を作る */
-function clipBarHtml(kind, copyLabel, copyCall, pastes, summary, note){
-  const c = clipGet(kind);
-  const btns = pastes.map(b =>
-    `<button class="mini" onclick="${b.call}"${c?'':' disabled'} title="${
-      escAttr(c ? b.title(c) : ('先に「'+copyLabel+'」を押してください'))}">${b.label}</button>`).join('');
-  return `<div class="line" style="gap:6px;margin:0 0 6px;flex-wrap:wrap;align-items:center;">
-      <button class="mini" onclick="${copyCall}">${copyLabel}</button>${btns}
-      ${c?`<span style="font-size:12px;color:#2d4a38;background:#f6faf7;border:1px solid #cfe0d5;border-radius:6px;padding:4px 9px;">
-        コピー中：<b>${escHtml(summary(c))}</b>
-        <a href="javascript:void(0)" onclick="clipDrop('${kind}','${escAttr(copyLabel.replace(/^📋\s*/,''))}')" style="color:#8a9c90;text-decoration:none;margin-left:8px;" title="控えを消す">✕</a></span>`:''}
-    </div>
-    <div class="muted" style="font-size:12px;margin:0 0 12px;line-height:1.8;">${note}</div>`;
 }
 
 function rptClipGet(){
@@ -2059,155 +2043,65 @@ function rptPickPaste(){
   _saveMsg(`${add.length}地点（${nm}）を ${at+1}番から差し込みました。地図で道を確かめてから「保存」を押してください。`, true);
 }
 
-/* ===== ①②③ のタブのコピー／貼り付け =====
-   ・④と同じ考え方。タブごとに控えを1本ずつ持つ。
-   ・③（添乗員送迎）だけは**足すだけ**にしてある。
-     course_scenarios の id は duties（配置）と course_route_points（回送の道）が
-     参照していて、消すと保存が止まるため（FKは ON DELETE NO ACTION）。 */
-
-/* ① 主要情報・登校便 */
-function clipCopyMain(){
-  const c = _c(); if(!c){ _saveMsg('先にコースを選んでください。', false); return; }
-  const o = { course: courseLabel(c),
-    shussha: c.toukou_shussha||'', shukko: c.toukou_shukko||'',
-    after: { mode:c.after_toukou||'帰庫', place:c.after_toukou_place||'',
-             addr:c.after_toukou_addr||'', coord:c.after_toukou_coord||'' },
-    stops: _stops().map(s=>JSON.parse(JSON.stringify(s))) };
-  if(!clipPut('main', o)) return;
-  renderEditor();
-  _saveMsg(`①の内容をコピーしました（バス停${o.stops.length}件）。貼り付けたいコースを開いて「📥 ①を貼り付け」を押してください。`, true);
-}
-function clipPasteMain(){
-  const o = clipGet('main'); const c = _c();
-  if(!o){ _saveMsg('コピーされた①がありません。', false); return; }
-  if(!c){ _saveMsg('先にコースを選んでください。', false); return; }
-  const cur = _stops().length;
-  if(!confirm('コピーした①\n　　' + (o.course||'') + '\n'
-    + '　　出社 ' + (o.shussha||'--:--') + '／出庫 ' + (o.shukko||'--:--') + '\n'
-    + '　　バス停 ' + (o.stops||[]).length + '件\n'
-    + '　　登校後の車両 ' + (o.after && o.after.mode || '帰庫')
-        + ((o.after && o.after.mode)==='他所移動' ? '（' + (o.after.place||'名前なし') + '）' : '') + '\n'
-    + '\n↓ これを貼り付けます\n\n貼り付け先\n　　' + courseLabel(c) + '\n'
-    + (cur ? '　　いまのバス停' + cur + '件と、上の3つの設定は消えます\n' : '　　いまバス停はありません\n')
-    + '\nよろしいですか。（この時点ではまだ保存されません）')) return;
-  c.toukou_shussha = o.shussha||'';
-  c.toukou_shukko  = o.shukko||'';
-  const a = o.after||{};
-  c.after_toukou       = a.mode||'帰庫';
-  c.after_toukou_place = (a.mode==='他所移動') ? (a.place||'') : '';
-  c.after_toukou_addr  = (a.mode==='他所移動') ? (a.addr||'')  : '';
-  c.after_toukou_coord = (a.mode==='他所移動') ? (a.coord||'') : '';
-  STOPS[String(selCourseId)] = (o.stops||[]).map(s=>JSON.parse(JSON.stringify(s)));
-  renderEditor();
-  _saveMsg(`①を貼り付けました（バス停${(o.stops||[]).length}件）。時刻と名前をこのコースのものに直してから「保存」を押してください。`, true);
-}
-
-/* ② 下校便 */
-function clipCopyGekou(){
-  const c = _c(); if(!c){ _saveMsg('先にコースを選んでください。', false); return; }
-  const o = { course: courseLabel(c),
-    shukko_lead: (c.gekou_shukko_lead==null ? null : c.gekou_shukko_lead),
-    haisha_lead: (c.gekou_haisha_lead==null ? null : c.gekou_haisha_lead),
-    forms: (FORMS[String(selCourseId)]||[]).map(f=>JSON.parse(JSON.stringify(f))) };
-  if(!clipPut('gekou', o)) return;
-  renderEditor();
-  _saveMsg(`②の内容をコピーしました（日課${o.forms.length}件）。貼り付けたいコースを開いて「📥 ②を貼り付け」を押してください。`, true);
-}
-function clipPasteGekou(){
-  const o = clipGet('gekou'); const c = _c();
-  if(!o){ _saveMsg('コピーされた②がありません。', false); return; }
-  if(!c){ _saveMsg('先にコースを選んでください。', false); return; }
-  const cur = (FORMS[String(selCourseId)]||[]).length;
-  const names = (o.forms||[]).map(f=>f.form_name||'（名前なし）').join('、');
-  if(!confirm('コピーした②\n　　' + (o.course||'') + '\n'
-    + '　　日課 ' + (o.forms||[]).length + '件　' + (names||'なし') + '\n'
-    + '　　出庫リード ' + (o.shukko_lead==null?'未設定':(o.shukko_lead+'分前'))
-        + '／配車リード ' + (o.haisha_lead==null?'未設定':(o.haisha_lead+'分前')) + '\n'
-    + '\n↓ これを貼り付けます\n\n貼り付け先\n　　' + courseLabel(c) + '\n'
-    + (cur ? '　　いまの日課' + cur + '件と、2つのリード時間は消えます\n' : '　　いま日課はありません\n')
-    + '\nよろしいですか。（この時点ではまだ保存されません）')) return;
-  c.gekou_shukko_lead = (o.shukko_lead==null ? null : o.shukko_lead);
-  c.gekou_haisha_lead = (o.haisha_lead==null ? null : o.haisha_lead);
-  FORMS[String(selCourseId)] = (o.forms||[]).map(f=>JSON.parse(JSON.stringify(f)));
-  renderEditor();
-  _saveMsg(`②を貼り付けました（日課${(o.forms||[]).length}件）。学校の出発時刻をこのコースのものに直してから「保存」を押してください。`, true);
-}
-
-/* ③ 添乗員送迎（足すだけ） */
-function clipCopyTensou(){
-  const c = _c(); if(!c){ _saveMsg('先にコースを選んでください。', false); return; }
-  // 中身のあるものだけ写す（保存側と同じ判定）
-  const hasContent = s => (s.pts||[]).some(p=>(p.name||'').trim()||(p.address||'').trim()||(p.coord||'').trim())
-    || Object.keys(s.ps||{}).some(ph=>((s.ps[ph]||{}).shussha||'').trim()||((s.ps[ph]||{}).shukko||'').trim())
-    || (s.label||'').trim();
-  const list = _scenList().filter(hasContent);
-  if(!list.length){ _saveMsg('中身のある送迎がありません。', false); return; }
-  const o = { course: courseLabel(c),
-    scens: list.map(s=>({ segment:s.segment, label:s.label||'',
-                          pts: JSON.parse(JSON.stringify(s.pts||[])),
-                          ps:  JSON.parse(JSON.stringify(s.ps ||{})) })) };
-  if(!clipPut('tensou', o)) return;
-  renderEditor();
-  _saveMsg(`③の送迎${o.scens.length}件をコピーしました。貼り付けたいコースを開いて「📥 ③を足す」を押してください。`, true);
-}
-/** 同じ便に同じ名前があれば「（写し）」を付けて見分けられるようにする */
-function _uniqScenLabel(list, seg, label){
-  const used = nm => list.some(s => s.segment===seg && (s.label||'')===nm);
-  if(!used(label||'')) return label||'';
-  let nm = (label||'') + '（写し）', n = 1;
-  while(used(nm)){ n++; nm = (label||'') + '（写し' + n + '）'; }
-  return nm;
-}
-function clipPasteTensou(){
-  const o = clipGet('tensou'); const c = _c();
-  if(!o){ _saveMsg('コピーされた③がありません。', false); return; }
-  if(!c){ _saveMsg('先にコースを選んでください。', false); return; }
-  const list = _scenList();
-  const src = (o.scens||[]);
-  if(!src.length){ _saveMsg('コピーされた送迎が空です。', false); return; }
-  if(!confirm('コピーした③\n　　' + (o.course||'') + '\n'
-    + src.map(s=>'　　・' + (s.segment||'') + '　' + (s.label||'（名前なし）')
-                + '（乗降' + (s.pts||[]).length + 'か所）').join('\n') + '\n'
-    + '\n↓ これを足します\n\n足す先\n　　' + courseLabel(c) + '\n'
-    + '　　いまの' + list.length + '件はそのまま残ります（' + src.length + '件を足すだけです）\n'
-    + '\n※ 配置や回送の道が送迎を参照しているため、消さずに足す作りにしています。\n'
-    + '　 要らない送迎は、貼り付けたあと1件ずつ消してください。\n'
-    + '\nよろしいですか。（この時点ではまだ保存されません）')) return;
-  src.forEach(s=>{
-    list.push({ dbId:null, segment:s.segment,
-                label:_uniqScenLabel(list, s.segment, s.label||''),
-                pts: JSON.parse(JSON.stringify(s.pts||[])),
-                ps:  JSON.parse(JSON.stringify(s.ps ||{})) });
+/* ===== 場所帳（①の他所移動・③の乗降場所を使い回す） =====
+   同じ場所を何コースでも使う。
+   ・登校後の他所移動：大塚ろう学校の各コースは、どれも「前野原温泉 さやの湯処」へ行く
+   ・添乗員の乗降場所：久我山の複数車両が、世田谷の車両が乗せた添乗員を受け取る同じ場所へ向かう
+   そのたびに座標を調べ直すのは無駄なので、**すでにこのシステムに入っている場所**を選べるようにする
+   （2026-08-21 八重樫さんの要望）。
+   ⚠️ 控え（コピー）ではなく**その場の一覧**にしてある。
+      保存前の入力もそのまま出るし、どこかで直せば全部の一覧に反映される。 */
+let PLACEBOOK = [];
+function placeBook(){
+  const map = {};
+  const add = (name, addr, coord, where) => {
+    name = String(name||'').trim(); coord = String(coord||'').trim();
+    if(!name || !coord || !dmsToDecimal(coord)) return;   // 座標が読めないものは出さない
+    const k = name + '|' + coord;
+    if(!map[k]) map[k] = { name, addr:String(addr||'').trim(), coord, uses:[] };
+    if(!map[k].addr && addr) map[k].addr = String(addr).trim();
+    if(where && map[k].uses.indexOf(where) < 0) map[k].uses.push(where);
+  };
+  COURSES.forEach(c=>{
+    if(c.after_toukou === '他所移動')
+      add(c.after_toukou_place, c.after_toukou_addr, c.after_toukou_coord, courseLabel(c)+'（登校後）');
   });
+  Object.keys(SCEN).forEach(cid=>{
+    const c = COURSES.find(x=>String(x.id)===String(cid));
+    (SCEN[cid]||[]).forEach(s=>(s.pts||[]).forEach(p=>
+      add(p.name, p.address, p.coord, (c?courseLabel(c):'コース'+cid)+'（'+(s.label||'送迎')+'）')));
+  });
+  return Object.keys(map).map(k=>map[k]).sort((a,b)=>String(a.name).localeCompare(String(b.name),'ja'));
+}
+/** 場所を選ぶ小さな選択欄。onchange に呼び出し先を渡す */
+function placePickHtml(call){
+  if(!PLACEBOOK.length) return '';
+  const opts = PLACEBOOK.map((p,i)=>{
+    const n = p.uses.length;
+    return `<option value="${i}">${escHtml(p.name)}${n?`（${escHtml(p.uses[0])}${n>1?' ほか'+(n-1)+'件':''}）`:''}</option>`;
+  }).join('');
+  return `<select onchange="${call}" title="すでにこのシステムに入っている場所から選ぶと、名前・住所・座標がまとめて入ります"
+    style="flex:0 0 auto;max-width:200px;font-size:12px;padding:4px 6px;">
+    <option value="">📍 登録済みの場所…</option>${opts}</select>`;
+}
+function _placePicked(el){ const p = PLACEBOOK[Number(el.value)]; el.value=''; return p||null; }
+/** ①の登校後の他所移動へ入れる */
+function pickPlaceAfter(el){
+  const p = _placePicked(el); if(!p) return;
+  const c = _c(); if(!c) return;
+  c.after_toukou_place = p.name; c.after_toukou_addr = p.addr; c.after_toukou_coord = p.coord;
   renderEditor();
-  _saveMsg(`③に送迎${src.length}件を足しました。中身を直してから「保存」を押してください。`, true);
+  _saveMsg(`「${p.name}」を入れました。「保存」を押すまでは反映されません。`, true);
+}
+/** ③の乗降場所へ入れる */
+function pickPlaceScen(si, pi, el){
+  const p = _placePicked(el); if(!p) return;
+  const s = _scenList()[si]; if(!s || !s.pts[pi]) return;
+  s.pts[pi].name = p.name; s.pts[pi].address = p.addr; s.pts[pi].coord = p.coord;
+  renderEditor();
+  _saveMsg(`「${p.name}」を入れました。「保存」を押すまでは反映されません。`, true);
 }
 
-/* 各タブの帯 */
-function clipBarMain(){
-  return clipBarHtml('main', '📋 ①をコピー', 'clipCopyMain()',
-    [{ label:'📥 ①を貼り付け', call:'clipPasteMain()',
-       title:o=>(o.course||'')+' の①（バス停'+((o.stops||[]).length)+'件）を、このコースへ入れます' }],
-    o => (o.course||'') + '　バス停' + ((o.stops||[]).length) + '件',
-    '出社・出庫の時刻、<b>バス停一覧（下校専用・下校のずらしも含む）</b>、登校後の車両（帰庫／他所移動の行き先）をまとめて写します。' +
-    '貼り付けると<b>いまのバス停は消えます</b>。保存はされないので、直してから「保存」を押してください。');
-}
-function clipBarGekou(){
-  return clipBarHtml('gekou', '📋 ②をコピー', 'clipCopyGekou()',
-    [{ label:'📥 ②を貼り付け', call:'clipPasteGekou()',
-       title:o=>(o.course||'')+' の②（日課'+((o.forms||[]).length)+'件）を、このコースへ入れます' }],
-    o => (o.course||'') + '　日課' + ((o.forms||[]).length) + '件',
-    '出庫・配車のリード時間と、<b>日課（下校便の学校出発時刻）</b>を写します。同じ学校の別の車両なら日課はたいてい同じです。' +
-    '貼り付けると<b>いまの日課は消えます</b>。<span class="muted">「通らない停」の指定は停の名前で覚えているため、バス停の名前が違うコースでは効かなくなります。</span>');
-}
-function clipBarTensou(){
-  return clipBarHtml('tensou', '📋 ③をコピー', 'clipCopyTensou()',
-    [{ label:'📥 ③を足す', call:'clipPasteTensou()',
-       title:o=>(o.course||'')+' の送迎'+((o.scens||[]).length)+'件を、このコースに足します（今あるものは残ります）' }],
-    o => (o.course||'') + '　送迎' + ((o.scens||[]).length) + '件',
-    '送迎のパターンを（乗降場所・時刻・局面の設定ごと）写します。<b>③だけは消さずに「足す」作り</b>です。' +
-    '配置や回送の道が送迎を番号で参照しているため、入れ替えると保存が止まってしまうからです。要らないものは足したあとに1件ずつ消してください。');
-}
 
 /* ===== Googleマップの道案内リンク =====
    実際にGoogleマップへ渡して確かめたこと（2026-08-19）：
