@@ -49,6 +49,8 @@
   .mapbtn{width:100%;font-family:inherit;font-size:17px;font-weight:700;background:#fff;
     border:2px solid var(--brand);color:var(--brand-dark);border-radius:12px;padding:13px;
     margin-top:9px;cursor:pointer;text-decoration:none;display:block;text-align:center;}
+  /* サブルート＝渋滞・事故のときの別の道。メインと見分けがつくよう色を変える */
+  .mapbtn.subbtn{border-color:#d8a24a;color:var(--amber);font-size:15px;padding:11px;}
   .undo{font-family:inherit;font-size:13px;font-weight:700;background:none;border:none;
     color:var(--ink-soft);text-decoration:underline;padding:6px 2px;margin-top:4px;cursor:pointer;}
 
@@ -168,6 +170,12 @@ function legLinks(s){
            : g.cut ? (g.toName||'区切りの地点') + 'まで'
                    : 'その先 〜 ' + (s.mapTo || s.label));
     h += `<a class="mapbtn" href="${u}" target="unkoumap" rel="noopener">${esc(label)}</a>`;
+  });
+  // 渋滞や事故でメインが使えないときの、会社が用意した別の道
+  (s.subs || []).forEach(sb=>{
+    const u = mapUrl(sb.pts);
+    if(!u) return;
+    h += `<a class="mapbtn subbtn" href="${u}" target="unkoumap" rel="noopener">🚧 サブ：${esc(sb.name)}</a>`;
   });
   return h;
 }
@@ -371,6 +379,7 @@ function buildSteps(seg){
   steps.push({ type:'one', kind:'出庫', seq:null, label:'出庫', btn:'出庫した',
                note: plan ? ('この便は添乗員の送迎があります　予定 ' + plan) : null });
   let carry = [];                               // 手前の目印に付いていた注意書き
+  let firstStopDone = false;                    // 最初のバス停＝車庫から来る区間
   pts.forEach((p,idx)=>{
     const n = (p.note||'').trim();
     if(!p.is_stop){ if(n) carry.push(n); return; }
@@ -378,7 +387,10 @@ function buildSteps(seg){
     carry = [];
     steps.push({ type:'stop', seq:p.seq, label:p.name||('地点'+p.seq),
                  note: notes.length ? notes.join('／') : null,
-                 legs: legsTo(pts, idx, gar, seg.segment) });
+                 legs: legsTo(pts, idx, gar, seg.segment),
+                 // 渋滞・事故のときに選べるサブルート（会社が用意した道）
+                 subs: firstStopDone ? null : kaisouSubs(seg.segment, '出庫', gar, pts.slice(0, idx+1)) });
+    firstStopDone = true;
   });
   // 最初と最後のバス停に印をつける。
   // 登校便＝最後が学校（全員降りる）／下校便＝最初が学校（全員乗る）
@@ -394,7 +406,9 @@ function buildSteps(seg){
                      (kaisouPoints(seg.segment,'帰庫').length
                        ? kaisouPoints(seg.segment,'帰庫')
                        : transferPoints(seg.segment,'後')), [gar]))
-                 : null });
+                 : null,
+               subs: (gar && pts.length)
+                 ? kaisouSubs(seg.segment, '帰庫', gar, [pts[pts.length-1]]) : null });
   return steps;
 }
 
@@ -516,16 +530,33 @@ function chainLegs(seg){
   return out.filter(g => g.pts.filter(p=>p.lat!=null&&p.lng!=null).length >= 2);
 }
 
-/** その便の回送の経路（運行時程マスタ④の「出庫回送」「帰庫回送」）。
- *  その日の送迎シナリオに合う道が返ってくる。入っていなければ空。
- *  ここに地点があるときは、**会社が決めた道**として、それを通って案内する */
-function kaisouPoints(segName, which){
+/** その便の回送のルート一覧（運行時程マスタ④で決めた道）。
+ *  先頭がメイン、以降がサブルート（渋滞・事故のときに運転手が選ぶ）。
+ *  which は '出庫' か '帰庫'。入っていなければ空の配列 */
+function kaisouRoutes(segName, which){
   const o = (INFO && INFO.kaisou && INFO.kaisou[segName]) || null;
-  const list = (o && o[which]) || [];
-  return list
-    .filter(p => p && p.lat != null && p.lng != null)
-    .map(p => ({ lat:Number(p.lat), lng:Number(p.lng), name:p.name || '',
-                 is_stop:!!p.is_stop, split_here:!!p.split_here, brk:!!p.is_stop }));
+  return ((o && o[which]) || []).map(r => ({
+    name: r.name || '',
+    pts: (r.points || [])
+      .filter(p => p && p.lat != null && p.lng != null)
+      .map(p => ({ lat:Number(p.lat), lng:Number(p.lng), name:p.name || '',
+                   is_stop:!!p.is_stop, split_here:!!p.split_here, brk:!!p.is_stop }))
+  })).filter(r => r.pts.length);
+}
+/** メインの道の地点（無ければ空） */
+function kaisouPoints(segName, which){
+  const rs = kaisouRoutes(segName, which);
+  return rs.length ? rs[0].pts : [];
+}
+/** サブルート（メイン以外）を、案内リンクにできる形で返す。
+ *  ⚠️ 会社が用意した道の中から運転手が選ぶ。Googleに自由に選ばせるのとは違う
+ *     （バス進入禁止・狭路・隘路に入り込むため。2026-08-21 八重樫さんの指摘） */
+function kaisouSubs(segName, which, gar, tail){
+  return kaisouRoutes(segName, which).slice(1).map(r => ({
+    name: r.name,
+    pts: (which === '出庫') ? (gar ? [gar] : []).concat(r.pts, tail || [])
+                            : (tail || []).concat(r.pts, gar ? [gar] : [])
+  }));
 }
 
 /** その便の添乗員の乗降地点。配置（duties.scenario_id）で選ばれたシナリオのもの。
