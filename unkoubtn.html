@@ -164,8 +164,9 @@ function legLinks(s){
       ? (s.type==='stop' ? '🗺 ここまでの道案内'
                          : '🗺 ' + (s.mapTo || '次の地点') + 'までの道案内')
       : '🗺 道案内' + (MARU[k]||(k+1)) + '　'
-        + (g.cut ? (g.toName||'区切りの地点') + 'まで'
-                 : 'その先 〜 ' + (s.mapTo || s.label));
+        + (g.label ? g.label + 'まで'
+           : g.cut ? (g.toName||'区切りの地点') + 'まで'
+                   : 'その先 〜 ' + (s.mapTo || s.label));
     h += `<a class="mapbtn" href="${u}" target="unkoumap" rel="noopener">${esc(label)}</a>`;
   });
   return h;
@@ -363,7 +364,12 @@ function buildSteps(seg){
   const pts = seg.points;
   const gar = garagePoint();                    // そのコースの車庫（座標が入っていれば）
   const steps = [];
-  steps.push({ type:'one', kind:'出庫', seq:null, label:'出庫', btn:'出庫した', note:null });
+  // 送迎が選ばれている便は、出社・出庫が通常より早い。その予定を出庫に添える
+  const tm = (INFO && INFO.scenario_times && INFO.scenario_times[seg.segment]) || null;
+  const plan = tm ? ['出社 ' + (tm.shussha ? String(tm.shussha).slice(0,5) : '—'),
+                     '出庫 ' + (tm.shukko  ? String(tm.shukko ).slice(0,5) : '—')].join('　') : null;
+  steps.push({ type:'one', kind:'出庫', seq:null, label:'出庫', btn:'出庫した',
+               note: plan ? ('この便は添乗員の送迎があります　予定 ' + plan) : null });
   let carry = [];                               // 手前の目印に付いていた注意書き
   pts.forEach((p,idx)=>{
     const n = (p.note||'').trim();
@@ -372,18 +378,20 @@ function buildSteps(seg){
     carry = [];
     steps.push({ type:'stop', seq:p.seq, label:p.name||('地点'+p.seq),
                  note: notes.length ? notes.join('／') : null,
-                 legs: legsTo(pts, idx, gar) });
+                 legs: legsTo(pts, idx, gar, seg.segment) });
   });
   // 最初と最後のバス停に印をつける。
   // 登校便＝最後が学校（全員降りる）／下校便＝最初が学校（全員乗る）
   const stops = steps.filter(s=>s.type==='stop');
   if(stops.length){ stops[0].first = true; stops[stops.length-1].last = true; }
-  // 帰庫は「最後の地点 → 車庫」。ここも今まで道案内が出せていなかった区間
+  // 帰庫は「最後の地点 →（添乗員を降ろす地点があれば）→ 車庫」。
+  // ここも今まで道案内が出せていなかった区間
   steps.push({ type:'one', kind:'帰庫', seq:null, label:'帰庫', btn:'帰庫した',
                note: carry.length ? carry.join('／') : null,
                mapTo: gar ? gar.name : null,
                legs: (gar && pts.length)
-                 ? [{ pts:[pts[pts.length-1], gar], toName: gar.name, cut:false }] : null });
+                 ? chainLegs([pts[pts.length-1]].concat(transferPoints(seg.segment,'後'), [gar]))
+                 : null });
   return steps;
 }
 
@@ -473,22 +481,48 @@ function allOffRow(i, s, CI){
  *  ⚠️ 2026-08-20 まではここで `is_stop || split_here` の手前まで遡っていたため、
  *  区切のある区間は**前半が丸ごと抜け落ち**、しかも案内の出発点が区切の地点になっていた。
  *  Googleはそこから回り道を組み立てるので、ルートが壊れて見えた（八重樫さんが実車で発見）。 */
-function legsTo(pts, toIdx, gar){
+function legsTo(pts, toIdx, gar, segName){
   let from = -1;
   for(let i=toIdx-1;i>=0;i--){ if(pts[i].is_stop){ from=i; break; } }   // 遡るのはバス停まで
-  // 手前にバス停が無い＝この便の最初のバス停。そこは**車庫から**案内する
-  const seg = (from < 0) ? (gar ? [gar].concat(pts.slice(0, toIdx+1)) : pts.slice(0, toIdx+1))
-                         : pts.slice(from, toIdx+1);
-  const mk = (a,b) => ({ pts: seg.slice(a,b+1), toName: seg[b].name||'', cut: !!seg[b].split_here });
+  if(from >= 0) return chainLegs(pts.slice(from, toIdx+1));
+  // 手前にバス停が無い＝この便の最初のバス停。**車庫から**、
+  // その日の配置で添乗員の送迎が選ばれていれば、その乗降地点も通って案内する
+  const head = (gar ? [gar] : []).concat(transferPoints(segName, '前'));
+  return chainLegs(head.concat(pts.slice(0, toIdx+1)));
+}
+
+/** 地点の並びを、複数の道案内に分ける。
+ *  ・区切（split_here）… その地点で終わり、**次の地点から**やり直す（Uターンなど）
+ *  ・送迎地点（brk）  … その地点で区切り、**同じ地点から**続ける（停まって乗り降りするため） */
+function chainLegs(seg){
+  const mk = (a,b) => {
+    const e = seg[b];
+    return { pts: seg.slice(a,b+1), toName: e.name||'', cut: !!e.split_here,
+             label: e.brk ? (e.name||'送迎地点') + '（添乗員 ' + (e.kind||'乗降')
+                            + (e.bus_time ? ' ' + String(e.bus_time).slice(0,5) : '') + '）'
+                          : null };
+  };
   const out = []; let start = 0;
-  for(let i=1;i<seg.length;i++){
-    if(seg[i].split_here && i<seg.length-1){
-      if(i>start) out.push(mk(start,i));
-      start = i+1;                        // 区切の地点は次の区間に入れない
-    }
+  for(let i=1;i<seg.length-1;i++){
+    if(seg[i].split_here){ if(i>start) out.push(mk(start,i)); start = i+1; }
+    else if(seg[i].brk)  { if(i>start) out.push(mk(start,i)); start = i;   }
   }
   if(seg.length-1 >= start) out.push(mk(start, seg.length-1));
   return out.filter(g => g.pts.filter(p=>p.lat!=null&&p.lng!=null).length >= 2);
+}
+
+/** その便の添乗員の乗降地点。配置（duties.scenario_id）で選ばれたシナリオのもの。
+ *  '前' は車庫と第1バス停の間、'後' は最終地点と帰庫の間に入る */
+function transferPoints(segName, when){
+  const list = (INFO && INFO.transfers && INFO.transfers[segName]) || [];
+  return list
+    .filter(p => String(p.phase || '').endsWith(when))
+    .map(p => {
+      const c = parseCoord(p.coord);
+      return c ? { lat:c.lat, lng:c.lng, name:p.name || '送迎地点', kind:p.kind,
+                   bus_time:p.bus_time, is_stop:true, split_here:false, brk:true } : null;
+    })
+    .filter(Boolean);
 }
 
 function evOf(kind, seq){ return EVENTS[SEG+'|'+kind+'|'+(seq==null?'':seq)] || null; }

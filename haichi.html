@@ -996,7 +996,9 @@ let PEOPLE = { '添乗員': [], '運転手': [] };
 let HIST = {};               // 'course_id|役割|便区分' -> [{staff_id,cnt,last_date}]（回数の多い順）
 let VEH = [];                // 車両一覧
 let VEHBY = {};              // vehicle_id -> 車両
+let SCEN = [];               // 添乗員送迎シナリオ一覧（course_scenarios）
 let DIRTYV = {};             // duty_id -> vehicle_id（車両の変更ぶん）
+let DIRTYS = {};             // duty_id -> scenario_id（添乗員送迎シナリオの変更ぶん）
 let DIRTY = {};              // 'duty_id|role|index' -> {duty_id, role, staff_id, orig_id}
 let CUR = null;              // 開いているセル {cid, date}
 
@@ -1049,6 +1051,8 @@ function _jpHolidays(year){
 /* ---------- 読み込み ---------- */
 async function hLoadBase(){
   CRS = await _fetchAll('courses?select=id,prefecture,school_name,course_name,active,driver_count,attendant_count,vehicle_id&order=prefecture,school_name,course_name');
+  // 添乗員送迎シナリオ（運行時程マスタ③タブで作る）。便ごとにどれを使うかを選ぶ
+  SCEN = await _fetchAll('course_scenarios?select=id,course_id,segment,label,seq&order=course_id,segment,seq');
   // 従業員（業務種別で添乗員／運転手を振り分け）
   const staff = await _fetchAll('staff?select=id,name,active&active=eq.true&order=name');
   const jt    = await _fetchAll('job_types?select=id,name');
@@ -1123,6 +1127,16 @@ function _segGroup(seg){
 }
 
 // 選択肢：このコースの「その便」で過去に乗った人を先頭に、その後ろに全員（名前順）
+/** その便で選べる送迎シナリオ。無いコースでは欄そのものを出さない（空欄が増えるだけなので）。
+ *  シナリオは登校用／下校用に分かれているので、便の区分（登校／下校①②③）で振り分ける */
+function _scenOptsFor(cid, segment){
+  const sg = _segGroup(segment);
+  const list = SCEN.filter(s=>s.course_id===cid && s.segment===sg);
+  if(!list.length) return '';
+  return '<option value="">（送迎なし・車庫から直行）</option>'
+       + list.map(s=>`<option value="${s.id}">${escHtml(s.label||('送迎'+s.seq))}</option>`).join('');
+}
+
 function _optsFor(cid, segment){
   const sg = _segGroup(segment);
   const all = PEOPLE[TAB] || [];
@@ -1147,9 +1161,9 @@ function _optsFor(cid, segment){
 async function hLoadMonth(){
   const ym=_ym(); if(!ym) return;
   const start=ym+'-01', end=ym+'-'+_p2(_dim(ym));
-  DUTIES={}; CREW={}; DIRTY={}; DIRTYV={};
+  DUTIES={}; CREW={}; DIRTY={}; DIRTYV={}; DIRTYS={};
   // 乗務は埋め込みで一緒に取る（IDをURLに並べると長さ上限を超えるため）
-  const ds = await _fetchAll(`duties?work_date=gte.${start}&work_date=lte.${end}&select=id,work_date,course_id,segment,seq,start_time,driver_need,attendant_need,vehicle_id,duty_crew(id,staff_id,role)&order=course_id,work_date,seq`);
+  const ds = await _fetchAll(`duties?work_date=gte.${start}&work_date=lte.${end}&select=id,work_date,course_id,segment,seq,start_time,driver_need,attendant_need,vehicle_id,scenario_id,duty_crew(id,staff_id,role)&order=course_id,work_date,seq`);
   ds.forEach(d=>{
     (DUTIES[_key(d.course_id,d.work_date)] = DUTIES[_key(d.course_id,d.work_date)]||[]).push(d);
     const cw = Array.isArray(d.duty_crew) ? d.duty_crew : [];
@@ -1436,6 +1450,10 @@ function hOpenAsg(cid,date){
     // 車両（便ごと。代車の日はここだけ変える）
     h+=`<div class="crewline"><span class="lb">🚌 車両</span>`
       +`<select id="veh_${d.id}">${_vehOptsFor(cid)}</select></div>`;
+    // 添乗員送迎シナリオ（便ごと。運行ボタンの案内と出庫時刻がこれで決まる）
+    const sc=_scenOptsFor(cid, d.segment);
+    if(sc) h+=`<div class="crewline"><span class="lb">🧑 添乗員送迎</span>`
+      +`<select id="scn_${d.id}" title="運行ボタンは、選んだ送迎の乗降地点を車庫と第1バス停の間に入れて案内します">${sc}</select></div>`;
     for(let i=0;i<need;i++){
       h+=`<div class="crewline"><span class="lb">${TAB}${need>1?(i+1):''}</span>`
         +`<select id="asg_${d.id}_${i}" data-duty="${d.id}" data-idx="${i}" onchange="hAutoFill(${d.id},${i})">`
@@ -1455,6 +1473,8 @@ function hOpenAsg(cid,date){
     }
     const ve=document.getElementById(`veh_${d.id}`);
     if(ve) ve.value = d.vehicle_id ? String(d.vehicle_id) : '';
+    const sc=document.getElementById(`scn_${d.id}`);
+    if(sc) sc.value = d.scenario_id ? String(d.scenario_id) : '';
   });
   document.getElementById('asgWrap').style.display='block';
 }
@@ -1545,6 +1565,13 @@ function hApplyAsg(){
     const v = ve.value ? parseInt(ve.value,10) : null;
     if(v !== (d.vehicle_id||null)){ d.vehicle_id = v; DIRTYV[d.id]=v; }
   });
+  // 添乗員送迎も「その日のその便だけ」に適用する（車両と同じ考え方）
+  (DUTIES[_key(CUR.cid,CUR.date)]||[]).filter(d=>_needOf(d)>0).forEach(d=>{
+    const sc=document.getElementById(`scn_${d.id}`);
+    if(!sc) return;
+    const s = sc.value ? parseInt(sc.value,10) : null;
+    if(s !== (d.scenario_id||null)){ d.scenario_id = s; DIRTYS[d.id]=s; }
+  });
   const n=dates.length;
   hCloseAsg(); hRender(); _dirtyView();
   status(n>1 ? `${n}日ぶんに反映しました（まだ保存していません）` : '反映しました（まだ保存していません）', true);
@@ -1585,7 +1612,7 @@ function hClearAsg(){
   });
 }
 function _dirtyView(){
-  const n=Object.keys(DIRTY).length + Object.keys(DIRTYV).length;
+  const n=Object.keys(DIRTY).length + Object.keys(DIRTYV).length + Object.keys(DIRTYS).length;
   const el=document.getElementById('hDirty');
   if(el) el.textContent = n? `未保存 ${n}件`:'';
 }
@@ -1600,7 +1627,8 @@ async function hSave(){
   if(_hSaving){ status('保存中です。そのままお待ちください。', false); return; }
   const keys=Object.keys(DIRTY);
   const vkeys=Object.keys(DIRTYV);
-  if(!keys.length && !vkeys.length){ status('変更はありません', true); return; }
+  const skeys=Object.keys(DIRTYS);
+  if(!keys.length && !vkeys.length && !skeys.length){ status('変更はありません', true); return; }
   _hSaving = true;
   const _b = document.getElementById('hSaveBtn');
   const _label = _b ? _b.textContent : '';
@@ -1615,6 +1643,14 @@ async function hSave(){
       });
       if(!r.ok){ status('車両の保存に失敗しました：'+(await r.text()).slice(0,120), false); return; }
     }
+    // 添乗員送迎シナリオ（duties 側の更新）
+    for(const id of skeys){
+      const r = await fetch(`${REST_URL}/duties?id=eq.${id}`, {
+        method:'PATCH', headers:getH(),
+        body: JSON.stringify({ scenario_id: DIRTYS[id], updated_at: new Date().toISOString() })
+      });
+      if(!r.ok){ status('添乗員送迎の保存に失敗しました：'+(await r.text()).slice(0,120), false); return; }
+    }
     for(const k of keys){
       const {duty_id, role} = DIRTY[k];
       // その便・その役割の行を入れ替える（削除→挿入）
@@ -1626,7 +1662,7 @@ async function hSave(){
         if(!ins.ok){ status('保存に失敗しました：'+(await ins.text()).slice(0,120), false); return; }
       }
     }
-    DIRTY={}; DIRTYV={}; _dirtyView();
+    DIRTY={}; DIRTYV={}; DIRTYS={}; _dirtyView();
     await hLoadMonth(); await hLoadHist(); hRender();
     status('保存しました', true);
   }catch(e){ status('保存に失敗しました：'+e.message, false); }
