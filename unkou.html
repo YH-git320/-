@@ -966,6 +966,37 @@ function _gekouIdx(){
   });
   return idx;
 }
+/** gekou_seq 順の添字を、任意の stops 配列に対して計算する（_gekouIdx は _stops() 固定なので別に用意） */
+function _gekouIdxOf(stops){
+  const idx = stops.map((s,i)=>i);
+  idx.sort((a,b)=>{
+    const A = (stops[a].gekou_seq==null) ? 99999 : stops[a].gekou_seq;
+    const B = (stops[b].gekou_seq==null) ? 99999 : stops[b].gekou_seq;
+    return (A!==B) ? (A-B) : (a-b);
+  });
+  return idx;
+}
+/** 登校・下校それぞれの「並び（名前だけの列）」を文字列にする。保存時に②が変わったかを見るための目印。
+   ⚠️ 2026-08-24　②（バス停の並び）を保存したら④もそれに合わせて作り直す、という約束のための仕組み。
+   八重樫さんの整理：「①②③を作ってから④」なので、②を変えたら④は作り直してよい（曲がり角も消えてよい）。
+   逆に①（出社・出庫の時刻）や③（日課の時刻）だけを直したときは、④の並びは変える理由が無いので触らない。 */
+function _stopsOrderSig(stops){
+  const toukou = stops.filter(s=>!s.gekou_only).map(s=>s.name||'').join('|');
+  const gekou  = _gekouIdxOf(stops).map(i=>stops[i].name||'').join('|');
+  return { toukou, gekou };
+}
+let STOPS_ORIG_SIG = {};   // course_id(String) -> {toukou, gekou}（版を読み込んだ時点の並び）
+/** ②のバス停一覧から、指定した便(seg)の経路点を作る（rptFillFromStops と同じ元ロジック）。
+   座標の入っていない停は飛ばす。曲がり角（split_here 等の手作業の点）は含まない＝作り直すと消える。 */
+function _rptFromStops(stops, seg){
+  const src = (seg==='登校') ? stops.filter(s=>!s.gekou_only) : _gekouIdxOf(stops).map(i=>stops[i]);
+  const pts=[];
+  src.forEach(s=>{
+    const c=dmsToDecimal(s.coord);
+    if(c) pts.push({ name:s.name||'', lat:String(c.lat), lng:String(c.lng), is_stop:true, split_here:false, note:'' });
+  });
+  return pts;
+}
 /** 今の並びのまま 1,2,3… に振り直す */
 function _renumGekou(){
   const stops=_stops();
@@ -1078,6 +1109,8 @@ async function loadVersionInto(cid, verId){
     (box[kk] = box[kk] || []).push({ name:r.name||'', lat:(r.lat==null?'':String(r.lat)), lng:(r.lng==null?'':String(r.lng)), is_stop:!!r.is_stop, split_here:!!r.split_here, note:(r.note||'') });
   });
   RPTS[k] = box;
+  // ②の並びを、このあと保存時に「変わったか」比べるための目印（2026-08-24）
+  STOPS_ORIG_SIG[k] = _stopsOrderSig(STOPS[k]);
 }
 async function loadScenarios(){
   const buf = {}, byId = {};     // 読み終えるまで SCEN には触らない
@@ -2523,6 +2556,7 @@ async function saveCourse(){
   if(!selVerId){ _saveMsg('版がありません。まず版を作成してください。', false); return; }
   if(!isLatestVer()){ _saveMsg('過去版は保存できません。最新版を選ぶか、「新版を作成」してから編集してください。', false); return; }
   const key=String(c.id);
+  let _rebuiltRoute = [];   // ②の並びが変わったので④を作り直した便（保存完了メッセージで伝える）
   // 押している間ずっと分かるようにする（無反応に見えて何度も押されるのを防ぐ）
   _saving = true;
   const _btn = document.getElementById('saveBtn');
@@ -2568,6 +2602,27 @@ async function saveCourse(){
     if(rows.length){ const r3=await fetch(`${REST_URL}/course_locations`, { method:'POST', headers:getH(), body:JSON.stringify(rows) }); if(!r3.ok){ const t=await r3.text(); _saveMsg('バス停・ルートの保存に失敗：'+t.slice(0,100), false); return; } }
     // 3.5) 経路点（この版の4便ぶんをまとめて置き換え）
     rptSyncFromInputs();
+    /* ②（バス停の並び）が、この版を開いたときから変わっていたら、
+       ④の本線（登校・下校①②③）を新しい並びから作り直す。
+       八重樫さんの整理：「①②③を作ってから④」なので、②を変えたら④は作り直してよい
+       （曲がり角の目印も含めて消えてよい）。①（時刻）③（日課）だけ直したときは触らない。
+       2026-08-24　あおば支援学校2コースの件（下校の並びを直したのに④の到着地が古いままだった）から。 */
+    {
+      const nowSig  = _stopsOrderSig(keep);
+      const origSig = STOPS_ORIG_SIG[key] || { toukou:'', gekou:'' };
+      if(nowSig.toukou !== origSig.toukou){
+        const pts = _rptFromStops(keep, '登校');
+        if(pts.length){ RPTS[key]['登校'] = pts; _rebuiltRoute.push('登校'); }   // 座標が1つも無ければ、誤って全消しにしないよう既存のまま残す
+      }
+      if(nowSig.gekou !== origSig.gekou){
+        ['下校①','下校②','下校③'].forEach(seg=>{
+          if(((RPTS[key]||{})[seg]||[]).length){   // 元々使っている便だけ作り直す（下校②③が空なら触らない）
+            const pts = _rptFromStops(keep, seg);
+            if(pts.length){ RPTS[key][seg] = pts; _rebuiltRoute.push(seg); }
+          }
+        });
+      }
+    }
     const rptRows=[];
     // 回送の鍵は「便|シナリオid|ルート名」。本線は便の名前だけ
     Object.keys(RPTS[key]||{}).forEach(kk=>{
@@ -2652,7 +2707,7 @@ async function saveCourse(){
     //    renderEditor() は編集欄をまるごと作り直すので、先に出すとメッセージごと消える。
     //    2026-08-19 に読み直しを速くしたことで、見える間もなく消えるようになっていた
     //    （2026-08-21 八重樫さんが「保存しましたが表示されませんでした」と発見）
-    _saveMsg('✅ 保存しました', true);
+    _saveMsg('✅ 保存しました' + (_rebuiltRoute.length ? `（②の並びが変わったので、④の${_rebuiltRoute.join('・')}を新しい並びで作り直しました。曲がり角の目印を付けていた場合は消えています。④を確認してください）` : ''), true);
   }catch(e){ _saveMsg('保存エラー：'+e.message, false); }
   finally{
     // どの抜け方をしても必ず鍵を外し、ボタンを戻す
