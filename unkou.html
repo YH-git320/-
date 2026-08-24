@@ -2487,16 +2487,16 @@ function renderRoutePoints(){
   return `
     <div id="rptSticky" style="position:sticky;top:0;z-index:5;background:#fff;padding-top:6px;box-shadow:0 6px 8px -6px rgba(0,0,0,0.12);">
       <div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;">${segBtns}</div>
-      ${legRow}
+      <div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+        ${_isKaisou(selRSeg) ? '' : '<button class="mini" onclick="rptFillFromStops()" title="②のバス停の並びから、この便の地点を作り直します（曲がり角の目印は消えます）">②のバス停から並びを作る</button>'}
+        <button class="mini" id="rptAddBtn" onclick="rptAdd()">${_rptAddLabel()}</button>
+        ${(lock.from||lock.to)?`<span class="muted" style="font-size:12px;">🔒 ${lock.from&&lock.to?'出発地と到着地':(lock.from?'出発地':'到着地')}（灰色の行）は①②で決まります</span>`:''}
+      </div>
     </div>
     ${scenRow}
+    ${legRow}
     ${copyRow}
     ${legNote}
-    <div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;">
-      ${_isKaisou(selRSeg) ? '' : '<button class="mini" onclick="rptFillFromStops()">②のバス停から並びを作る</button>'}
-      <button class="mini" id="rptAddBtn" onclick="rptAdd()">${_rptAddLabel()}</button>
-      ${(lock.from||lock.to)?`<span class="muted" style="font-size:12px;">🔒 ${lock.from&&lock.to?'出発地と到着地':(lock.from?'出発地':'到着地')}（灰色の行）は①②で決まります</span>`:''}
-    </div>
     ${helpBox}
     ${valid>=2?`<div style="background:#f6faf7;border:1px solid #e2ede6;border-radius:8px;padding:9px 12px;margin-bottom:8px;">
       <span style="font-size:13px;color:#2d4a38;font-weight:700;">直線距離の積み上げ　${dist.total.toFixed(2)} km</span>
