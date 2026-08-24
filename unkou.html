@@ -949,7 +949,28 @@ function latestVerId(cid){ const a=_vers(cid); return a.length?a[0].id:null; }
 function curVer(){ const a=_vers(selCourseId); return a.find(v=>v.id===selVerId)||a[0]||null; }
 function isLatestVer(){ return selVerId!=null && selVerId===latestVerId(selCourseId); }
 function _mapForm(r){ return { form_name:r.form_name, gekou_departures:Array.isArray(r.gekou_departures)?r.gekou_departures.slice():[], after_toukou:r.after_toukou||'', after_toukou_place:r.after_toukou_place||'', after_toukou_addr:r.after_toukou_addr||'', after_toukou_coord:r.after_toukou_coord||'', dep_overrides:(r.dep_overrides&&typeof r.dep_overrides==='object')?r.dep_overrides:{} }; }
-function _mapStop(r){ return { name:r.name||'', address:r.address||'', toukou_time:r.toukou_time||'', gekou_offset:(r.gekou_offset==null?null:r.gekou_offset), gekou_only:!!r.gekou_only, coord:r.coord||'', gekou_overrides:(r.gekou_overrides&&typeof r.gekou_overrides==='object')?r.gekou_overrides:{} }; }
+function _mapStop(r){ return { name:r.name||'', address:r.address||'', toukou_time:r.toukou_time||'', gekou_offset:(r.gekou_offset==null?null:r.gekou_offset), gekou_only:!!r.gekou_only, coord:r.coord||'', gekou_seq:(r.gekou_seq==null?null:r.gekou_seq), gekou_overrides:(r.gekou_overrides&&typeof r.gekou_overrides==='object')?r.gekou_overrides:{} }; }
+
+/* 下校便の並び。gekou_seq の順に、STOPS 配列の添字を返す。
+   ⚠️ 2026-08-24 まで「登校の逆順」を毎回計算していたが、あおば支援学校のように
+   下校が途中から登校と同じ向きに戻る（ロの字）コースは逆順では表せず、
+   最終目的地まで変わってしまうため、下校の順番をデータで持つことにした（gekou_seq）。
+   gekou_seq が空の停（古いデータ・追加直後）は末尾に回す。 */
+function _gekouIdx(){
+  const stops = _stops();
+  const idx = stops.map((s,i)=>i);
+  idx.sort((a,b)=>{
+    const A = (stops[a].gekou_seq==null) ? 99999 : stops[a].gekou_seq;
+    const B = (stops[b].gekou_seq==null) ? 99999 : stops[b].gekou_seq;
+    return (A!==B) ? (A-B) : (a-b);
+  });
+  return idx;
+}
+/** 今の並びのまま 1,2,3… に振り直す */
+function _renumGekou(){
+  const stops=_stops();
+  _gekouIdx().forEach((i,k)=>{ stops[i].gekou_seq = k+1; });
+}
 const R_MAIN = ['登校','下校①','下校②','下校③'];
 /* 回送（車庫⇄バス停）は、
    ・便によって行き先が違う（登校の出庫＝車庫→第1バス停／下校の出庫＝車庫→学校）
@@ -1019,7 +1040,7 @@ async function loadFormsLatest(){
 }
 async function loadStops(){
   const buf = {};   // 読み終えるまで STOPS には触らない（途中で空になる瞬間を作らない）
-  const res = await fetch(`${REST_URL}/course_locations?select=course_id,version_id,name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_overrides&order=seq.nullslast,name`, { headers: getH() });
+  const res = await fetch(`${REST_URL}/course_locations?select=course_id,version_id,name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_seq,gekou_overrides&order=seq.nullslast,name`, { headers: getH() });
   if(!res.ok){ _saveMsg('バス停の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   (await res.json()).forEach(r=>{ if(r.version_id!==latestVerId(r.course_id)) return; const k=String(r.course_id); (buf[k]=buf[k]||[]).push(_mapStop(r)); });
   STOPS = buf;
@@ -1045,7 +1066,7 @@ async function loadVersionInto(cid, verId){
   const rf = await fetch(`${REST_URL}/course_schedule_forms?version_id=eq.${verId}&select=form_name,gekou_departures,after_toukou,after_toukou_place,after_toukou_addr,after_toukou_coord,dep_overrides&order=form_name`, { headers: getH() });
   if(rf.ok){ FORMS[k] = (await rf.json()).map(_mapForm); FORMS[k].sort(_cmpForm); }
   else { _saveMsg('日課の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
-  const rs = await fetch(`${REST_URL}/course_locations?version_id=eq.${verId}&select=name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_overrides&order=seq.nullslast,name`, { headers: getH() });
+  const rs = await fetch(`${REST_URL}/course_locations?version_id=eq.${verId}&select=name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_seq,gekou_overrides&order=seq.nullslast,name`, { headers: getH() });
   if(rs.ok){ STOPS[k] = (await rs.json()).map(_mapStop); }
   else { _saveMsg('バス停の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   const rr = await fetch(`${REST_URL}/course_route_points?version_id=eq.${verId}&select=segment,scenario_id,route_name,seq,name,lat,lng,is_stop,split_here,note&order=segment,seq`, { headers: getH() });
@@ -1155,11 +1176,11 @@ async function createVersion(){
     const newId=(await rv.json())[0].id;
     const [sf,ss,sr]=await Promise.all([
       fetch(`${REST_URL}/course_schedule_forms?version_id=eq.${srcVid}&select=form_name,gekou_departures,after_toukou,after_toukou_place,after_toukou_addr,after_toukou_coord,dep_overrides`, { headers:getH() }),
-      fetch(`${REST_URL}/course_locations?version_id=eq.${srcVid}&select=name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_overrides`, { headers:getH() }),
+      fetch(`${REST_URL}/course_locations?version_id=eq.${srcVid}&select=name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_seq,gekou_overrides`, { headers:getH() }),
       fetch(`${REST_URL}/course_route_points?version_id=eq.${srcVid}&select=segment,scenario_id,route_name,seq,name,lat,lng,is_stop,split_here,note`, { headers:getH() })
     ]);
     const forms=(sf.ok?await sf.json():[]).map(r=>({ course_id:c.id, version_id:newId, form_name:r.form_name, gekou_departures:r.gekou_departures, after_toukou:r.after_toukou, after_toukou_place:r.after_toukou_place, after_toukou_addr:r.after_toukou_addr, after_toukou_coord:r.after_toukou_coord, dep_overrides:r.dep_overrides||{} }));
-    const stops=(ss.ok?await ss.json():[]).map(r=>({ course_id:c.id, version_id:newId, name:r.name, address:r.address, seq:r.seq, toukou_time:r.toukou_time, gekou_offset:r.gekou_offset, gekou_only:r.gekou_only, coord:r.coord, gekou_overrides:r.gekou_overrides||{}, in_gekou:(r.gekou_offset!=null) }));
+    const stops=(ss.ok?await ss.json():[]).map(r=>({ course_id:c.id, version_id:newId, name:r.name, address:r.address, seq:r.seq, toukou_time:r.toukou_time, gekou_offset:r.gekou_offset, gekou_only:r.gekou_only, coord:r.coord, gekou_seq:r.gekou_seq, gekou_overrides:r.gekou_overrides||{}, in_gekou:(r.gekou_offset!=null) }));
     if(forms.length){ const r=await fetch(`${REST_URL}/course_schedule_forms`, { method:'POST', headers:getH(), body:JSON.stringify(forms) }); if(!r.ok){ const t=await r.text(); _saveMsg('日課の複製に失敗：'+t.slice(0,120), false); return; } }
     // 回送は「便・送迎・ルート」で分かれているので、その3つも一緒に複製する
     const rpts=(sr.ok?await sr.json():[]).map(r=>({ course_id:c.id, version_id:newId, segment:r.segment,
@@ -1234,18 +1255,26 @@ function renderEditor(){
     </div>`;
   }).join('') : '<p class="muted" style="margin:0 0 6px;">まだありません。「＋バス停を追加」で登校の順路を入れてください。</p>';
 
-  // 下校ルート（登校の逆順 + 下校専用）
-  let gIdx = []; for(let i=stops.length-1;i>=0;i--){ if(!stops[i].gekou_only) gIdx.push(i); } stops.forEach((s,i)=>{ if(s.gekou_only) gIdx.push(i); });
+  /* 下校ルート（gekou_seq の順）。
+     ⚠️ 登校の逆順とは別の並びを持てる。下校が途中から登校と同じ向きに戻る
+     （ロの字の）コースがあるため（2026-08-24 あおば支援学校の件） */
+  const gIdx = _gekouIdx();
   const rM=_toMin(selRefD);
-  const gekouHtml = gIdx.map(i=>{
+  const gekouHtml = gIdx.map((i,k)=>{
     const s=stops[i];
     const disp = (s.gekou_offset!=null && rM!=null) ? _toHm(rM+s.gekou_offset) : '';
     const nameCell = s.gekou_only
       ? `<input type="text" value="${escAttr(s.name)}" placeholder="下校専用バス停名" oninput="updStopName(${i},this.value)" style="flex:1;min-width:120px;"><input type="text" value="${escAttr(s.address)}" placeholder="住所" oninput="updStopAddr(${i},this.value)" style="flex:1;min-width:120px;"><input type="text" value="${escAttr(s.coord||'')}" placeholder="座標(任意)" oninput="updCoord(${i},this.value)" style="flex:0 0 120px;">`
       : `<span style="flex:1;min-width:120px;font-size:13px;">${escHtml(s.name||'(停)')}</span>`;
     const delBtn = s.gekou_only ? `<button class="link" onclick="delStop(${i})">削除</button>` : (s.gekou_offset!=null?`<button class="link" onclick="clearGekou(${i})" title="この停は下校で使わない">下校で外す</button>`:'');
-    return `<div class="line" style="margin-bottom:6px;">${nameCell}<input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(disp)}" onchange="updGekouTime(${i},tnorm(this))" title="最初の日課(基準便)でのこの停の時刻" style="width:64px;text-align:center;"><button class="mini" onclick="mapStop(${i})" title="グーグルマップで開く">🗺</button>${delBtn}</div>`;
-  }).join('') || '<p class="muted" style="margin:0 0 6px;">登校のバス停を入れると、ここに逆順で出ます。</p>';
+    const tail = (k===gIdx.length-1) ? `<span style="font-size:11px;color:#b0451f;font-weight:600;margin-left:2px;">最終</span>` : '';
+    return `<div class="line" style="margin-bottom:6px;"><span style="flex:0 0 20px;text-align:right;font-size:11px;color:#5a7a65;">${k+1}</span>${nameCell}<input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(disp)}" onchange="updGekouTime(${i},tnorm(this))" title="最初の日課(基準便)でのこの停の時刻" style="width:64px;text-align:center;"><button class="mini" onclick="mapStop(${i})" title="グーグルマップで開く">🗺</button><button class="link" onclick="moveGekou(${i},-1)" title="下校の順番を上へ">▲</button><button class="link" onclick="moveGekou(${i},1)" title="下校の順番を下へ">▼</button>${delBtn}${tail}</div>`;
+  }).join('') || '<p class="muted" style="margin:0 0 6px;">登校のバス停を入れると、ここに登校の逆順で出ます。逆順でない場合は ▲▼ で並べ替えてください。</p>';
+  const gekouTools = gIdx.length ? `<div class="line" style="gap:6px;margin:0 0 8px;flex-wrap:wrap;">
+      <button class="mini" onclick="sortGekouByTime()" title="入れた時刻の早い順に並べ替える">🕒 時刻の早い順に並べ替え</button>
+      <button class="mini" onclick="resetGekouOrder()" title="登校の逆順に戻す">↩ 登校の逆順に戻す</button>
+      <span class="muted" style="font-size:11px;">下校の並びは登校とは別に持っています。登校を並べ替えても下校は変わりません。</span>
+    </div>` : '';
 
   const refD = _refDeparture();
   const firstFormName = (forms.find(f=>(f.gekou_departures||[]).some(t=>t))||{}).form_name || '';
@@ -1287,10 +1316,11 @@ function renderEditor(){
     ${formsHtml}
     <button class="mini" onclick="addForm()">＋日課を追加</button>
 
-    <label class="fld" style="margin-top:18px;">④ 🔁 下校便のルート・時刻（登校の逆順）</label>
+    <label class="fld" style="margin-top:18px;">④ 🔁 下校便のルート・時刻（上から順に回る順路）</label>
     ${ refD
         ? `<div class="line" style="margin-bottom:8px;"><span class="muted">基準＝最初の日課${firstFormName?`「${escHtml(firstFormName)}」`:''}の下校便 <b>${escHtml(refD)}</b>。この便での各停の時刻を入れてください → 他の日課は自動。</span></div>`
         : `<div class="line" style="margin-bottom:8px;"><span class="muted">先に③で日課を1つ（下校便の出発時刻つき）追加してください。最初の日課が基準になります。</span></div>` }
+    ${gekouTools}
     ${gekouHtml}
     <button class="mini" onclick="addGekouOnly()">＋下校専用のバス停</button>
 
@@ -1431,12 +1461,59 @@ function mapStop(i){
   window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q), '_blank');
 }
 function updToukouTime(i,val){ _stops()[i].toukou_time=val; }
-function addStop(){ _stops().push({name:'',address:'',toukou_time:'',gekou_offset:null,gekou_only:false}); renderEditor(); }
-function delStop(i){ _stops().splice(i,1); renderEditor(); }
+/* 登校に停を足すと、下校では先頭に入る（＝既定の「登校の逆順」を保つため）。
+   登校 1→2→3 の順に足せば、下校は 3→2→1 になる */
+function addStop(){
+  const a=_stops();
+  a.forEach(s=>{ if(s.gekou_seq!=null) s.gekou_seq += 1; });
+  a.push({name:'',address:'',toukou_time:'',gekou_offset:null,gekou_only:false,gekou_seq:1});
+  _renumGekou(); renderEditor();
+}
+function delStop(i){ _stops().splice(i,1); _renumGekou(); renderEditor(); }
 function moveStop(i,dir){ const a=_stops(); const j=i+dir; if(j<0||j>=a.length) return; const t=a[i]; a[i]=a[j]; a[j]=t; renderEditor(); }
 function updGekouTime(i,val){ const s=_stops()[i]; const t=_toMin(val), r=_toMin(selRefD); s.gekou_offset=(t!=null&&r!=null)?(t-r):null; _updPreview(); }
 function clearGekou(i){ _stops()[i].gekou_offset=null; renderEditor(); }
-function addGekouOnly(){ _stops().push({name:'',address:'',toukou_time:'',gekou_offset:null,gekou_only:true}); renderEditor(); }
+function addGekouOnly(){
+  const a=_stops();
+  const mx = a.reduce((m,s)=>Math.max(m, s.gekou_seq==null?0:s.gekou_seq), 0);
+  a.push({name:'',address:'',toukou_time:'',gekou_offset:null,gekou_only:true,gekou_seq:mx+1});
+  renderEditor();
+}
+
+/* ── 下校便の並べ替え（2026-08-24 追加） ──
+   下校が登校の逆順にならないコースがあるため。あおば支援学校2コースは
+   途中から登校と同じ向きに戻る（ロの字）ので、最終目的地も逆順とは違う。 */
+function moveGekou(i,dir){
+  const stops=_stops(), ord=_gekouIdx();
+  const p=ord.indexOf(i), q=p+dir;
+  if(p<0 || q<0 || q>=ord.length) return;
+  const t=ord[p]; ord[p]=ord[q]; ord[q]=t;
+  ord.forEach((idx,k)=>{ stops[idx].gekou_seq = k+1; });
+  renderEditor();
+}
+/** 入れた時刻の早い順に並べ替える。時刻が空の停（学校・下校で外した停）は今の位置に残す */
+function sortGekouByTime(){
+  const stops=_stops(), ord=_gekouIdx();
+  const slots=[]; ord.forEach((i,k)=>{ if(stops[i].gekou_offset!=null) slots.push(k); });
+  if(slots.length<2){ _saveMsg('時刻が2つ以上入っていないと並べ替えられません。', false); return; }
+  const timed = ord.filter(i=>stops[i].gekou_offset!=null)
+                   .sort((a,b)=>stops[a].gekou_offset-stops[b].gekou_offset);
+  const next = ord.slice();
+  slots.forEach((k,n)=>{ next[k]=timed[n]; });
+  next.forEach((i,k)=>{ stops[i].gekou_seq=k+1; });
+  renderEditor();
+  _saveMsg('下校の並びを、入れた時刻の早い順にしました。よければ「このコースを保存」を押してください。', true);
+}
+/** 登校の逆順に戻す（下校専用の停はその後ろ） */
+function resetGekouOrder(){
+  const stops=_stops();
+  const norm=[], only=[];
+  stops.forEach((s,i)=>{ (s.gekou_only?only:norm).push(i); });
+  norm.reverse();
+  norm.concat(only).forEach((i,k)=>{ stops[i].gekou_seq=k+1; });
+  renderEditor();
+  _saveMsg('下校の並びを登校の逆順に戻しました。よければ「このコースを保存」を押してください。', true);
+}
 
 // ⑤ 添乗員の送迎シナリオ（人・日付は入れない）。登校用／下校用を別々に複数持てる＝途中交代に対応。
 function _scenList(){ return SCEN[String(selCourseId)] = SCEN[String(selCourseId)] || []; }
@@ -1741,12 +1818,12 @@ function rptCoordIn(el){
   rptRecalc();
 }
 
-/** ②のバス停一覧から下書きを作る。登校＝順路どおり、下校＝逆順の目安 */
+/** ②のバス停一覧から下書きを作る。登校＝順路どおり、下校＝②下校便で並べた順 */
 function rptFillFromStops(){
   const stops=_stops();
   const src = (selRSeg==='登校')
     ? stops.filter(s=>!s.gekou_only)
-    : (function(){ const a=[]; for(let i=stops.length-1;i>=0;i--){ if(!stops[i].gekou_only) a.push(stops[i]); } stops.forEach(s=>{ if(s.gekou_only) a.push(s); }); return a; })();
+    : _gekouIdx().map(i=>stops[i]);
   const pts=[], skipped=[];
   src.forEach(s=>{
     const c=dmsToDecimal(s.coord);
@@ -1946,11 +2023,13 @@ function _endPtsHere(){
   const num = p => (p && String(p.lat).trim()!=='' && String(p.lng).trim()!=='')
     ? { name:p.name||'', lat:Number(p.lat), lng:Number(p.lng) } : null;
   if(!_isKaisou(selRSeg)){
-    // 本線＝②のバス停の並び。登校は先頭から、下校は逆から
+    /* 本線＝②のバス停の並び。登校は先頭から、下校は②下校便で並べた順（gekou_seq）。
+       ⚠️ 以前は「登校の逆順」だったため、下校がロの字で戻るコースでは
+       到着地が登校の1番目になってしまっていた（2026-08-24 修正） */
     const stops = _stops();
     const src = (selRSeg==='登校')
       ? stops.filter(s=>!s.gekou_only)
-      : (function(){ const a=[]; for(let i=stops.length-1;i>=0;i--){ if(!stops[i].gekou_only) a.push(stops[i]); } stops.forEach(s=>{ if(s.gekou_only) a.push(s); }); return a; })();
+      : _gekouIdx().map(i=>stops[i]);
     const cv = src.map(s=>{ const d=dmsToDecimal(s.coord); return d ? { name:s.name||'', lat:d.lat, lng:d.lng } : null; }).filter(Boolean);
     return cv.length ? { from:cv[0], to:cv[cv.length-1] } : { from:null, to:null };
   }
@@ -2470,9 +2549,18 @@ async function saveCourse(){
     if(!(await _confirmWipe(`course_locations?version_id=eq.${selVerId}`, stopsCount, 'バス停'))){ _saveMsg('保存を中止しました。', false); return; }
     await fetch(`${REST_URL}/course_locations?version_id=eq.${selVerId}`, { method:'DELETE', headers:getH() });
     let seq=0;
-    const rows = (STOPS[key]||[]).filter(s=>(s.name||'').trim()||(s.address||'').trim()).map(s=>{
+    const keep = (STOPS[key]||[]).filter(s=>(s.name||'').trim()||(s.address||'').trim());
+    /* 下校の順番は、空行を抜いたあとの並びで 1,2,3… に振り直す。
+       画面で ▲▼ したときの並びをそのまま保存するため（2026-08-24） */
+    const gRank = new Map();
+    keep.map((s,i)=>({s,i})).sort((a,b)=>{
+      const A=(a.s.gekou_seq==null)?99999:a.s.gekou_seq, B=(b.s.gekou_seq==null)?99999:b.s.gekou_seq;
+      return (A!==B)?(A-B):(a.i-b.i);
+    }).forEach((x,k)=>gRank.set(x.i,k+1));
+    const rows = keep.map((s,i)=>{
       const r = { course_id:c.id, version_id:selVerId, name:(s.name||'').trim()||(s.address||'').trim(), address:(s.address||'').trim(),
-                  toukou_time:s.toukou_time||null, gekou_offset:(s.gekou_offset==null?null:s.gekou_offset), gekou_only:!!s.gekou_only, coord:s.coord||null, gekou_overrides:(s.gekou_overrides&&Object.keys(s.gekou_overrides).length)?s.gekou_overrides:{},
+                  toukou_time:s.toukou_time||null, gekou_offset:(s.gekou_offset==null?null:s.gekou_offset), gekou_only:!!s.gekou_only, coord:s.coord||null,
+                  gekou_seq:gRank.get(i)||null, gekou_overrides:(s.gekou_overrides&&Object.keys(s.gekou_overrides).length)?s.gekou_overrides:{},
                   in_gekou:(s.gekou_offset!=null) };
       if(!s.gekou_only){ seq++; r.seq=seq; } else { r.seq=null; }
       return r;
