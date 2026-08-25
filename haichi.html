@@ -1651,16 +1651,19 @@ async function hSave(){
       });
       if(!r.ok){ status('添乗員送迎の保存に失敗しました：'+(await r.text()).slice(0,120), false); return; }
     }
-    for(const k of keys){
-      const {duty_id, role} = DIRTY[k];
-      // その便・その役割の行を入れ替える（削除→挿入）
-      const del = await fetch(`${REST_URL}/duty_crew?duty_id=eq.${duty_id}&role=eq.${encodeURIComponent(role)}`, { method:'DELETE', headers:getH() });
-      if(!del.ok){ status('保存に失敗しました：'+(await del.text()).slice(0,120), false); return; }
-      const rows=(CREW[duty_id]||[]).filter(c=>c.role===role).map(c=>({duty_id:duty_id, staff_id:c.staff_id, role:role}));
-      if(rows.length){
-        const ins = await fetch(`${REST_URL}/duty_crew`, { method:'POST', headers:getH(), body:JSON.stringify(rows) });
-        if(!ins.ok){ status('保存に失敗しました：'+(await ins.text()).slice(0,120), false); return; }
-      }
+    /* 2026-08-25：便・役割ごとの削除＋入れ直しを1つのDB関数にまとめた（00_データを壊さない書き方）。
+       以前は1組ずつ削除→挿入していたため、途中で失敗すると
+       その便のその役割の乗務員だけが消えたまま戻らなかった。
+       いまは全部まとめて渡し、どこかで失敗すれば全部が元に戻る。 */
+    if(keys.length){
+      const changes = keys.map(k=>{
+        const {duty_id, role} = DIRTY[k];
+        return { duty_id, role,
+                 rows:(CREW[duty_id]||[]).filter(c=>c.role===role).map(c=>({ staff_id:c.staff_id })) };
+      });
+      const rc = await fetch(`${REST_URL}/rpc/save_duty_crew`, { method:'POST', headers:getH(),
+        body:JSON.stringify({ p_changes: changes }) });
+      if(!rc.ok){ status('保存に失敗しました（元のデータは残っています）：'+(await rc.text()).slice(0,120), false); return; }
     }
     DIRTY={}; DIRTYV={}; DIRTYS={}; _dirtyView();
     await hLoadMonth(); await hLoadHist(); hRender();
