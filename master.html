@@ -2292,7 +2292,12 @@ function _renderAuditList() {
     el.innerHTML = '<div style="text-align:center;padding:24px;color:#888;">変更履歴がありません</div>';
     return;
   }
-  el.innerHTML = _auditLogs.map((log, idx) => {
+  // 訂正（operation='CORRECTION'）は独立した行にせず、対象の記録に添えて表示する
+  const _corr = {};
+  _auditLogs.forEach(l => { if (l.corrects_log_id) (_corr[l.corrects_log_id] = _corr[l.corrects_log_id] || []).push(l); });
+  el.innerHTML = _auditLogs.filter(l => l.operation !== 'CORRECTION').map((log) => {
+    const idx = _auditLogs.indexOf(log);
+    const myCorr = _corr[log.id] || [];
     const dt  = new Date(log.changed_at).toLocaleString('ja-JP');
     const ops = {INSERT:'新規登録', UPDATE:'変更', DELETE:'削除'};
     const opc = {INSERT:'#2e7d52', UPDATE:'#1565c0', DELETE:'#c0392b'};
@@ -2321,15 +2326,14 @@ function _renderAuditList() {
     }
 
     // correction badge
-    const badge = log.correction_note
-      ? `<div style="background:#fff0f0;border-radius:4px;padding:4px 8px;font-size:11px;margin-top:6px;color:#c0392b;">
-           ⚠️ 訂正済み（${esc(log.corrected_by||'')} ${log.corrected_at ? new Date(log.corrected_at).toLocaleString('ja-JP') : ''}）：${esc(log.correction_note)}
-         </div>` : '';
+    const badge = myCorr.map(c => `<div style="background:#fff0f0;border-radius:4px;padding:4px 8px;font-size:11px;margin-top:6px;color:#c0392b;">
+           ⚠️ 訂正済み（${esc(c.corrected_by||'')} ${c.corrected_at ? new Date(c.corrected_at).toLocaleString('ja-JP') : ''}）：${esc(c.correction_note||'')}
+         </div>`).join('');
 
     // buttons
-    const noteBtn = !log.correction_note
+    const noteBtn = !myCorr.length
       ? `<button class="btn btn-gray btn-small" style="font-size:10px;" onclick="_toggleCorrForm(${idx})">誤入力訂正メモ</button>` : '';
-    const revertBtn = (!log.correction_note && op === 'UPDATE' && log.old_data && _auditTableName !== 'vehicle_assignments')
+    const revertBtn = (!myCorr.length && op === 'UPDATE' && log.old_data && _auditTableName !== 'vehicle_assignments')
       ? `<button class="btn btn-gray btn-small" style="font-size:10px;margin-left:4px;" onclick="_confirmRevert(${idx})">この変更を取り消す</button>` : '';
 
     // inline correction form
@@ -2342,7 +2346,7 @@ function _renderAuditList() {
       </div>
     </div>`;
 
-    const isCorrected = !!log.correction_note;
+    const isCorrected = myCorr.length > 0;
     return `<div style="border:1px solid ${isCorrected?'#ffcccc':'#dde8dd'};border-radius:8px;padding:10px 14px;margin-bottom:10px;background:${isCorrected?'#fff8f8':'#fff'};">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
         <div>
@@ -2365,14 +2369,16 @@ function _toggleCorrForm(idx) {
 async function _saveCorrNote(idx, logId) {
   const note = (document.getElementById('cn-'+idx)?.value||'').trim();
   if (!note) { alert('訂正メモを入力してください'); return; }
-  let who = 'unknown';
-  try { const s = JSON.parse(sessionStorage.getItem('takao_session')); who = s?.user?.email||s?.email||'unknown'; } catch(e){}
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/audit_log?id=eq.${logId}`, {
-    method:'PATCH', headers:getH(),
-    body: JSON.stringify({ correction_note:note, corrected_at:new Date().toISOString(), corrected_by:who })
+  // 記録は書き換えず、訂正の記録を1行足す（実行者はサーバー側がログイン情報から取る）
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/add_audit_correction`, {
+    method:'POST', headers:getH(),
+    body: JSON.stringify({ p_log_id: logId, p_note: note })
   });
   if (res.ok) { await openAuditModal(_auditTableName, _auditRecordId, _auditLabel); }
-  else alert('保存に失敗しました');
+  else {
+    let m=''; try { m=(await res.json()).message||''; } catch(e){}
+    alert('保存に失敗しました（元の記録は変わっていません）'+(m?'：'+m:''));
+  }
 }
 
 async function _confirmRevert(idx) {
