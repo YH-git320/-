@@ -1024,14 +1024,14 @@ async function loadVersionInto(cid, verId){
 async function loadScenarios(){
   const buf = {}, byId = {};     // 読み終えるまで SCEN には触らない
   const res = await fetch(`${REST_URL}/course_scenarios?select=id,course_id,segment,label,seq&order=segment,seq.nullslast,id`, { headers: getH() });
-  if(!res.ok){ _saveMsg('③ 回送パターンの読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
+  if(!res.ok){ _saveMsg('③ 添乗員送迎の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   (await res.json()).forEach(r=>{ const k=String(r.course_id); const o={dbId:r.id, segment:r.segment, label:r.label||'', pts:[], ps:{}}; (buf[k]=buf[k]||[]).push(o); byId[r.id]=o; });
   // 残り2つは互いに独立しているので同時に取る
   const [rp, rq] = await Promise.all([
     fetch(`${REST_URL}/course_transfer_points?scenario_id=not.is.null&select=scenario_id,phase,kind,seq,name,address,coord,bus_time,time_lead&order=seq.nullslast,id`, { headers: getH() }),
     fetch(`${REST_URL}/course_phase_settings?select=scenario_id,phase,shussha,shukko,shukko_lead`, { headers: getH() })
   ]);
-  if(!rp.ok || !rq.ok){ _saveMsg('③ 回送パターンの読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
+  if(!rp.ok || !rq.ok){ _saveMsg('③ 添乗員送迎の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   (await rp.json()).forEach(r=>{ const o=byId[r.scenario_id]; if(o) o.pts.push({ phase:r.phase, kind:r.kind||'乗車', name:r.name||'', address:r.address||'', coord:r.coord||'', bus_time:r.bus_time||'', time_lead:(r.time_lead==null?null:r.time_lead) }); });
   (await rq.json()).forEach(r=>{ const o=byId[r.scenario_id]; if(o) o.ps[r.phase]={ shussha:r.shussha||'', shukko:r.shukko||'', shukko_lead:(r.shukko_lead==null?null:r.shukko_lead) }; });
   SCEN = buf;
@@ -1227,7 +1227,7 @@ function renderEditor(){
         <button class="${c.active?'':'primary'}" onclick="toggleActive()">${c.active?'✅ 有効（クリックで廃止）':'🚫 廃止中（クリックで有効）'}</button>
       </div>
       ${renderVersionBar(c)}
-      <div class="line" style="gap:4px;margin:2px 0 -1px;flex-wrap:wrap;">${_tabBtn('main','① 主要情報・登校便')}${_tabBtn('gekou','② 下校便')}${_tabBtn('tensou','③ 回送パターン')}${_tabBtn('keiro','④ ルート詳細')}</div>
+      <div class="line" style="gap:4px;margin:2px 0 -1px;flex-wrap:wrap;">${_tabBtn('main','① 主要情報・登校便')}${_tabBtn('gekou','② 下校便')}${_tabBtn('tensou','③ 添乗員送迎')}${_tabBtn('keiro','④ ルート詳細')}</div>
     </div>
 
     <div id="tab-main" style="display:${selTab==='main'?'':'none'};">
@@ -2564,7 +2564,7 @@ async function saveCourse(){
       || Object.keys(s.ps||{}).some(ph=>((s.ps[ph]||{}).shussha||'').trim()||((s.ps[ph]||{}).shukko||'').trim())
       || (s.label||'').trim();
     const scens = (SCEN[key]||[]).filter(scenHasContent);
-    if(!(await _confirmWipe(`course_scenarios?course_id=eq.${c.id}`, scens.length, '回送パターン'))){ _saveMsg('保存を中止しました。', false); return; }
+    if(!(await _confirmWipe(`course_scenarios?course_id=eq.${c.id}`, scens.length, '添乗員送迎'))){ _saveMsg('保存を中止しました。', false); return; }
 
     /* ⚠️ シナリオの id は**残す**こと（2026-08-21 判明）。
        配置（`duties.scenario_id`）と回送の経路（`course_route_points.scenario_id`）が
@@ -2579,7 +2579,7 @@ async function saveCourse(){
     const rdel = await fetch(`${REST_URL}/${delQ}`, { method:'DELETE', headers:getH() });
     if(!rdel.ok){
       const t = await rdel.text();
-      _saveMsg('使わなくなった回送パターンを消せませんでした：'+t.slice(0,120)
+      _saveMsg('使わなくなった添乗員送迎を消せませんでした：'+t.slice(0,120)
              + '／配置でその送迎が選ばれている日があると消せません。先に配置管理で外してください。', false);
       return;
     }
@@ -2590,14 +2590,14 @@ async function saveCourse(){
       const row = { course_id:c.id, segment:s.segment, label:(s.label||'').trim(), seq:i+1 };
       if(s.dbId){
         const r = await fetch(`${REST_URL}/course_scenarios?id=eq.${s.dbId}`, { method:'PATCH', headers:getH(), body:JSON.stringify(row) });
-        if(!r.ok){ const t=await r.text(); _saveMsg('③ 回送パターンの更新に失敗：'+t.slice(0,100), false); return; }
+        if(!r.ok){ const t=await r.text(); _saveMsg('③ 添乗員送迎の更新に失敗：'+t.slice(0,100), false); return; }
         sidList.push(s.dbId);
       }else{
         const r = await fetch(`${REST_URL}/course_scenarios`, { method:'POST', headers:getH(), body:JSON.stringify([row]) });
-        if(!r.ok){ const t=await r.text(); _saveMsg('③ 回送パターンの保存に失敗：'+t.slice(0,100), false); return; }
+        if(!r.ok){ const t=await r.text(); _saveMsg('③ 添乗員送迎の保存に失敗：'+t.slice(0,100), false); return; }
         const ins = await r.json();
         const nid = ins && ins[0] && ins[0].id;
-        if(!nid){ _saveMsg('③ 回送パターンの保存に失敗しました（idが返りません）。', false); return; }
+        if(!nid){ _saveMsg('③ 添乗員送迎の保存に失敗しました（idが返りません）。', false); return; }
         s.dbId = nid; sidList.push(nid);
       }
     }
@@ -2620,7 +2620,7 @@ async function saveCourse(){
       });
       const rtp = await fetch(`${REST_URL}/rpc/save_course_transfer_and_phase`, { method:'POST', headers:getH(),
         body:JSON.stringify({ p_course_id:c.id, p_scenario_ids:sidList, p_points:allPts, p_settings:allPs }) });
-      if(!rtp.ok){ const t=await rtp.text(); _saveMsg('③ 回送パターン（乗降場所・局面）の保存に失敗（元のデータは残っています）：'+t.slice(0,100), false); return; }
+      if(!rtp.ok){ const t=await rtp.text(); _saveMsg('③ 添乗員送迎（乗降場所・局面）の保存に失敗（元のデータは残っています）：'+t.slice(0,100), false); return; }
     }
     // 保存後の読み直しは**このコースだけ**にする。
     // 以前は毎回64コース分（停留所331行・日課238行）を取り直しており、
