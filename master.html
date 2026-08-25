@@ -2385,8 +2385,12 @@ async function _confirmRevert(idx) {
   if (!confirm(`以下の値に戻しますか？\n\n${preview}\n\n※この操作自体も履歴に記録されます`)) return;
   const body = {};
   changed.forEach(k => { body[k] = log.old_data[k]; });
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${_auditTableName}?id=eq.${_auditRecordId}`,
-    { method:'PATCH', headers:getH(), body:JSON.stringify(body) });
+  // staff は直接のテーブル書き込み権限が無く、_can_edit_staff() を通す update_staff RPC 経由にする（2026-08-25）
+  const res = (_auditTableName === 'staff')
+    ? await fetch(`${SUPABASE_URL}/rest/v1/rpc/update_staff`,
+        { method:'POST', headers:getH(), body:JSON.stringify({ p_id:_auditRecordId, p_data:body }) })
+    : await fetch(`${SUPABASE_URL}/rest/v1/${_auditTableName}?id=eq.${_auditRecordId}`,
+        { method:'PATCH', headers:getH(), body:JSON.stringify(body) });
   if (res.ok) {
     closeAuditModal();
     if (_auditTableName==='vehicles') await loadVehicles();
