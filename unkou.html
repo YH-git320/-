@@ -922,10 +922,10 @@ const R_MAIN = ['登校','下校①','下校②','下校③'];
 const R_KAISOU = ['出庫回送登校','帰庫回送登校','出庫回送下校','帰庫回送下校'];
 const R_SEGS = R_MAIN.concat(R_KAISOU);
 const R_SEG_LABEL = { '登校':'登校便', '下校①':'下校便①', '下校②':'下校便②', '下校③':'下校便③',
-                      '出庫回送登校':'🅿 登校便の前　車庫→最初のバス停',
-                      '帰庫回送登校':'🅿 登校便の後　学校→帰庫・他所',
-                      '出庫回送下校':'🅿 下校便の前　車庫・他所→学校',
-                      '帰庫回送下校':'🅿 下校便の後　最後のバス停→帰庫' };
+                      '出庫回送登校':'回送 登校便の前',
+                      '帰庫回送登校':'回送 登校便の後',
+                      '出庫回送下校':'回送 下校便の前',
+                      '帰庫回送下校':'回送 下校便の後' };
 let selRScen  = '';   // どの送迎シナリオのときの道か（空＝送迎なし）
 let selRRoute = '';   // ルート名（空＝メイン）
 function _isKaisou(seg){ return R_KAISOU.indexOf(seg) >= 0; }
@@ -2234,7 +2234,7 @@ function renderRoutePoints(){
   const dist=rptDistances();
   const _box = RPTS[String(selCourseId)] || {};
   const _segBtn = (val,label,on,n) =>
-    `<button onclick="setRSeg('${val}')" style="border:1px solid ${on?'#4d7a5e':'#cfe0d5'};background:${on?'#4d7a5e':'#fff'};color:${on?'#fff':'#2d4a38'};padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:${on?'700':'500'};font-family:inherit;">${label}${n?`（${n}）`:''}</button>`;
+    `<button onclick="setRSeg('${val}')" style="border:1px solid ${on?'#4d7a5e':'#cfe0d5'};background:${on?'#4d7a5e':'#fff'};color:${on?'#fff':'#2d4a38'};padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:${on?'700':'500'};font-family:inherit;">${label}${n?`（${n}）`:'（未入力）'}</button>`;
   const segBtns = R_MAIN.map(s=>_segBtn(s, R_SEG_LABEL[s], selRSeg===s, (_box[s]||[]).length))
     .concat(R_KAISOU.map(s=>{
       // 回送は送迎・ルートに分かれているので、その回送に入っている総数を出す
