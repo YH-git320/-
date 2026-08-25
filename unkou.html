@@ -2588,7 +2588,6 @@ async function saveCourse(){
     // 3) バス停・ルート（このコースを置き換え）
     const stopsCount = (STOPS[key]||[]).filter(s=>(s.name||'').trim()||(s.address||'').trim()).length;
     if(!(await _confirmWipe(`course_locations?version_id=eq.${selVerId}`, stopsCount, 'バス停'))){ _saveMsg('保存を中止しました。', false); return; }
-    await fetch(`${REST_URL}/course_locations?version_id=eq.${selVerId}`, { method:'DELETE', headers:getH() });
     let seq=0;
     const keep = (STOPS[key]||[]).filter(s=>(s.name||'').trim()||(s.address||'').trim());
     /* 下校の順番は、空行を抜いたあとの並びで 1,2,3… に振り直す。
@@ -2606,7 +2605,11 @@ async function saveCourse(){
       if(!s.gekou_only){ seq++; r.seq=seq; } else { r.seq=null; }
       return r;
     });
-    if(rows.length){ const r3=await fetch(`${REST_URL}/course_locations`, { method:'POST', headers:getH(), body:JSON.stringify(rows) }); if(!r3.ok){ const t=await r3.text(); _saveMsg('バス停・ルートの保存に失敗：'+t.slice(0,100), false); return; } }
+    // 2026-08-25：削除＋入れ直しを1つのDB関数（save_course_locations）にまとめた。
+    // 途中で失敗しても元のデータが残る（消えたのに入れ直せない、という事故を防ぐ）。
+    const r3 = await fetch(`${REST_URL}/rpc/save_course_locations`, { method:'POST', headers:getH(),
+      body:JSON.stringify({ p_course_id:c.id, p_version_id:selVerId, p_rows:rows }) });
+    if(!r3.ok){ const t=await r3.text(); _saveMsg('バス停・ルートの保存に失敗（元のデータは残っています）：'+t.slice(0,100), false); return; }
     // 3.5) 経路点（この版の4便ぶんをまとめて置き換え）
     rptSyncFromInputs();
     /* ②（バス停の並び）が、この版を開いたときから変わっていたら、
