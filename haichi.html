@@ -1637,8 +1637,11 @@ function hRenderMismatch(){
                     : m.has_record ? '運行ボタンの記録があります' : '';
   const noForm = [...new Set(MISMATCH.filter(m => !m.form_exists).map(m => m.form_name))];
   const nameWarn = noForm.length ? `<div style="background:#fdecea;border:1px solid #e6b0aa;border-radius:7px;padding:8px 10px;margin:7px 0;font-size:12px;line-height:1.75;color:#943126;">
-      ⚠️ 月間予定の日課「<b>${noForm.map(escHtml).join('」「')}</b>」が、運行経路データに見当たりません。<br>
-      <b>先に月間予定の日課名を直してください。</b>日課名が合っていないと、便を作り直しても1本も作られません。
+      ⚠️ 月間予定で選ばれている日課「<b>${noForm.map(escHtml).join('」「')}</b>」が、運行時程マスタにありません。<br>
+      <b>日課は運行時程マスタでしか作れません。</b>次のどちらかで直してください。<br>
+      ・学校の書類どおりの名前を入れてある場合 → <b>その名前の日課をマスタに作る</b><br>
+      ・マスタで日課を作り直した場合 → <b>④ルート詳細の「⚠️ 使われていない日課」で置き換える</b>（月間予定もまとめて直ります）<br>
+      日課名が合っていないと、便を作り直しても1本も作られません。
     </div>` : '';
 
   const movedRows = moved.length ? `<div style="margin-top:6px;">
