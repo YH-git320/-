@@ -4531,6 +4531,58 @@ function siRender() {
   else el.innerHTML = siRenderPlain(_si.tab);
 }
 
+// 日付は「同じ日を指しているか」で比べる（昭和22年01月13日 と 1947-01-13 は同じ）
+const SI_DATE_FIELDS = ['birth_date','hire_date','retirement_date'];
+function siYMD(t) {
+  const s = String(t == null ? '' : t)
+    .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).trim();
+  if (!s) return null;
+  let y = null, m = null, d = null;
+  const g = s.match(/^(令和|平成|昭和|大正|明治|R|H|S|T|M)\s*(\d+)\s*[年./-]\s*(\d+)\s*[月./-]\s*(\d+)/);
+  if (g) {
+    const base = { '令和':2018,'R':2018,'平成':1988,'H':1988,'昭和':1925,'S':1925,
+                   '大正':1911,'T':1911,'明治':1867,'M':1867 }[g[1]];
+    y = base + (+g[2]); m = +g[3]; d = +g[4];
+  } else {
+    const w = s.match(/^(\d{4})\s*[年./-]\s*(\d+)\s*[月./-]\s*(\d+)/);
+    if (!w) return null;
+    y = +w[1]; m = +w[2]; d = +w[3];
+  }
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  return y + '-' + ('0'+m).slice(-2) + '-' + ('0'+d).slice(-2);
+}
+// 取り込む値と今の値が「実質同じ」か
+function siSameValue(key, a, b) {
+  a = String(a == null ? '' : a).trim();
+  b = String(b == null ? '' : b).trim();
+  if (a === b) return true;
+  if (SI_DATE_FIELDS.indexOf(key) >= 0) {
+    const x = siYMD(a), y = siYMD(b);
+    if (x && y) return x === y;
+  }
+  if (key === 'name')      return _norm_name_js(a) === _norm_name_js(b);
+  if (key === 'name_kana') return _norm_kana_js(a) === _norm_kana_js(b);
+  if (key === 'phone' || key === 'postal_code') return a.replace(/\D/g,'') === b.replace(/\D/g,'');
+  return false;
+}
+// 異体字をならす（データベース側の _norm_name と同じ組）
+function _norm_name_js(s) {
+  const from = '髙﨑濵濱冨栁邊邉嶋國廣齋齊澤眞惠德瀨桒';
+  const to   = '高崎浜浜富柳辺辺島国広斎斎沢真恵徳瀬桑';
+  return String(s||'').replace(/[\s　]/g,'').replace(/./g, c => {
+    const i = from.indexOf(c); return i >= 0 ? to[i] : c; });
+}
+// フリガナを比べるための簡易ならし（全角カナ→半角相当・空白除去）
+function _norm_kana_js(s) {
+  const d = {'ガ':'ｶﾞ','ギ':'ｷﾞ','グ':'ｸﾞ','ゲ':'ｹﾞ','ゴ':'ｺﾞ','ザ':'ｻﾞ','ジ':'ｼﾞ','ズ':'ｽﾞ','ゼ':'ｾﾞ','ゾ':'ｿﾞ',
+             'ダ':'ﾀﾞ','ヂ':'ﾁﾞ','ヅ':'ﾂﾞ','デ':'ﾃﾞ','ド':'ﾄﾞ','バ':'ﾊﾞ','ビ':'ﾋﾞ','ブ':'ﾌﾞ','ベ':'ﾍﾞ','ボ':'ﾎﾞ',
+             'パ':'ﾊﾟ','ピ':'ﾋﾟ','プ':'ﾌﾟ','ペ':'ﾍﾟ','ポ':'ﾎﾟ','ヴ':'ｳﾞ'};
+  const from = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲンァィゥェォャュョッー・';
+  const to   = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜｦﾝｧｨｩｪｫｬｭｮｯｰ･';
+  let v = String(s||'').replace(/[\s　]/g,'').replace(/[―－]/g,'ｰ');
+  v = v.replace(/./g, c => d[c] || c);
+  return v.replace(/./g, c => { const i = from.indexOf(c); return i >= 0 ? to[i] : c; });
+}
 function _siVal(v) { return (v === null || v === undefined || v === '') ? '<span class="si-empty">（なし）</span>' : esc(String(v)); }
 
 function siCompareTable(data, ex) {
@@ -4538,7 +4590,7 @@ function siCompareTable(data, ex) {
     <thead><tr><th style="width:90px;">項目</th><th>取り込むデータ</th><th>今の登録${ex?('（#'+ex.id+'）'):''}</th></tr></thead>
     <tbody>${SI_FIELDS.map(([k,label]) => {
       const a = (data && data[k]) || '', b = ex ? (ex[k] || '') : '';
-      const diff = ex && String(a).trim() !== '' && String(a).trim() !== String(b).trim();
+      const diff = ex && String(a).trim() !== '' && !siSameValue(k, a, b);
       return `<tr class="${diff?'diff':''}"><td>${label}</td><td>${_siVal(a)}</td><td>${_siVal(b)}</td></tr>`;
     }).join('')}</tbody></table>`;
 }
@@ -4582,7 +4634,7 @@ function siRenderPlain(kind) {
   const rows = _si.rows.filter(r => r.match_kind === kind);
   if (!rows.length) return '<p style="font-size:13px;color:#5b6b63;">該当する行はありません。</p>';
   if (kind === '一致') {
-    return '<p style="font-size:12.5px;color:#5b6b63;">社員番号が一致した行です。<b>色が付いた項目が書き換わります。</b></p>' +
+    return '<p style="font-size:12.5px;color:#5b6b63;">社員番号が一致した行です。<b>色が付いた項目だけが書き換わります。</b>書き方が違うだけ（昭和22年01月13日 と 1947-01-13、平成24年08月10日 と 平成24年8月10日）のものは、同じ日と見なして<b>書き換えません</b>。</p>' +
       rows.map(r => `<div class="si-card">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <span class="si-kind k-match">一致</span>
@@ -4640,7 +4692,7 @@ async function siApply() {
   try {
     const res = await _siRpc('staff_import_apply', { p_batch: _si.batch, p_overwrite_name: ow });
     showStatus('si-status3','success',
-      '登録しました（更新' + res['更新'] + '件・新規' + res['新規'] + '件・保留' + res['保留'] + '件'
+      '登録しました（更新' + res['更新'] + '件・変更なし' + (res['変更なし']||0) + '件・新規' + res['新規'] + '件・保留' + res['保留'] + '件'
       + (res['氏名を既存のまま残した'] ? '・氏名を今のまま残した' + res['氏名を既存のまま残した'] + '件' : '') + '）');
     await siLoadResult();
     btn.style.display = 'none';
