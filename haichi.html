@@ -101,6 +101,7 @@ button.mini{font-size:12px;padding:6px 10px;}
       <button class="mini" onclick="hGenerate()">🔄 この月の便を作成／更新</button>
       <span class="muted" style="font-size:11px;">月間予定の日課をもとに便を作ります。既にある便はそのまま（担当者は消えません）。</span>
     </div>
+    <div id="hMismatch"></div>
     <div class="muted" style="font-size:11px;margin-top:6px;">
       上部3行＝<b>必要</b>（コースごとの必要人数×便数）／<b>配置</b>（割り当て済み）／<b>不足</b>（赤は要対応）。<br>
       セル内は便ごとの担当者。<b>登</b>=登校便／<b>①②</b>=下校便。未割り当ては「—」。土＝青／日祝＝赤。<br>
@@ -1156,6 +1157,7 @@ function _headHtml(ym,y,m,dim,HOL,firstLabel){
 }
 
 function hRender(){
+  hRenderMismatch();
   if(TAB==='人別'){ hRenderPerson(); return; }
   if(TAB==='車両別'){ hRenderVehicle(); return; }
   const ym=_ym(); if(!ym) return;
@@ -1575,7 +1577,7 @@ async function hSave(){
       if(!rc.ok){ status('保存に失敗しました（元のデータは残っています）：'+(await rc.text()).slice(0,120), false); return; }
     }
     DIRTY={}; DIRTYV={}; DIRTYS={}; _dirtyView();
-    await hLoadMonth(); await hLoadHist(); hRender();
+    await hLoadMonth(); await hLoadHist(); await hLoadMismatch(); hRender();
     status('保存しました', true);
   }catch(e){ status('保存に失敗しました：'+e.message, false); }
   finally{
@@ -1584,6 +1586,85 @@ async function hSave(){
     const b=document.getElementById('hSaveBtn');
     if(b){ b.disabled=false; b.textContent=_label||'💾 変更を保存'; b.style.opacity=''; }
   }
+}
+
+/* 月間予定と便の食い違い（2026-08-26）。
+   ⚠️ 便は月間予定から作られた結果で、月間予定を直しても自動では作り直されない。
+      「便の作成／更新」は無い便を足すだけで、余分な便は消さない。
+      日課の便数を減らす変更をすると、余分な便が残る。ここで気づけるようにする。
+   八重樫さんの線引き：
+      予定（これから走る）… 直してよい。乗務の割り当ても一緒に外れてよい
+      記録（実際に走った）… 直さない（人数が入っている・運行ボタンの記録がある便） */
+let MISMATCH = [];
+async function hLoadMismatch(){
+  const ym = _ym();
+  if(!ym){ MISMATCH = []; return; }
+  const start = ym + '-01', end = ym + '-' + _p2(_dim(ym));
+  try{
+    const r = await fetch(`${REST_URL}/rpc/duty_mismatch`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ p_start:start, p_end:end }) });
+    MISMATCH = r.ok ? (await r.json() || []) : [];
+  }catch(e){ MISMATCH = []; }
+}
+function hRenderMismatch(){
+  const el = document.getElementById('hMismatch');
+  if(!el) return;
+  if(!MISMATCH.length){ el.innerHTML = ''; return; }
+  const extra = MISMATCH.filter(m => m.kind === '余分');
+  const lack  = MISMATCH.filter(m => m.kind === '足りない');
+  const why = m => m.passengers != null ? `人数（${m.passengers}人）が入っています`
+                 : m.has_record ? '運行ボタンの記録があります' : '';
+  const rows = extra.map((m,i) => {
+    const blocked = why(m);
+    return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:4px 0;font-size:12.5px;padding:4px 0;border-top:1px solid #f0e4d0;">
+      <span style="font-weight:700;min-width:86px;">${escHtml(String(m.work_date))}</span>
+      <span style="min-width:180px;">${escHtml(m.course_label)}</span>
+      <span class="muted">日課 ${escHtml(m.form_name)}</span>
+      <span style="color:#b0451f;font-weight:700;">${escHtml(m.segment)} ${escHtml(m.start_time||'')}</span>
+      ${m.crew_names ? `<span style="color:#8a6d1f;">外れる乗務：${escHtml(m.crew_names)}</span>` : '<span class="muted">乗務なし</span>'}
+      ${blocked
+        ? `<span style="color:#c0392b;font-size:11.5px;">🔒 ${escHtml(blocked)}ので消せません</span>`
+        : `<button class="mini" onclick="hDeleteDuty(${m.duty_id}, ${i})">この便を消す</button>`}
+    </div>`;
+  }).join('');
+  const lackRows = lack.length ? `<div style="margin-top:8px;font-size:12.5px;color:#2d5f96;">
+      <b>足りない便が${lack.length}件あります。</b>「🔄 この月の便を作成／更新」で足せます（既にある便は触りません）。<br>
+      <span class="muted">${lack.slice(0,8).map(m=>escHtml(String(m.work_date)+' '+m.course_label+' '+m.segment+' '+(m.start_time||''))).join('／')}${lack.length>8?' ほか':''}</span>
+    </div>` : '';
+  el.innerHTML = `<div style="background:#fdf6e8;border:1px solid #e0c6a2;border-radius:10px;padding:11px 14px;margin:8px 0;">
+    <div style="font-weight:700;color:#8a6d1f;font-size:13.5px;">⚠️ 月間予定と食い違っている便（${MISMATCH.length}件）</div>
+    <div style="font-size:12px;color:#5b6b63;line-height:1.7;margin:5px 0 4px;">
+      月間予定の日課を変えても、<b>できあがった便は自動では変わりません。</b>
+      便数が減る変更をすると、走らない便が残ります。
+    </div>
+    ${extra.length ? `<div style="font-size:12.5px;font-weight:700;color:#8a6d1f;margin-top:6px;">余分な便（${extra.length}件）</div>${rows}` : ''}
+    ${lackRows}
+  </div>`;
+}
+async function hDeleteDuty(id, idx){
+  const m = MISMATCH.find(x => x.duty_id === id);
+  if(!m) return;
+  const msg = `この便を消します。\n\n`
+    + `　${m.work_date}　${m.course_label}\n`
+    + `　${m.segment} ${m.start_time||''}（日課 ${m.form_name} にはこの便がありません）\n\n`
+    + (m.crew_names
+        ? `⚠️ この便に付いている乗務も一緒に外れます：\n　　${m.crew_names}\n\n`
+          + `　※ 従業員の登録や、他の便への割り当ては変わりません。\n`
+          + `　※ 外した記録は変更履歴に残ります。\n\n`
+        : `　この便に乗務は付いていません。\n\n`)
+    + `よろしいですか。`;
+  if(!confirm(msg)) return;
+  try{
+    const r = await fetch(`${REST_URL}/rpc/delete_duty`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ p_id: id }) });
+    const t = await r.text();
+    if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
+      status('消せませんでした：' + ((j && j.message) || t).slice(0,150), false); return; }
+    const j = JSON.parse(t);
+    await hLoadMonth(); await hLoadMismatch(); hRender();
+    status(`便を消しました（${j.work_date} ${j.segment} ${j.start_time||''}）`
+      + (j.crew_count ? ` — 乗務 ${j.crew_count}名（${j.crew}）も外れました` : ''), true);
+  }catch(e){ status('消せませんでした：' + e.message, false); }
 }
 
 /* ---------- 便の生成 ---------- */
@@ -1596,7 +1677,7 @@ async function hGenerate(){
     const t = await r.text();
     if(!r.ok){ status('作成に失敗しました：'+t.slice(0,150), false); return; }
     let j={}; try{ j=JSON.parse(t); }catch(e){}
-    await hLoadMonth(); hRender();
+    await hLoadMonth(); await hLoadMismatch(); hRender();
     status(`便を作成しました（新規 ${j.created??'?'}件／この月の合計 ${j.total_now??'?'}件）`, true);
   }catch(e){ status('作成に失敗しました：'+e.message, false); }
 }
@@ -1607,12 +1688,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!ok) return;
   const now=new Date();
   document.getElementById('hMonth').value = `${now.getFullYear()}-${_p2(now.getMonth()+1)}`;
-  document.getElementById('hMonth').addEventListener('change', async ()=>{ await hLoadMonth(); hRender(); });
+  document.getElementById('hMonth').addEventListener('change', async ()=>{ await hLoadMonth(); await hLoadMismatch(); hRender(); });
   document.getElementById('hFilter').addEventListener('input', hRender);
   document.getElementById('hPref').addEventListener('change', hRender);
   try{
     await hLoadBase();
     await hLoadMonth();
+    await hLoadMismatch();
     hRender();
   }catch(e){ status('読み込みに失敗しました：'+e.message, false); }
 
