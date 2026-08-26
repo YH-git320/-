@@ -2916,6 +2916,102 @@ async function _confirmWipe(path, newCount, label){
    バッファを空にした瞬間に2回目がバス停を読み、空だと判断して削除してしまった。 */
 let _saving = false;
 
+/* 🔴 マスタを保存したら、便にも必ず反映する（2026-08-26 八重樫さんの指示）。
+   正本：業務管理システム_マスタ連動の原則
+
+   > とにかくマスタの情報を重要視してください。マスタが変わったときに配置画面は変わらないといけません。
+   > 下見はマスタを保存する前でないと整合性が取れません。
+   > 保存後「反映しますか」の問いに拒否ができるのはデータが二重になってしまうことになります。
+
+   ⚠️ だから、この順序でなければならない。
+       ① 保存する前に、便がどう変わるかを見せる（preview_duty_sync。1件も書き換えない）
+       ② 「保存して反映する」を押したら、マスタを保存し、続けて必ず便へ反映する
+       ③ 「やめる」なら、マスタも保存しない
+   ⚠️ 「保存したけど反映しない」は選べない。選べると、マスタと便が食い違ったまま残る。
+   ⚠️ 反映するのは「版の適用開始日以降」かつ「今日以降」だけ。過去は1件も触らない。 */
+
+/** 画面がいま持っている日課（保存したらこうなる、という中身） */
+function _pendingForms(){
+  const key = String(selCourseId);
+  return (FORMS[key] || [])
+    .filter(f => (f.form_name||'').trim())
+    .map(f => ({ form_name: (f.form_name||'').trim(),
+                 gekou_departures: (f.gekou_departures||[]).filter(t => (t||'').trim()) }));
+}
+/** 画面がいま持っているバス停から、登校便の最初の時刻（＝便の時刻になる） */
+function _pendingToukou(){
+  const t = _stops().filter(s => !s.gekou_only)
+                    .map(s => (s.toukou_time||'').trim()).filter(Boolean).sort();
+  return t.length ? t[0] : null;
+}
+/** 保存したら便がどう変わるかを調べる（何も書き換えない） */
+async function _previewSync(){
+  const v = curVer();
+  if(!v) return null;
+  try{
+    const r = await fetch(`${REST_URL}/rpc/preview_duty_sync`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ p_course: selCourseId, p_from: String(v.valid_from),
+                             p_forms: _pendingForms(), p_toukou: _pendingToukou() }) });
+    if(!r.ok) return { _ng: (await r.text()).slice(0,200) };
+    return await r.json();
+  }catch(e){ return { _ng: e.message }; }
+}
+function _syncLines(p){
+  const L = [];
+  const d = s => String(s).slice(5).replace('-','/');
+  (p.retimed||[]).slice(0,20).forEach(x => L.push(
+    `　${d(x.work_date)} ${x.segment}　${x.old||'—'} → ${x.new||'—'}` + (x.crew ? `（${x.crew} はそのまま）` : '')));
+  if((p.retimed||[]).length > 20) L.push(`　ほか ${p.retimed.length-20}件`);
+  (p.added||[]).slice(0,10).forEach(x => L.push(`　${d(x.work_date)} ${x.segment} ${x.start_time||''} を作ります`));
+  if((p.added||[]).length > 10) L.push(`　ほか ${p.added.length-10}件`);
+  (p.removed||[]).slice(0,20).forEach(x => L.push(
+    `　${d(x.work_date)} ${x.segment} ${x.start_time||''} を取り消します` + (x.crew ? `　⚠️ ${x.crew} が外れます` : '')));
+  if((p.removed||[]).length > 20) L.push(`　ほか ${p.removed.length-20}件`);
+  (p.fixed||[]).slice(0,10).forEach(x => L.push(`　${d(x.work_date)} ${x.segment}　${x.what}を直します`));
+  if((p.fixed||[]).length > 10) L.push(`　ほか ${p.fixed.length-10}件`);
+  return L;
+}
+/** 保存の前に出す確認。true が返ったときだけ保存へ進む */
+function _confirmSync(p){
+  const n = (p.retimed_count|0) + (p.added_count|0) + (p.removed_count|0) + (p.fixed_count|0);
+  if(!n) return true;                               // 便に影響が無ければ黙って保存
+  const kept = (p.kept||[]).slice(0,10)
+    .map(x => `　${String(x.work_date).slice(5).replace('-','/')} ${x.segment}　${x.why}`);
+  const msg =
+    `保存すると、この変更が便にも反映されます。\n`
+  + `　${p.course}　${p.from} 以降（今日より前の便は触りません）\n\n`
+  + (p.retimed_count ? `【時刻を直す】${p.retimed_count}件　乗務員はそのまま残ります\n` : '')
+  + (p.added_count   ? `【便を作る】${p.added_count}件\n` : '')
+  + (p.removed_count ? `【便を取り消す】${p.removed_count}件　⚠️ 配置されている乗務員も外れます\n` : '')
+  + (p.fixed_count   ? `【車両・必要人数を直す】${p.fixed_count}件\n` : '')
+  + '\n' + _syncLines(p).join('\n') + '\n'
+  + (kept.length ? `\n【触らないもの】\n${kept.join('\n')}\n` : '')
+  + `\n保存して反映しますか。\n`
+  + `　「キャンセル」を押すと、マスタも保存しません。`;
+  return confirm(msg);
+}
+/** 保存のあとに必ず呼ぶ。マスタの内容を便へ反映する */
+async function _applySync(){
+  const v = curVer();
+  if(!v) return '';
+  try{
+    const r = await fetch(`${REST_URL}/rpc/sync_duties_from_master`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ p_course: selCourseId, p_from: String(v.valid_from), p_apply: true }) });
+    const t = await r.text();
+    if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
+      return `　⚠️ 便への反映ができませんでした：${((j&&j.message)||t).slice(0,120)}`; }
+    const p = JSON.parse(t);
+    const n = (p.retimed_count|0) + (p.added_count|0) + (p.removed_count|0) + (p.fixed_count|0);
+    if(!n) return '';
+    if(p.removed_count){
+      alert(`便を取り消しました（${p.removed_count}件）。配置されていた乗務員も外れています。\n`
+        + `（従業員の登録は変わりません。外した記録は変更履歴に残ります）\n\n`
+        + (p.removed||[]).map(x => `　${x.work_date} ${x.segment} ${x.start_time||''}　外れた配置：${x.crew||'なし'}`).join('\n'));
+    }
+    return `（便へ反映：時刻${p.retimed_count}件／作成${p.added_count}件／取り消し${p.removed_count}件／車両・人数${p.fixed_count}件）`;
+  }catch(e){ return `　⚠️ 便への反映ができませんでした：${e.message}`; }
+}
+
 async function saveCourse(){
   if(_saving){ _saveMsg('保存中です。そのままお待ちください。', false); return; }
   const c=_c(); if(!c) return;
@@ -2944,6 +3040,16 @@ async function saveCourse(){
     }
     if ((FORMS[key]||[]).some(f => !(f.form_name||'').trim() && (f.gekou_departures||[]).some(t=>t))){
       _saveMsg('日課名が空の行があります。A・B・C… の日課名を入れてから保存してください。', false); return;
+    }
+    /* 🔴 保存する前に、便がどう変わるかを見せる。ここで断られたらマスタも保存しない。
+       保存してから「反映しますか」と聞くと、断られたときにマスタと便が食い違ったまま残る */
+    {
+      const _pv = await _previewSync();
+      if(_pv && _pv._ng){
+        if(!confirm('便への影響を調べられませんでした：' + _pv._ng + '\n\nこのまま保存しますか。\n（マスタだけ保存され、便は古いままになります）')) return;
+      } else if(_pv && !_confirmSync(_pv)){
+        _saveMsg('保存をやめました。マスタも便も変わっていません。', false); return;
+      }
     }
     // 1) 登校時刻・有効フラグ（courses）
     const r1 = await fetch(`${REST_URL}/courses?id=eq.${c.id}`, { method:'PATCH', headers:getH(), body:JSON.stringify({ toukou_shussha:c.toukou_shussha||null, toukou_shukko:c.toukou_shukko||null, active:c.active, after_toukou:c.after_toukou||'帰庫', after_toukou_place:(c.after_toukou==='他所移動'?(c.after_toukou_place||null):null), after_toukou_addr:(c.after_toukou==='他所移動'?(c.after_toukou_addr||null):null), after_toukou_coord:(c.after_toukou==='他所移動'?(c.after_toukou_coord||null):null), gekou_shukko_lead:(c.gekou_shukko_lead==null?null:c.gekou_shukko_lead), gekou_haisha_lead:(c.gekou_haisha_lead==null?null:c.gekou_haisha_lead) }) });
@@ -3142,7 +3248,8 @@ async function saveCourse(){
     //    renderEditor() は編集欄をまるごと作り直すので、先に出すとメッセージごと消える。
     //    2026-08-19 に読み直しを速くしたことで、見える間もなく消えるようになっていた
     //    （2026-08-21 八重樫さんが「保存しましたが表示されませんでした」と発見）
-    _saveMsg('✅ 保存しました' + (_calRenamed.length ? `（月間予定の日課名も付け替えました：${_calRenamed.join('・')}）` : '') + (_flagOn.length ? `（「④ルート詳細」で「${_flagOn.join('・')}」をバス停にしました）` : '') + (_flagOff.length ? `（「④ルート詳細」で「${_flagOff.join('・')}」のバス停の印を外しました。地点は道の目印として残しています）` : '') + (_stopsChanged.length ? `（⚠️ ${_stopsChanged.join('・')}のバス停が変わりました。④ルート詳細でバス停の設定との食い違いをご確認ください。④の道はそのまま残してあります）` : ''), true);
+    const _syncMsg = await _applySync();   // 🔴 保存したら必ず反映する（断れない）
+    _saveMsg('✅ 保存しました' + _syncMsg + (_calRenamed.length ? `（月間予定の日課名も付け替えました：${_calRenamed.join('・')}）` : '') + (_flagOn.length ? `（「④ルート詳細」で「${_flagOn.join('・')}」をバス停にしました）` : '') + (_flagOff.length ? `（「④ルート詳細」で「${_flagOff.join('・')}」のバス停の印を外しました。地点は道の目印として残しています）` : '') + (_stopsChanged.length ? `（⚠️ ${_stopsChanged.join('・')}のバス停が変わりました。④ルート詳細でバス停の設定との食い違いをご確認ください。④の道はそのまま残してあります）` : ''), true);
   }catch(e){ _saveMsg('保存エラー：'+e.message, false); }
   finally{
     // どの抜け方をしても必ず鍵を外し、ボタンを戻す
