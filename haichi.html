@@ -105,6 +105,7 @@ button.mini{font-size:12px;padding:6px 10px;}
     </div>
     <div id="hMismatch"></div>
     <div id="hSkips"></div>
+    <div id="hManual"></div>
     <div id="hDeleted"></div>
     <div class="muted" style="font-size:11px;margin-top:6px;">
       上部3行＝<b>必要</b>（コースごとの必要人数×便数）／<b>配置</b>（割り当て済み）／<b>不足</b>（赤は要対応）。<br>
@@ -1163,6 +1164,7 @@ function _headHtml(ym,y,m,dim,HOL,firstLabel){
 function hRender(){
   hRenderMismatch();
   hRenderSkips();
+  hRenderManual();
   hRenderDeleted();
   if(TAB==='人別'){ hRenderPerson(); return; }
   if(TAB==='車両別'){ hRenderVehicle(); return; }
@@ -1729,19 +1731,56 @@ function hRenderSkips(){
    変更履歴（audit_log）に、消した便と一緒に消えた乗務員が残っている。そこから元に戻す。
    ⚠️ 便の id は採番し直しになるので、乗務員は「消えたときの duty_id」で拾って付け直している。
    ⚠️ 過去の日付には戻さない。同じ便が既にあるときも戻さない。
-   ⚠️ この一覧は既定では畳んでおく。ふだん見るものではないため。 */
+
+   🔴 戻す理由は2つあり、行き先が違う（2026-08-26 八重樫さんの指摘）。
+      ① 予定のほうが違う → 月間予定でその日の日課を直す（ふつうはこれ）。マスタを直すのはマスタのミスのときだけ
+      ② この日だけ例外的に走らせたい → 「例外」として残す。マスタと違ってよく、守られる
+
+   ⚠️ ②は危険。「よほど例外措置ということを認識させないと独り歩きします」（八重樫さん）。
+      だから：理由を必ず書かせる／一覧に出し続ける／やめる道を用意する／
+      画面ではまず月間予定を直すよう促す。 */
 let DELETED = [];
+let MANUAL  = [];
 let _delOpen = false;
 async function hLoadDeleted(){
-  const ym=_ym(); if(!ym){ DELETED=[]; return; }
+  const ym=_ym(); if(!ym){ DELETED=[]; MANUAL=[]; return; }
   const start=ym+'-01', end=ym+'-'+_p2(_dim(ym));
   try{
     const r = await fetch(`${REST_URL}/rpc/deleted_duties`, { method:'POST', headers:getH(),
       body: JSON.stringify({ p_from:start, p_to:end }) });
     DELETED = r.ok ? (await r.json() || []) : [];
   }catch(e){ DELETED = []; }
+  try{
+    const r2 = await fetch(`${REST_URL}/rpc/manual_duties`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ p_from:start, p_to:end }) });
+    MANUAL = r2.ok ? (await r2.json() || []) : [];
+  }catch(e){ MANUAL = []; }
 }
 function hToggleDeleted(){ _delOpen = !_delOpen; hRenderDeleted(); }
+/** 🔴 例外として走らせている便。隠れないよう、畳まずに出し続ける */
+function hRenderManual(){
+  const el = document.getElementById('hManual');
+  if(!el) return;
+  if(!MANUAL.length){ el.innerHTML=''; return; }
+  const ng = MANUAL.filter(x=>!x.wanted_by_master);
+  if(!ng.length){ el.innerHTML=''; return; }
+  el.innerHTML = `<div style="background:#fdecea;border:1px solid #e6b0aa;border-radius:10px;padding:11px 14px;margin:8px 0;">
+    <div style="font-weight:700;color:#943126;font-size:13.5px;">⚠️ 例外として走らせている便（${ng.length}件）</div>
+    <div style="font-size:12px;color:#7b4a44;line-height:1.75;margin-top:3px;">
+      <b>運行時程マスタには無い便です。</b>マスタを保存しても消えません。<br>
+      例外はここに出続けます。<b>要らなくなったら「例外をやめる」を押してください。</b>
+      ふだんは <b>月間予定でその日の日課を直す</b>のが本筋です。運行時程マスタを直すのは、マスタが間違っているときだけです。
+    </div>
+    <div style="max-height:280px;overflow:auto;margin-top:4px;">
+      ${ng.map(x=>`<div style="padding:6px 0;border-top:1px solid #f0d5d0;font-size:12.5px;line-height:1.8;">
+        <div><b>${escHtml(String(x.work_date))}</b>　${escHtml(x.course_label||'')}　${escHtml(x.segment)} ${escHtml(x.start_time||'')}</div>
+        ${x.note ? `<div style="color:#943126;">${escHtml(x.note)}</div>` : ''}
+        ${x.crew ? `<div class="muted" style="font-size:11.5px;">配置：${escHtml(x.crew)}</div>` : ''}
+        <div style="margin-top:3px;"><button class="mini" onclick="hUnkeepDuty(${x.duty_id})">例外をやめる</button></div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
 function hRenderDeleted(){
   const el = document.getElementById('hDeleted');
   if(!el) return;
@@ -1758,7 +1797,9 @@ function hRenderDeleted(){
       <button class="mini" style="margin-left:auto;" onclick="hToggleDeleted()">閉じる</button>
     </div>
     <div style="font-size:12px;color:#5b6b63;line-height:1.75;margin-top:3px;">
-      変更履歴に残っているものです。<b>戻すと、一緒に外れた乗務員も付け直します。</b>
+      変更履歴に残っているものです。戻すと、一緒に外れた乗務員も付け直します。<br>
+      ⚠️ <b>マスタに無い便を戻しても、次にマスタを保存すればまた取り消されます。</b>
+      本筋は <b>月間予定でその日の日課を直す</b>ことです（マスタを直すのはマスタの間違いのときだけ）。
     </div>
     <div style="max-height:320px;overflow:auto;margin-top:4px;">
       ${DELETED.map(x=>`<div style="padding:6px 0;border-top:1px solid #e6e6e0;font-size:12.5px;line-height:1.8;">
@@ -1768,35 +1809,72 @@ function hRenderDeleted(){
           ${x.deleted_by ? '／' + escHtml(String(x.deleted_by).slice(0,40)) : ''}
         </div>
         ${x.crew ? `<div style="color:#8a6d1f;">一緒に外れた乗務員：${escHtml(x.crew)}</div>` : ''}
-        <div style="margin-top:3px;">${x.can_restore
-          ? `<button class="mini" onclick="hRestoreDuty(${x.audit_id})">この便を戻す</button>`
+        <div style="margin-top:3px;display:flex;gap:6px;flex-wrap:wrap;">${x.can_restore
+          ? `<button class="mini" onclick="hRestoreDuty(${x.audit_id},false)">戻す</button>`
+            + `<button class="mini" style="border-color:#e0b4ac;color:#a5382c;" onclick="hRestoreDuty(${x.audit_id},true)">例外として走らせる</button>`
           : `<span class="muted" style="font-size:11.5px;">戻せません（${escHtml(x.why||'')}）</span>`}</div>
       </div>`).join('')}
     </div>
   </div>`;
 }
-async function hRestoreDuty(aid){
+async function hRestoreDuty(aid, keep){
   const x = DELETED.find(v=>v.audit_id===aid);
   if(!x) return;
-  if(!confirm(`取り消した便を戻します。\n\n`
-    + `　${x.work_date}　${x.course_label||''}　${x.segment} ${x.start_time||''}\n\n`
-    + (x.crew ? `　一緒に外れた乗務員も付け直します：\n　　${x.crew}\n\n` : '')
-    + `⚠️ 運行時程マスタがこの便を求めていない場合、\n`
-    + `　　次にマスタを保存したときに、また取り消されます。\n`
-    + `　　残すのであれば、マスタか月間予定のほうをご確認ください。\n\n`
-    + `よろしいですか。`)) return;
+  let why = null;
+  if(keep){
+    // 🔴 例外は独り歩きしやすい。まず月間予定を直すよう促し、理由を必ず書かせる
+    if(!confirm(`⚠️ これは例外措置です。\n\n`
+      + `　${x.work_date}　${x.course_label||''}　${x.segment} ${x.start_time||''}\n\n`
+      + `この便は運行時程マスタにありません。\n`
+      + `「例外として走らせる」にすると、マスタを保存しても消えなくなります。\n\n`
+      + `⚠️ ふだんは、こちらではなく月間予定でその日の日課を直してください。\n`
+      + `　　運行時程マスタを直すのは、マスタが間違っているときだけです。\n`
+      + `　　例外を増やすほど、マスタと実際の運行がずれていきます。\n`
+      + `　　例外はこの画面に出続け、いつでもやめられます。\n\n`
+      + `そのうえで、この日だけの例外にしますか。`)) return;
+    why = prompt('例外にする理由を入れてください（あとから見て分かるように）', '');
+    if(why === null) return;
+    if(!String(why).trim()){ status('理由が要ります。例外にはできません。', false); return; }
+  } else {
+    if(!confirm(`取り消した便を戻します。\n\n`
+      + `　${x.work_date}　${x.course_label||''}　${x.segment} ${x.start_time||''}\n\n`
+      + (x.crew ? `　一緒に外れた乗務員も付け直します：\n　　${x.crew}\n\n` : '')
+      + `⚠️ 運行時程マスタがこの便を求めていない場合、\n`
+      + `　　次にマスタを保存したときに、また取り消されます。\n`
+      + `　　残すのであれば、月間予定でその日の日課をご確認ください。\n\n`
+      + `よろしいですか。`)) return;
+  }
   try{
     const r = await fetch(`${REST_URL}/rpc/restore_deleted_duty`, { method:'POST', headers:getH(),
-      body: JSON.stringify({ p_audit_id: aid }) });
+      body: JSON.stringify({ p_audit_id: aid, p_keep: !!keep, p_reason: why }) });
     const t = await r.text();
     if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
       status('戻せませんでした（元のデータは残っています）：' + ((j&&j.message)||t).slice(0,150), false); return; }
     const j = JSON.parse(t);
-    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); await hLoadDeleted(); hRender();
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender();
     status(`${j.work_date} ${j.segment} ${j.start_time||''} を戻しました`
       + (j.crew_count ? `（${j.crew} を付け直しました）` : '')
-      + (j.missing_staff ? `　⚠️ 名簿にいない方 ${j.missing_staff}名 は付け直せませんでした` : ''), true);
+      + (j.missing_staff ? `　⚠️ 名簿にいない方 ${j.missing_staff}名 は付け直せませんでした` : '')
+      + `　${j.note||''}`, true);
   }catch(e){ status('戻せませんでした：'+e.message, false); }
+}
+async function hUnkeepDuty(id){
+  const x = MANUAL.find(v=>v.duty_id===id);
+  if(!confirm(`例外をやめます。\n\n`
+    + (x ? `　${x.work_date}　${x.course_label||''}　${x.segment} ${x.start_time||''}\n\n` : '')
+    + `次に運行時程マスタを保存したとき、この便はマスタどおりになります。\n`
+    + `（マスタに無い便なら取り消されます）\n\n`
+    + `よろしいですか。`)) return;
+  try{
+    const r = await fetch(`${REST_URL}/rpc/unkeep_duty`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ p_id: id }) });
+    const t = await r.text();
+    if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
+      status('できませんでした：' + ((j&&j.message)||t).slice(0,150), false); return; }
+    const j = JSON.parse(t);
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender();
+    status(`${j.work_date} ${j.segment} の例外をやめました。${j.note||''}`, true);
+  }catch(e){ status('できませんでした：'+e.message, false); }
 }
 
 /* 運行経路データと便の食い違い（2026-08-26）。
@@ -1848,12 +1926,14 @@ function _hCourseOnly(label){ const t = String(label||'').split('／'); return (
 function _hFixLinks(m){
   const q = encodeURIComponent(_hCourseOnly(m.course_label));
   const ym = String(m.work_date).slice(0,7);
+  /* ⚠️ 月間予定を先に出す。その日だけ違うなら直すのは予定のほう。
+     マスタを直すのは、マスタが間違っているときだけ（2026-08-26 八重樫さん） */
   return `<a class="mini" style="text-decoration:none;" target="_blank" rel="noopener"
-      href="unkou.html#course=${encodeURIComponent(m.course_id)}&tab=gekou&q=${q}"
-      title="運行時程マスタの「②下校便」タブをこのコースで開きます">🕒 運行時程マスタを見る</a>
-    <a class="mini" style="text-decoration:none;" target="_blank" rel="noopener"
       href="yotei.html#ym=${encodeURIComponent(ym)}&q=${q}"
-      title="月間予定のこの月をこのコースで開きます">📅 月間予定を見る</a>`;
+      title="月間予定のこの月をこのコースで開きます。その日だけ違うなら、ここを直します">📅 月間予定を直す</a>
+    <a class="mini" style="text-decoration:none;" target="_blank" rel="noopener"
+      href="unkou.html#course=${encodeURIComponent(m.course_id)}&tab=gekou&q=${q}"
+      title="運行時程マスタの「②下校便」タブ。日課の中身そのものが違うときだけ直します">🕒 マスタを直す</a>`;
 }
 function hRenderMismatch(){
   const el = document.getElementById('hMismatch');
@@ -1875,7 +1955,7 @@ function hRenderMismatch(){
       <div style="font-weight:700;color:#2d5f96;font-size:13px;">便の時刻がマスタと違います（${moved.length}件）</div>
       <div style="font-size:12px;color:#5b6b63;line-height:1.75;margin-top:3px;">
         <b>マスタが正しければ、便の時刻を直してください。</b>配置されている乗務員はそのまま残ります。<br>
-        便のほうが正しければ、マスタを見直してください。
+        便のほうが正しければ、📅 月間予定でその日の日課をご確認ください。
       </div>
       <div style="max-height:300px;overflow:auto;">${moved.map(m => {
         const lk = locked(m);
@@ -1926,8 +2006,11 @@ function hRenderMismatch(){
   el.innerHTML = `<div style="background:#fdf6e8;border:1px solid #e0c6a2;border-radius:10px;padding:11px 14px;margin:8px 0;">
     <div style="font-weight:700;color:#8a6d1f;font-size:13.5px;">⚠️ 運行時程マスタと便が食い違っています（${MISMATCH.length}件）</div>
     <div style="font-size:12px;color:#5b6b63;line-height:1.75;margin-top:3px;">
-      <b>便・運行時程マスタ・月間予定のうち、どれかが違っているという意味です。便が間違いとは限りません。</b>
-      マスタの打ち間違いなら、便を取り消すと配置していた乗務員が消えます。<b>どれが正しいかを確かめてから動かしてください。</b>
+      <b>便・月間予定・運行時程マスタのうち、どれかが違っているという意味です。便が間違いとは限りません。</b><br>
+      ・<b>その日だけ違う</b>なら → 📅 月間予定でその日の日課を直します（ふつうはこれ）<br>
+      ・<b>日課の中身そのものが違う</b>なら → 🕒 運行時程マスタを直します（マスタの間違いのときだけ）<br>
+      ・<b>その日だけの例外</b>なら → この画面で「この日だけ」にします<br>
+      便を取り消すと、配置していた乗務員が外れます。<b>どれが正しいかを確かめてから動かしてください。</b>
     </div>
     <div class="muted" style="font-size:11px;margin-top:2px;">今日以降の日だけ見ています。過去の便は触りません。自動では何も消しません。</div>
     ${nameWarn}
@@ -1936,7 +2019,7 @@ function hRenderMismatch(){
       <div style="font-weight:700;color:#b0451f;font-size:13px;">マスタにない便が残っています（${gone.length}件）</div>
       <div style="font-size:12px;color:#5b6b63;line-height:1.75;margin-top:3px;">
         マスタが正しければ、この便は走りません。取り消すと配置されている乗務員も外れます。<br>
-        <b>便のほうが正しければ、マスタか月間予定を直してください。</b>
+        <b>便のほうが正しければ、まず 📅 月間予定でその日の日課をご確認ください。</b>
       </div>
       <div style="max-height:340px;overflow:auto;margin-top:2px;">${goneRows}</div>
     </div>` : ''}
