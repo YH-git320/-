@@ -1181,6 +1181,16 @@ async function _calDefaultMonth(){
   if(r.ok){ const a=await r.json(); if(a.length) return String(a[0].cal_date).slice(0,7); }
   const d=new Date(); return d.getFullYear()+'-'+_p2(d.getMonth()+1);
 }
+/* 配置管理の知らせから飛んできたとき、そのコース・その月を開く（2026-08-26）。
+   例：unkou.html#course=72&tab=gekou ／ yotei.html#ym=2026-09&q=赤コース */
+function _hashParams(){
+  const o = {};
+  (location.hash||'').replace(/^#/,'').split('&').forEach(kv=>{
+    const i = kv.indexOf('=');
+    if(i > 0){ try{ o[decodeURIComponent(kv.slice(0,i))] = decodeURIComponent(kv.slice(i+1)); }catch(e){} }
+  });
+  return o;
+}
 document.addEventListener('DOMContentLoaded', async () => {
   const ok = await initAuth(['super_admin','admin','operator','staff']);
   if (!ok) return;
@@ -1188,7 +1198,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.addEventListener('click',(e)=>{ const p=document.getElementById('calPop'); if(!p||p.style.display==='none') return; if(p.contains(e.target)) return; if(e.target.closest && e.target.closest('[id^="b_"]')) return; p.style.display='none'; CUR_CID=null; });
   try{
     await calLoadBase();
-    document.getElementById('calMonth').value = await _calDefaultMonth();
+    const _hp = _hashParams();
+    document.getElementById('calMonth').value =
+      (/^d{4}-d{2}$/.test(_hp.ym||'') ? _hp.ym : await _calDefaultMonth());
+    if(_hp.q) document.getElementById('calFilter').value = _hp.q;
     document.getElementById('calMonth').addEventListener('change', ()=>{ if(Object.keys(CDIRTY).length && !confirm('未保存の変更があります。月を変えると破棄されます。よろしいですか？')){ return; } CDIRTY={}; calChangeMonth(); });
     document.getElementById('calFilter').addEventListener('input', calRender);
     document.getElementById('calPref').addEventListener('change', calRender);

@@ -3152,6 +3152,16 @@ async function saveCourse(){
   }
 }
 
+/* 配置管理の知らせから飛んできたとき、そのコース・その月を開く（2026-08-26）。
+   例：unkou.html#course=72&tab=gekou ／ yotei.html#ym=2026-09&q=赤コース */
+function _hashParams(){
+  const o = {};
+  (location.hash||'').replace(/^#/,'').split('&').forEach(kv=>{
+    const i = kv.indexOf('=');
+    if(i > 0){ try{ o[decodeURIComponent(kv.slice(0,i))] = decodeURIComponent(kv.slice(i+1)); }catch(e){} }
+  });
+  return o;
+}
 document.addEventListener('DOMContentLoaded', async () => {
   const ok = await initAuth(['super_admin','admin','operator','staff']);
   if (!ok) return;
@@ -3160,7 +3170,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   try{
     await loadCourses(); await loadVersions(); await loadStops(); await loadFormsLatest(); await loadScenarios(); await loadRoutePointsLatest();
     renderCourseList(); renderEditor();
-    status('準備ができました。コースを選んでください。', true);
+    const _hp = _hashParams();
+    if(_hp.q) document.getElementById('courseSearch').value = _hp.q;
+    if(_hp.course && !isNaN(Number(_hp.course))){
+      await selectCourse(Number(_hp.course));
+      if(_hp.tab) setTab(_hp.tab);
+      status('配置管理から開きました。食い違いの元をご確認ください。', true);
+    } else {
+      renderCourseList();
+      status('準備ができました。コースを選んでください。', true);
+    }
   }catch(e){ status('データ読み込みエラー：'+e.message, false); }
 });
 
