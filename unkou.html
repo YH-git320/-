@@ -2802,6 +2802,7 @@ async function saveCourse(){
   if(!isLatestVer()){ _saveMsg('過去版は保存できません。最新版を選ぶか、「新版を作成」してから編集してください。', false); return; }
   const key=String(c.id);
   let _stopsChanged = [];   // ②のバス停が変わった側（保存後に④の確認をうながす）
+  let _flagOn = [], _flagOff = [];   // ②に合わせて④のバス停の印を付けた／外した停
   // 押している間ずっと分かるようにする（無反応に見えて何度も押されるのを防ぐ）
   _saving = true;
   const _btn = document.getElementById('saveBtn');
@@ -2873,6 +2874,52 @@ async function saveCourse(){
       const origSig = STOPS_ORIG_SIG[key] || { toukou:'', gekou:'' };
       if(nowSig.toukou !== origSig.toukou) _stopsChanged.push('登校');
       if(nowSig.gekou  !== origSig.gekou)  _stopsChanged.push('下校');
+    }
+    /* ②を保存したら、④のバス停の印を②に合わせる（2026-08-26 八重樫さん）。
+       　「この④ルート詳細は②の各日課にあわせて反映しなければなりません。
+       　　編集ののちチェックが外れるバス停もあればチェックが加わるバス停もあると思います」
+
+       日課・便ごとに、②が言う「この便で通る停」と突き合わせる：
+         ②の下校に入っている　かつ　その便で「通らない」に入っていない → バス停の印を付ける
+         そうでない                                                  → バス停の印を外す
+
+       ⚠️ 地点は消さない。道をたどる目印として残す。
+       ⚠️ ②のバス停に無い名前（曲がり角の目印など）は触らない。
+       ⚠️ ④に地点そのものが無い停は、ここでは足さない（道の形が変わるため）。
+          ④の食い違いの枠から「バス停にする」を押していただく。 */
+    {
+      const inGekou = {};
+      keep.forEach(s=>{ const n=(s.name||'').trim(); if(n) inGekou[n] = (s.gekou_offset != null); });
+      // 下校の並びの先頭は学校＝出発地。時刻を持たないがバス停のまま残す
+      let schoolName = '';
+      { const ord = _gekouIdxOf(keep); if(ord.length) schoolName = (keep[ord[0]].name||'').trim(); }
+      const fmap = {};
+      (FORMS[key]||[]).forEach(f=>{
+        const nm = (f.form_name||'').trim(); if(!nm) return;
+        fmap[nm] = { deps:(f.gekou_departures||[]).filter(t=>t),
+                     ov:(f.dep_overrides && typeof f.dep_overrides==='object') ? f.dep_overrides : {} };
+      });
+      const box = RPTS[key] || {};
+      const off = {}, on = {};
+      Object.keys(box).forEach(kk=>{
+        const q  = _rkeyParse(kk);
+        const gi = R_GEKOU_MAIN.indexOf(q.seg);
+        if(gi < 0) return;   // 下校の本線だけ（回送は②のバス停と対応しない）
+        let skip = [];
+        const f = q.form ? fmap[q.form] : null;
+        if(f){ const t = f.deps[gi]; const o = t ? f.ov[t] : null;
+               skip = (o && Array.isArray(o.skip)) ? o.skip : []; }
+        (box[kk]||[]).forEach(p=>{
+          const n = (p.name||'').trim();
+          if(!n || n === schoolName) return;
+          if(!(n in inGekou)) return;            // ②のバス停でない＝曲がり角の目印。触らない
+          const want = inGekou[n] && skip.indexOf(n) < 0;
+          if(p.is_stop && !want){ p.is_stop = false; off[n] = true; }
+          else if(!p.is_stop && want){ p.is_stop = true; on[n] = true; }
+        });
+      });
+      _flagOff = Object.keys(off);
+      _flagOn  = Object.keys(on);
     }
     const rptRows=[];
     // 回送の鍵は「便|シナリオid|ルート名」。本線は便の名前だけ
@@ -2961,7 +3008,7 @@ async function saveCourse(){
     //    renderEditor() は編集欄をまるごと作り直すので、先に出すとメッセージごと消える。
     //    2026-08-19 に読み直しを速くしたことで、見える間もなく消えるようになっていた
     //    （2026-08-21 八重樫さんが「保存しましたが表示されませんでした」と発見）
-    _saveMsg('✅ 保存しました' + (_stopsChanged.length ? `（⚠️ ${_stopsChanged.join('・')}のバス停が変わりました。④ルート詳細で②との食い違いをご確認ください。` + `④の道はそのまま残してあります）` : ''), true);
+    _saveMsg('✅ 保存しました' + (_flagOn.length ? `（④で「${_flagOn.join('・')}」をバス停にしました）` : '') + (_flagOff.length ? `（④で「${_flagOff.join('・')}」のバス停の印を外しました。地点は道の目印として残しています）` : '') + (_stopsChanged.length ? `（⚠️ ${_stopsChanged.join('・')}のバス停が変わりました。④ルート詳細で②との食い違いをご確認ください。④の道はそのまま残してあります）` : ''), true);
   }catch(e){ _saveMsg('保存エラー：'+e.message, false); }
   finally{
     // どの抜け方をしても必ず鍵を外し、ボタンを戻す
