@@ -941,6 +941,13 @@ function _shortName(n){ n=n||'';
 
       マスタ側で同じ名前の日課を作れば、そのまま効く（名前で結びつくため）。 */
 
+// ⚠️ 過去は触らないと決めた以上、過去を警告に出さない（2026-08-26 八重樫さん）
+//    日課名やコース名を変えるたびに過去が赤くなるのは運用上こまる
+function _isPastDate(d){
+  const t=new Date();
+  const today=t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');
+  return String(d) < today;
+}
 function _unknownForms(){
 
   const out = [];
@@ -959,6 +966,7 @@ function _unknownForms(){
 
       const v = ((CDATA[cid] || {})[date] || {}).form_name || '';
 
+      if (_isPastDate(date)) return;   // 過去は知らせない
       if (!v || v === '運休' || known[v] || CAL_EXTRA.indexOf(v) >= 0) return;
 
       (bad[v] = bad[v] || []).push(date);
@@ -1015,7 +1023,7 @@ function _unknownFormBox(){
 
     <div style="font-size:11.5px;color:#8a9a91;margin-top:7px;">
 
-      表の中では <b>名前(?)</b> と赤く出ています。運行時程マスタは
+      表の中では <b>名前(?)</b> と赤く出ています。（今日以降の日だけ見ています）運行時程マスタは
 
       <a href="unkou.html" style="color:#4d7a5e;">こちら</a>（②下校便のタブ）。
 
@@ -1035,13 +1043,13 @@ function _shortLabel(cid, v){
   if(CAL_EXTRA.indexOf(v)>=0) return v;
   return v+'(?)';
 }
-function _cellBg(v, cid){ if(v==='運休') return '#eceff0'; if(v==='') return '#fff'; if(CAL_EXTRA.indexOf(v)>=0) return '#e6eefb';
-  // マスタに無い日課は目立たせる
-  if(cid!=null && !(CFORMS[String(cid)]||[]).some(f=>f.name===v)) return '#fdf0e4';
+function _cellBg(v, cid, date){ if(v==='運休') return '#eceff0'; if(v==='') return '#fff'; if(CAL_EXTRA.indexOf(v)>=0) return '#e6eefb';
+  // マスタに無い日課は目立たせる。ただし過去は除く
+  if(cid!=null && !(date && _isPastDate(date)) && !(CFORMS[String(cid)]||[]).some(f=>f.name===v)) return '#fdf0e4';
   return '#eaf5ee'; }
 function _note(cid,date){ return ((CDATA[String(cid)]||{})[date]||{}).note||''; }
 function _kekkin(cid,date){ return ((CDATA[String(cid)]||{})[date]||{}).kekkin||''; }
-function _btnBg(cid,date,v){ if(_kekkin(cid,date)) return '#ffd6d6'; return _note(cid,date) ? '#ffe1b0' : _cellBg(v, cid); }
+function _btnBg(cid,date,v){ if(_kekkin(cid,date)) return '#ffd6d6'; return _note(cid,date) ? '#ffe1b0' : _cellBg(v, cid, date); }
 function _btnBd(cid,date){ if(_kekkin(cid,date)) return '#d9534f'; return _note(cid,date) ? '#e0821a' : '#cfe0d5'; }
 function _btnHtml(cid,date,v){
   const kk=_kekkin(cid,date);
@@ -1055,7 +1063,9 @@ function _btnHtml(cid,date,v){
          + (t?` <span style="font-size:10px;">${escHtml(t)}</span>`:''); }
     else if(CAL_EXTRA.indexOf(v)>=0) main=`<b style="font-weight:700;font-size:13px;">${escHtml(v)}</b>`;
     // ⚠️ マスタに無い日課。この日は便が1本も作られない（2026-08-26）
-    else main=`<b style="font-weight:700;font-size:12px;color:#b0451f;">${escHtml(v)}(?)</b>`; }
+    else main = _isPastDate(date)
+      ? `<b style="font-weight:700;font-size:13px;">${escHtml(v)}</b>`   // 過去は普通に出す
+      : `<b style="font-weight:700;font-size:12px;color:#b0451f;">${escHtml(v)}(?)</b>`; }
   return main+' ▾'+(kk?`<div style="font-size:9px;line-height:1.1;color:#b30000;font-weight:700;">${escHtml(kk)}</div>`:'');
 }
 // 日本の国民の祝日を計算（固定日・ハッピーマンデー・春分/秋分・国民の休日・振替休日）。約1980〜2099年で有効。

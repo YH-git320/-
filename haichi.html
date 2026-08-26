@@ -1594,6 +1594,8 @@ async function hSave(){
      便を増やした → 配置する便が増える（「便の作成／更新」で足す）
    ⚠️ 取り消しは自動にしない。1件ずつ確認してから（八重樫さんの指示：事故のきっかけになるため）。
    ⚠️ 記録（人数が入っている・運行ボタンの記録がある）は取り消さない。
+   ⚠️ 知らせるのは今日以降だけ（duty_mismatch の p_future_only 既定 true）。
+      過去は触らないと決めたので、日課名やコース名を変えるたびに過去が警告になるのを防ぐ。
    ⚠️ 日課名そのものがマスタに無いとき（form_exists=false）は対処が逆。
       先に月間予定の日課名を直す。名前が合わない日は便が1本も作られないため。 */
 let MISMATCH = [];
@@ -1657,6 +1659,7 @@ function hRenderMismatch(){
 
   el.innerHTML = `<div style="background:#fdf6e8;border:1px solid #e0c6a2;border-radius:10px;padding:11px 14px;margin:8px 0;">
     <div style="font-weight:700;color:#8a6d1f;font-size:13.5px;">⚠️ 運行経路データが変更されたため、配置環境が変わりました</div>
+    <div class="muted" style="font-size:11px;margin-top:2px;">今日以降の日だけ見ています。過去の便は触りません。</div>
     ${nameWarn}
     ${gone.length ? `<div style="margin-top:6px;">
       <div style="font-weight:700;color:#b0451f;font-size:13px;">配置した便が取り消されます（${gone.length}件）</div>
