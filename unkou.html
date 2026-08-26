@@ -1719,19 +1719,20 @@ function _diffBox(){
   const chip = (n, kind) => kind === 'extra'
     ? `<span style="display:inline-flex;align-items:center;gap:5px;background:#fff;border:1px solid #e0c6a2;border-radius:8px;padding:3px 8px;margin:3px 5px 0 0;font-size:12px;">
          <span style="text-decoration:line-through;color:#b0451f;">${escHtml(n)}</span>
-         <button class="mini" onclick="rptDropStop('${escAttr(n)}')">④から消す</button></span>`
+         <button class="mini" onclick="rptUnstop('${escAttr(n)}')" title="バス停ではなくします。地点は道の目印として残します">バス停を外す</button>
+         <button class="mini" onclick="rptDropStop('${escAttr(n)}')" title="地点ごと消します。道からも外れるときだけ" style="opacity:.7;">地点ごと消す</button></span>`
     : `<span style="display:inline-flex;align-items:center;gap:5px;background:#fff;border:1px solid #a2c0e0;border-radius:8px;padding:3px 8px;margin:3px 5px 0 0;font-size:12px;">
          <span style="color:#2d5f96;font-weight:700;">${escHtml(n)}</span>
-         <button class="mini" onclick="rptAddStop('${escAttr(n)}')">④に足す</button></span>`;
+         <button class="mini" onclick="rptAddStop('${escAttr(n)}')" title="道の目印として既にあれば印を付けるだけ。無ければ正しい位置に差し込みます">バス停にする</button></span>`;
   return `<div style="background:#fdf6e8;border:1px solid #e0c6a2;border-radius:10px;padding:10px 12px;margin-bottom:8px;">
     <div style="font-weight:700;color:#8a6d1f;font-size:13.5px;">⚠️ ②と食い違っています</div>
-    ${d.extra.length ? `<div style="margin-top:5px;font-size:12.5px;color:#5b6b63;">この便は通りません（④に入っています）${d.extra.map(n=>chip(n,'extra')).join('')}</div>` : ''}
-    ${d.missing.length ? `<div style="margin-top:5px;font-size:12.5px;color:#5b6b63;">この便は通ります（④にありません）${d.missing.map(n=>chip(n,'miss')).join('')}</div>` : ''}
+    ${d.extra.length ? `<div style="margin-top:5px;font-size:12.5px;color:#5b6b63;">この便は通りません（④でバス停になっています）${d.extra.map(n=>chip(n,'extra')).join('')}</div>` : ''}
+    ${d.missing.length ? `<div style="margin-top:5px;font-size:12.5px;color:#5b6b63;">この便は通ります（④でバス停になっていません）${d.missing.map(n=>chip(n,'miss')).join('')}</div>` : ''}
     ${(!d.extra.length && !d.missing.length && d.orderNg) ? `<div style="margin-top:5px;font-size:12.5px;color:#5b6b63;">停は揃っていますが、<b>並び順が②と違います</b>。</div>` : ''}
     <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
       ${(d.extra.length + d.missing.length > 1) ? `<button class="mini" onclick="rptFixAll()">まとめて直す</button>` : ''}
       <button class="mini" onclick="rptFillFromStops()" title="②のバス停だけで作り直します。曲がり角の目印は消えます">②から全部作り直す</button>
-      <span class="muted" style="font-size:11.5px;">⚠️ 足し引きした前後の曲がり角は、そのままでは合わないことがあります</span>
+      <span class="muted" style="font-size:11.5px;">⚠️ バス停を外しても地点は道の目印として残ります。差し込んだ場合は前後の道をご確認ください</span>
     </div>
   </div>`;
 }
@@ -1746,6 +1747,15 @@ function setRForm(name){
   renderEditor();
 }
 
+/** ②で下校に入っている停の添字（下校の並び順）。
+ *  ⚠️ ②で「下校で外す」を押した停は下校の時刻が空になる（gekou_offset が null）。
+ *     これを見ないと、外したはずの停を④が「足りない」と言ってしまう（2026-08-26）。
+ *  ⚠️ 先頭（＝学校）は時刻を持たないが、下校の出発地なので必ず含める。 */
+function _gekouStopIdx(){
+  const stops = _stops();
+  return _gekouIdx().filter((i,k)=> k === 0 || stops[i].gekou_offset != null);
+}
+
 /** ②が「この便で通る」と言っているバス停の名前（並び順）。
  *  ⚠️ ②が正。④はこれに合わせる（2026-08-26 八重樫さんの整理） */
 function _expectedStops(form, seg){
@@ -1754,7 +1764,7 @@ function _expectedStops(form, seg){
   if(seg === '登校') return stops.filter(s=>!s.gekou_only).map(s=>(s.name||'').trim()).filter(Boolean);
   if(R_GEKOU_MAIN.indexOf(seg) < 0) return [];   // 回送は②のバス停と対応しない
   const skip = _skipNames(form, seg);
-  return _gekouIdx().map(i=>(stops[i].name||'').trim())
+  return _gekouStopIdx().map(i=>(stops[i].name||'').trim())
     .filter(n=>n && skip.indexOf(n) < 0);
 }
 
@@ -1776,28 +1786,47 @@ function _diffVs2(){
   return { extra, missing, orderNg, want };
 }
 
-/** ②で通らない停を、この便の④から消す */
-function rptDropStop(name){
+/** ②で通らない停を「バス停ではない」にする。
+ *  ⚠️ 地点そのものは消さない。道をたどる目印として残すほうが多いため
+ *     （2026-08-26 八重樫さん）。本当に道から外れる場合だけ rptDropStop を使う。 */
+function rptUnstop(name){
   const list = _rpts();
   const i = list.findIndex(p=>p.is_stop && (p.name||'').trim() === name);
   if(i < 0) return;
-  if(!confirm(`「${name}」をこの便の道から外します。よろしいですか。\n\n※ 前後の曲がり角の目印はそのまま残ります。道が合わなくなっていないかご確認ください。`)) return;
+  list[i].is_stop = false;
+  rptSelIdx = null; rptPick = {};
+  renderEditor();
+  _saveMsg(`「${name}」のバス停の印を外しました。道の目印としては残しています。`, true);
+}
+/** 地点ごと消す（道からも外れるとき） */
+function rptDropStop(name){
+  const list = _rpts();
+  const i = list.findIndex(p=>(p.name||'').trim() === name);
+  if(i < 0) return;
+  if(!confirm(`「${name}」を地点ごと消します。\n\n※ 道の目印としても残りません。道が通らなくなる場合だけお使いください。\n　 バス停ではなくなるだけなら「バス停を外す」のほうが安全です。`)) return;
   list.splice(i, 1);
   rptSelIdx = null; rptPick = {};
   renderEditor();
-  _saveMsg(`「${name}」を外しました。前後の目印をご確認ください。`, true);
+  _saveMsg(`「${name}」を地点ごと消しました。`, true);
 }
-
-/** ②では通るのに④に無い停を、正しい位置へ差し込む */
+/** ②では通るのに④でバス停になっていない停を、バス停にする。
+ *  同じ名前の地点が目印として既にあれば、印を付けるだけ（重ねて入れない） */
 function rptAddStop(name){
+  const list = _rpts();
+  const at0 = list.findIndex(p=>!p.is_stop && (p.name||'').trim() === name);
+  if(at0 >= 0){
+    list[at0].is_stop = true;
+    rptSelIdx = null; rptPick = {};
+    renderEditor();
+    _saveMsg(`「${name}」は道の目印として入っていたので、バス停の印を付けました。`, true);
+    return;
+  }
   const stops = _stops();
   const src = stops.find(s=>(s.name||'').trim() === name);
   const c = src && dmsToDecimal(src.coord);
   if(!c){ _saveMsg(`「${name}」の座標が②で空です。先に②で座標を入れてください。`, false); return; }
   const want = _expectedStops();
   const wi = want.indexOf(name);
-  const list = _rpts();
-  // ②の並びで自分より後に来る停のうち、④にある最初のものの手前へ入れる
   let at = list.length;
   for(let i=0;i<list.length;i++){
     if(!list[i].is_stop) continue;
@@ -1809,16 +1838,17 @@ function rptAddStop(name){
   renderEditor();
   _saveMsg(`「${name}」を${at+1}番目に入れました。前後の目印をご確認ください。`, true);
 }
-
-/** 足りない停をまとめて足し、余分な停をまとめて外す */
+/** まとめて直す。余分はバス停の印を外すだけ、足りないものは付ける／差し込む */
 function rptFixAll(){
   const d = _diffVs2();
   if(!d) return;
-  if(!confirm(`②に合わせて直します。\n　外す：${d.extra.length}停\n　足す：${d.missing.length}停\n\n※ 曲がり角の目印は残しますが、前後の道が合わなくなっていないかご確認ください。`)) return;
+  if(!confirm(`②に合わせて直します。\n　バス停の印を外す：${d.extra.length}停（地点は道の目印として残します）\n　バス停にする：${d.missing.length}停\n\n※ 差し込んだ前後の道が合っているかご確認ください。`)) return;
   const list = _rpts();
-  d.extra.forEach(n=>{ const i=list.findIndex(p=>p.is_stop && (p.name||'').trim()===n); if(i>=0) list.splice(i,1); });
+  d.extra.forEach(n=>{ const i=list.findIndex(p=>p.is_stop && (p.name||'').trim()===n); if(i>=0) list[i].is_stop = false; });
   const want = _expectedStops();
   d.missing.forEach(n=>{
+    const at0 = list.findIndex(p=>!p.is_stop && (p.name||'').trim()===n);
+    if(at0 >= 0){ list[at0].is_stop = true; return; }
     const src = _stops().find(s=>(s.name||'').trim()===n);
     const c = src && dmsToDecimal(src.coord);
     if(!c) return;
@@ -1835,7 +1865,6 @@ function rptFixAll(){
   renderEditor();
   _saveMsg('②に合わせて直しました。前後の目印をご確認ください。', true);
 }
-
 function setRSeg(seg){
   rptSyncFromInputs();
   if(selRSeg !== seg){ selRScen = ''; selRRoute = ''; }   // 便が変われば送迎もルートも選び直し
@@ -1998,7 +2027,7 @@ function rptFillFromStops(){
   const _skip = _skipNames();
   const src = (selRSeg==='登校')
     ? stops.filter(s=>!s.gekou_only)
-    : _gekouIdx().map(i=>stops[i]).filter(s=>_skip.indexOf((s.name||'').trim()) < 0);
+    : _gekouStopIdx().map(i=>stops[i]).filter(s=>_skip.indexOf((s.name||'').trim()) < 0);
   const pts=[], skipped=[];
   src.forEach(s=>{
     const c=dmsToDecimal(s.coord);
@@ -2212,7 +2241,7 @@ function _endPtsHere(){
     const stops = _stops();
     const src = (selRSeg==='登校')
       ? stops.filter(s=>!s.gekou_only)
-      : _gekouIdx().map(i=>stops[i]);
+      : _gekouStopIdx().map(i=>stops[i]);
     const cv = src.map(s=>{ const d=dmsToDecimal(s.coord); return d ? { name:s.name||'', lat:d.lat, lng:d.lng } : null; }).filter(Boolean);
     return cv.length ? { from:cv[0], to:cv[cv.length-1] } : { from:null, to:null };
   }
