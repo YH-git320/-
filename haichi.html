@@ -39,6 +39,8 @@ button.mini{font-size:12px;padding:6px 10px;}
 #asgBox .bd{padding:14px 16px;}
 #asgBox .ft{position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);padding:12px 16px;display:flex;gap:8px;justify-content:flex-end;}
 .duty{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fbfdfb;}
+.onlyday{display:inline-block;background:#fdf0e4;border:1px solid #e0c6a2;color:#8a5a1a;
+  border-radius:6px;padding:1px 7px;font-size:11px;font-weight:700;margin:0 2px;}
 .duty .dh{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
 .duty .seg{font-weight:700;color:var(--g2);font-size:14px;}
 .duty .tm{font-size:12px;color:#6b7d72;}
@@ -102,6 +104,7 @@ button.mini{font-size:12px;padding:6px 10px;}
       <span class="muted" style="font-size:11px;">月間予定の日課をもとに便を作ります。既にある便はそのまま（担当者は消えません）。</span>
     </div>
     <div id="hMismatch"></div>
+    <div id="hSkips"></div>
     <div class="muted" style="font-size:11px;margin-top:6px;">
       上部3行＝<b>必要</b>（コースごとの必要人数×便数）／<b>配置</b>（割り当て済み）／<b>不足</b>（赤は要対応）。<br>
       セル内は便ごとの担当者。<b>登</b>=登校便／<b>①②</b>=下校便。未割り当ては「—」。土＝青／日祝＝赤。<br>
@@ -1073,7 +1076,7 @@ async function hLoadMonth(){
   const start=ym+'-01', end=ym+'-'+_p2(_dim(ym));
   DUTIES={}; CREW={}; DIRTY={}; DIRTYV={}; DIRTYS={};
   // 乗務は埋め込みで一緒に取る（IDをURLに並べると長さ上限を超えるため）
-  const ds = await _fetchAll(`duties?work_date=gte.${start}&work_date=lte.${end}&select=id,work_date,course_id,segment,seq,start_time,driver_need,attendant_need,vehicle_id,scenario_id,duty_crew(id,staff_id,role)&order=course_id,work_date,seq`);
+  const ds = await _fetchAll(`duties?work_date=gte.${start}&work_date=lte.${end}&select=id,work_date,course_id,segment,seq,start_time,driver_need,attendant_need,vehicle_id,scenario_id,manual_fields,manual_added,duty_crew(id,staff_id,role)&order=course_id,work_date,seq`);
   ds.forEach(d=>{
     (DUTIES[_key(d.course_id,d.work_date)] = DUTIES[_key(d.course_id,d.work_date)]||[]).push(d);
     const cw = Array.isArray(d.duty_crew) ? d.duty_crew : [];
@@ -1158,6 +1161,7 @@ function _headHtml(ym,y,m,dim,HOL,firstLabel){
 
 function hRender(){
   hRenderMismatch();
+  hRenderSkips();
   if(TAB==='人別'){ hRenderPerson(); return; }
   if(TAB==='車両別'){ hRenderVehicle(); return; }
   const ym=_ym(); if(!ym) return;
@@ -1355,12 +1359,25 @@ function hOpenAsg(cid,date){
   ds.forEach(d=>{
     const need=_needOf(d); const cw=_crewOf(d);
     const opts=_optsFor(cid, d.segment);   // 便ごとに候補を組む（登校便／下校便で実績が違うため）
+    const nf = TAB==='添乗員' ? 'attendant_need' : 'driver_need';
     h+=`<div class="duty"><div class="dh"><span class="seg">${escHtml(d.segment)}</span>`
       +`<span class="tm">${d.start_time?escHtml(_hm(d.start_time))+' 発':''}</span>`
-      +`<span class="muted">必要 ${need}名</span></div>`;
+      +`<span class="muted">必要 ${need}名</span>`
+      +`<button class="mini" style="margin-left:auto;border-color:#e0b4ac;color:#a5382c;" onclick="hSkipDuty(${d.id})" title="この日のこの便を走らせないことにします">この便は走らせない</button></div>`;
+    // 🔴 その日だけの変更（時刻・必要人数・車両）。印が付くとマスタの反映から守られる
+    h+=`<div class="crewline"><span class="lb">🕒 時刻</span>`
+      +`<input id="tm_${d.id}" value="${escAttr(d.start_time||'')}" placeholder="14:05" style="width:76px;">`
+      +`<button class="mini" onclick="hSetField(${d.id},'start_time')">この日だけ変える</button>`
+      +`${_odBadge(d,'start_time')}</div>`;
+    h+=`<div class="crewline"><span class="lb">👥 必要人数</span>`
+      +`<input id="nd_${d.id}" type="number" min="0" max="9" value="${need}" style="width:56px;">`
+      +`<button class="mini" onclick="hSetField(${d.id},'${nf}')">この日だけ変える</button>`
+      +`${_odBadge(d,nf)}</div>`;
     // 車両（便ごと。代車の日はここだけ変える）
     h+=`<div class="crewline"><span class="lb">🚌 車両</span>`
-      +`<select id="veh_${d.id}">${_vehOptsFor(cid)}</select></div>`;
+      +`<select id="veh_${d.id}">${_vehOptsFor(cid)}</select>`
+      +`<button class="mini" onclick="hSetField(${d.id},'vehicle_id')">この日だけ変える</button>`
+      +`${_odBadge(d,'vehicle_id')}</div>`;
     // 添乗員送迎シナリオ（便ごと。運行ボタンの案内と出庫時刻がこれで決まる）
     const sc=_scenOptsFor(cid, d.segment);
     if(sc) h+=`<div class="crewline"><span class="lb">🧑 添乗員送迎</span>`
@@ -1577,7 +1594,7 @@ async function hSave(){
       if(!rc.ok){ status('保存に失敗しました（元のデータは残っています）：'+(await rc.text()).slice(0,120), false); return; }
     }
     DIRTY={}; DIRTYV={}; DIRTYS={}; _dirtyView();
-    await hLoadMonth(); await hLoadHist(); await hLoadMismatch(); hRender();
+    await hLoadMonth(); await hLoadHist(); await hLoadMismatch(); await hLoadSkips(); hRender();
     status('保存しました', true);
   }catch(e){ status('保存に失敗しました：'+e.message, false); }
   finally{
@@ -1586,6 +1603,124 @@ async function hSave(){
     const b=document.getElementById('hSaveBtn');
     if(b){ b.disabled=false; b.textContent=_label||'💾 変更を保存'; b.style.opacity=''; }
   }
+}
+
+/* 🔴 「この日だけ」の変更（2026-08-26 八重樫さんの指示）。
+   正本：業務管理システム_マスタ連動の原則
+
+   > 配置画面、月間予定などはマスタの反映を確認することと、
+   > イレギュラーで変更するその日だけのための変更が可能な状態にすることが絶対的に大切です。
+
+   印が付いた項目は、マスタを保存しても上書きされない。印を外すとその場でマスタの値に戻る。
+   ⚠️ 過去の便・人数が入っている便・運行ボタンの記録がある便は、データベース側で断られる。
+   ⚠️ 項目は決め打ちにしない。`manual_fields` に名前を並べるだけなので、増えても仕組みは変わらない。 */
+const OD_LABEL = { start_time:'時刻', vehicle_id:'車両',
+                   driver_need:'運転手の必要人数', attendant_need:'添乗員の必要人数' };
+function _odMarked(d, f){ return (d.manual_fields||[]).indexOf(f) >= 0; }
+function _odBadge(d, f){
+  return _odMarked(d, f)
+    ? `<span class="onlyday" title="マスタを保存してもここは上書きされません">この日だけ</span>`
+      + `<button class="mini" onclick="hClearField(${d.id},'${f}')" title="印を外し、その場でマスタの値に戻します">マスタに戻す</button>`
+    : '';
+}
+async function hSetField(id, f){
+  const el = document.getElementById((f==='start_time'?'tm_':f==='vehicle_id'?'veh_':'nd_') + id);
+  if(!el) return;
+  const v = String(el.value == null ? '' : el.value).trim();
+  try{
+    const r = await fetch(`${REST_URL}/rpc/set_duty_field`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ p_id: id, p_field: f, p_value: v }) });
+    const t = await r.text();
+    if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
+      status('変えられませんでした（元のデータは残っています）：' + ((j&&j.message)||t).slice(0,150), false); return; }
+    const j = JSON.parse(t);
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); hRender();
+    if(CUR) hOpenAsg(CUR.cid, CUR.date);
+    status(`${j.work_date} ${j.segment} の${OD_LABEL[f]||f}を「この日だけ」変えました（${j.old||'—'} → ${j.new||'—'}）`, true);
+  }catch(e){ status('変えられませんでした：'+e.message, false); }
+}
+async function hClearField(id, f){
+  if(!confirm(`「この日だけ」の印を外し、運行時程マスタの値に戻します。\n\n`
+    + `　${OD_LABEL[f]||f}\n\n`
+    + `いま入れている値は失われます。よろしいですか。`)) return;
+  try{
+    const r = await fetch(`${REST_URL}/rpc/clear_duty_field`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ p_id: id, p_field: f }) });
+    const t = await r.text();
+    if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
+      status('戻せませんでした（元のデータは残っています）：' + ((j&&j.message)||t).slice(0,150), false); return; }
+    const j = JSON.parse(t);
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); hRender();
+    if(CUR) hOpenAsg(CUR.cid, CUR.date);
+    status(`${j.work_date} ${j.segment} の${OD_LABEL[f]||f}をマスタに戻しました（${j.old||'—'} → ${j.new||'—'}）`, true);
+  }catch(e){ status('戻せませんでした：'+e.message, false); }
+}
+/** この日のこの便は走らせない。マスタが求めていても作り直さない */
+async function hSkipDuty(id){
+  const d = (DUTIES[_key(CUR.cid,CUR.date)]||[]).find(x=>x.id===id);
+  if(!d) return;
+  const cw = (CREW[id]||[]);
+  const why = prompt(`この日のこの便を「走らせない」にします。\n`
+    + `　${d.work_date} ${d.segment} ${d.start_time||''}\n`
+    + (cw.length ? `　⚠️ 配置されている ${cw.length}名 も外れます\n` : '')
+    + `　※ 運行時程マスタを保存しても、この便は作り直されません\n\n`
+    + `理由を入れてください（あとから見て分かるように）`, '');
+  if(why === null) return;
+  try{
+    const r = await fetch(`${REST_URL}/rpc/skip_duty`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ p_id: id, p_reason: why }) });
+    const t = await r.text();
+    if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
+      status('できませんでした（元のデータは残っています）：' + ((j&&j.message)||t).slice(0,150), false); return; }
+    const j = JSON.parse(t);
+    hCloseAsg();
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); hRender();
+    status(`${j.work_date} ${j.segment} を走らせないことにしました`
+      + (j.crew_count ? `（${j.crew} が外れました）` : ''), true);
+  }catch(e){ status('できませんでした：'+e.message, false); }
+}
+/** 「走らせない」を取り消し、マスタどおりに戻す */
+async function hUnskipDuty(cid, date, seg){
+  if(!confirm(`${date} ${seg} の「走らせない」を取り消し、運行時程マスタどおりに戻します。\n\nよろしいですか。`)) return;
+  try{
+    const r = await fetch(`${REST_URL}/rpc/unskip_duty`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ p_course: cid, p_date: date, p_segment: seg }) });
+    const t = await r.text();
+    if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
+      status('戻せませんでした：' + ((j&&j.message)||t).slice(0,150), false); return; }
+    const j = JSON.parse(t);
+    await hLoadMonth(); await hLoadSkips(); await hLoadMismatch(); await hLoadSkips(); hRender();
+    status(j.restored ? `${j.work_date} ${j.segment} ${j.start_time||''} を戻しました`
+                      : `取り消しました（${j.why}）`, true);
+  }catch(e){ status('戻せませんでした：'+e.message, false); }
+}
+/** この月の「走らせない」を読む */
+let SKIPS = [];
+async function hLoadSkips(){
+  const ym=_ym(); if(!ym){ SKIPS=[]; return; }
+  const start=ym+'-01', end=ym+'-'+_p2(_dim(ym));
+  try{
+    const r = await fetch(`${REST_URL}/duty_skips?work_date=gte.${start}&work_date=lte.${end}`
+      + `&select=course_id,work_date,segment,reason&order=work_date,segment`, { headers:getH() });
+    SKIPS = r.ok ? (await r.json() || []) : [];
+  }catch(e){ SKIPS = []; }
+}
+function hRenderSkips(){
+  const el = document.getElementById('hSkips');
+  if(!el) return;
+  if(!SKIPS.length){ el.innerHTML=''; return; }
+  const nm = cid => { const c=CRS.find(x=>x.id===cid)||{}; return (c.school_name||'')+' ／ '+(c.course_name||''); };
+  el.innerHTML = `<div style="background:#f2f5f8;border:1px solid #c9d6e2;border-radius:10px;padding:10px 13px;margin:8px 0;">
+    <div style="font-weight:700;color:#2d5f96;font-size:13px;">走らせないことにした便（${SKIPS.length}件）</div>
+    <div style="font-size:12px;color:#5b6b63;line-height:1.75;margin-top:3px;">
+      運行時程マスタを保存しても、この便は作り直されません。
+    </div>
+    ${SKIPS.map(s=>`<div style="padding:5px 0;border-top:1px solid #e2e9f0;font-size:12.5px;line-height:1.8;">
+      <b>${escHtml(String(s.work_date))}</b>　${escHtml(nm(s.course_id))}　${escHtml(s.segment)}
+      <span class="muted">${escHtml(s.reason||'')}</span>
+      <button class="mini" onclick="hUnskipDuty(${s.course_id},'${escAttr(String(s.work_date))}','${escAttr(s.segment)}')">走らせるに戻す</button>
+    </div>`).join('')}
+  </div>`;
 }
 
 /* 運行経路データと便の食い違い（2026-08-26）。
@@ -1753,7 +1888,7 @@ async function hRetimeDuty(id){
     if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
       status('直せませんでした（元のデータは残っています）：' + ((j && j.message) || t).slice(0,150), false); return; }
     const j = JSON.parse(t);
-    await hLoadMonth(); await hLoadMismatch(); hRender();
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); hRender();
     status(`${_hMDate(j.work_date)} ${j.segment} の時刻を ${j.old_time} → ${j.new_time} に直しました`
       + (j.crew ? `（${j.crew} はそのまま）` : ''), true);
   }catch(e){ status('直せませんでした（元のデータは残っています）：' + e.message, false); }
@@ -1783,7 +1918,7 @@ async function hDeleteDuty(id){
     if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
       status('取り消せませんでした（元のデータは残っています）：' + ((j && j.message) || t).slice(0,150), false); return; }
     const j = JSON.parse(t);
-    await hLoadMonth(); await hLoadMismatch(); hRender();
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); hRender();
     status(`${_hMDate(j.work_date)} ${j.segment} ${j.start_time||''} の配置を取り消しました`
       + (j.crew_count ? `（${j.crew} が外れました）` : ''), true);
   }catch(e){ status('取り消せませんでした（元のデータは残っています）：' + e.message, false); }
@@ -1803,7 +1938,7 @@ async function hGenerate(){
     const t = await r.text();
     if(!r.ok){ status('作成に失敗しました（元のデータは残っています）：'+t.slice(0,150), false); return; }
     let j={}; try{ j=JSON.parse(t); }catch(e){}
-    await hLoadMonth(); await hLoadMismatch(); hRender();
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); hRender();
     status(`便を作成しました（新規 ${j.created??'?'}件／この月の合計 ${j.total_now??'?'}件）`, true);
   }catch(e){ status('作成に失敗しました（元のデータは残っています）：'+e.message, false); }
 }
@@ -1814,13 +1949,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!ok) return;
   const now=new Date();
   document.getElementById('hMonth').value = `${now.getFullYear()}-${_p2(now.getMonth()+1)}`;
-  document.getElementById('hMonth').addEventListener('change', async ()=>{ await hLoadMonth(); await hLoadMismatch(); hRender(); });
+  document.getElementById('hMonth').addEventListener('change', async ()=>{ await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); hRender(); });
   document.getElementById('hFilter').addEventListener('input', hRender);
   document.getElementById('hPref').addEventListener('change', hRender);
   try{
     await hLoadBase();
     await hLoadMonth();
-    await hLoadMismatch();
+    await hLoadMismatch(); await hLoadSkips();
     hRender();
   }catch(e){ status('読み込みに失敗しました：'+e.message, false); }
 
