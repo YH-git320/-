@@ -1416,12 +1416,71 @@ function _updPreview(){ const el=document.getElementById('gekouPreview'); if(el)
 
 function updToukou(field, val){ const c=_c(); if(c) c[field]=val; }
 function toggleActive(){ const c=_c(); if(c){ c.active=!c.active; renderEditor(); renderCourseList(); } }
-function updFormName(fi,val){ FORMS[String(selCourseId)][fi].form_name = val; }
+/** ②で日課名を変えたら、④の経路もその場で付け替える（2026-08-26）。
+ *  ⚠️ 経路は日課の「名前」で紐づいているので、付け替えないと
+ *     名前を変えたとたんに④の道が画面から消えたように見える。 */
+function _routePtsOfForm(nm){
+  const box = RPTS[String(selCourseId)] || {};
+  let n = 0; const pre = nm + RK;
+  Object.keys(box).forEach(kk=>{ if(kk.indexOf(pre) === 0) n += (box[kk]||[]).length; });
+  return n;
+}
+function _renameRouteForm(from, to){
+  const key = String(selCourseId);
+  const box = RPTS[key]; if(!box) return 0;
+  let n = 0; const next = {};
+  Object.keys(box).forEach(kk=>{
+    const p = kk.split(RK);
+    if(p[0] === from){ p[0] = to; n += (box[kk]||[]).length; }
+    next[p.join(RK)] = box[kk];
+  });
+  RPTS[key] = next;
+  return n;
+}
+function updFormName(fi, val){
+  const arr = FORMS[String(selCourseId)] || [];
+  const f = arr[fi]; if(!f) return;
+  const from = (f.form_name||'').trim(), to = (val||'').trim();
+  if(from === to){ f.form_name = val; return; }
+  /* ⚠️ 同じ名前が他にあると、④の経路がぶつかって片方が消える。
+     版の中で日課名は一意でなければならない */
+  if(to && arr.some((g,i)=>i!==fi && (g.form_name||'').trim() === to)){
+    _saveMsg(`日課名「${to}」は既にあります。別の名前にしてください。`, false);
+    renderEditor(); return;   // 入力を元に戻す
+  }
+  f.form_name = val;
+  let moved = 0;
+  if(from && to) moved = _renameRouteForm(from, to);
+  if(selRForm === from) selRForm = to;
+  renderEditor();
+  if(moved) _saveMsg(`「${from}」→「${to}」に変えました。④の経路 ${moved}地点も一緒に付け替えました（保存すると確定します）。`, true);
+}
+function delForm(fi){
+  const arr = FORMS[String(selCourseId)] || [];
+  const f = arr[fi]; if(!f) return;
+  const nm = (f.form_name||'').trim();
+  const n = nm ? _routePtsOfForm(nm) : 0;
+  if(n && !confirm(`日課「${nm}」を消します。\n\n④に入っている ${n}地点の道は、どの日課にも属さなくなります（消えはしません）。\n④の画面に「使われていない日課」として残るので、あとで他の日課へコピーできます。\n\nよろしいですか。`)) return;
+  arr.splice(fi, 1);
+  if(selRForm === nm) selRForm = '';
+  renderEditor();
+}
+/** どの日課にも属さなくなった経路の日課名（消さずに画面へ出す） */
+function _orphanForms(){
+  const box = RPTS[String(selCourseId)] || {};
+  const live = {}; _routeForms().forEach(f=>live[f.name] = true);
+  const out = {};
+  Object.keys(box).forEach(kk=>{
+    const nm = kk.split(RK)[0];
+    if(nm && !live[nm] && (box[kk]||[]).length) out[nm] = (out[nm]||0) + box[kk].length;
+  });
+  return Object.keys(out).map(nm=>({ name:nm, n:out[nm] }));
+}
 function updFormTime(fi,ti,val){ FORMS[String(selCourseId)][fi].gekou_departures[ti]=val; renderEditor(); }
 function addFormTime(fi){ FORMS[String(selCourseId)][fi].gekou_departures.push(''); renderEditor(); }
 function delFormTime(fi,ti){ FORMS[String(selCourseId)][fi].gekou_departures.splice(ti,1); renderEditor(); }
 function addForm(){ (FORMS[String(selCourseId)]=FORMS[String(selCourseId)]||[]).push({form_name:'',gekou_departures:[''],after_toukou:'',after_toukou_place:'',dep_overrides:{}}); renderEditor(); }
-function delForm(fi){ FORMS[String(selCourseId)].splice(fi,1); renderEditor(); }
+
 // 登校後の車両（コース既定／日課上書き）と下校の逆算リード
 function updAfterToukou(val){ const c=_c(); if(c){ c.after_toukou=val; renderEditor(); } }
 function updShukkoLead(){ const g=id=>{const e=document.getElementById(id);return e?parseInt(e.value||'0',10)||0:0;}; const t=g('shLeadH')*60+g('shLeadM'); const c=_c(); if(c){ c.gekou_shukko_lead = t>0?t:null; renderEditor(); } }
@@ -2436,7 +2495,9 @@ function renderRoutePoints(){
     + '<span style="align-self:center;color:#cfe0d5;">｜</span>'
     + (_rForms.length
         ? _rForms.map(f=>_formBtn(f.name, escHtml(f.name)+(f.deps.length>1?`<span style="font-weight:400;opacity:.8;"> ${f.deps.length}便</span>`:''), selRForm===f.name, _cntFor(f.name))).join('')
-        : '<span class="muted" style="align-self:center;font-size:12px;">②下校便のタブで日課を作ると、ここに並びます</span>');
+        : '<span class="muted" style="align-self:center;font-size:12px;">②下校便のタブで日課を作ると、ここに並びます</span>')
+    + _orphanForms().map(o=>_formBtn(o.name,
+        '⚠️ 使われていない日課：' + escHtml(o.name), selRForm===o.name, o.n)).join('');
   // 段2
   let segBtns;
   if(selRForm === ''){
@@ -2721,6 +2782,14 @@ async function saveCourse(){
   await ensureFreshToken();
   try{
     // 検証：時刻はあるのに日課名が空の行があれば中止（取りこぼし防止）
+    /* ⚠️ 日課名が重なると、④の経路が同じ鍵になってどちらかが消える（2026-08-26） */
+    {
+      const nm = (FORMS[key]||[]).map(f=>(f.form_name||'').trim()).filter(Boolean);
+      const dup = nm.filter((v,i)=>nm.indexOf(v) !== i);
+      if (dup.length){
+        _saveMsg('日課名が重なっています：' + [...new Set(dup)].join('、') + '。同じ名前があると④の道が消えてしまうため、別の名前にしてから保存してください。', false); return;
+      }
+    }
     if ((FORMS[key]||[]).some(f => !(f.form_name||'').trim() && (f.gekou_departures||[]).some(t=>t))){
       _saveMsg('日課名が空の行があります。A・B・C… の日課名を入れてから保存してください。', false); return;
     }
