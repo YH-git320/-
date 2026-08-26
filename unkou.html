@@ -1899,6 +1899,35 @@ function rptAddRoute(){
   rptSyncFromInputs(); selRRoute = nm; rptSelIdx = null; rptPick = {}; renderEditor();
   _saveMsg(`サブルート「${nm}」を作りました。地点を入れてください（空のままだと保存されません）。`, true);
 }
+/** いま選んでいる送迎の名前（表示用） */
+function _scenLabelNow(){
+  if(!selRScen) return '送迎なし';
+  const s = _scenList().find(x => String(x.dbId) === String(selRScen));
+  return (s && s.label) ? s.label : ('送迎' + selRScen);
+}
+/** いま開いているサブルートを消す。
+ *  ⚠️ メインは消せない（回送そのものが無くなってしまうため）。
+ *     消したいときは地点を1つずつ消すか、この便を使わない設定にする。 */
+function rptDelRoute(){
+  if(!_isKaisou(selRSeg)){ _saveMsg('サブルートは回送だけの仕組みです。', false); return; }
+  if(!selRRoute){ _saveMsg('メインは消せません。消したいサブルートを選んでから押してください。', false); return; }
+  rptSyncFromInputs();
+  const box = RPTS[String(selCourseId)] || {};
+  const kk  = _rkey();
+  const n   = (box[kk] || []).length;
+  const nm  = selRRoute;
+  const where = (selRForm ? ('日課 ' + selRForm + ' の ') : '') + (R_SEG_LABEL[selRSeg] || selRSeg);
+  if(!confirm(`サブルート「${nm}」を消します。`
+    + `\n\n　場所：${where} ／ ${_scenLabelNow()}`
+    + `\n　地点：${n}件`
+    + `\n\n※ ここだけが消えます。同じ名前でも、ほかの送迎・ほかの便のサブルートは残ります。`
+    + `\n※ 「このコースを保存」を押した時点で確定します。`)) return;
+  delete box[kk];
+  selRRoute = '';
+  rptSelIdx = null; rptPick = {};
+  renderEditor();
+  _saveMsg(`サブルート「${nm}」（${n}地点）を消しました。保存すると確定します。`, true);
+}
 
 /* ===== 出発地・到着地は①②で決まる =====
    経路の両端は独立した項目ではなく「並びの1番目と最後」そのもの。
@@ -2604,6 +2633,7 @@ function renderRoutePoints(){
       <span class="muted" style="font-size:13px;flex:0 0 auto;">ルート</span>
       <select onchange="setRRoute(this.value)" style="font-size:14px;padding:5px 8px;">${rOpts}</select>
       <button class="mini" onclick="rptAddRoute()">＋ サブルートを追加</button>
+      ${selRRoute ? `<button class="mini" onclick="rptDelRoute()" title="${escAttr('いま開いているサブルート「'+selRRoute+'」を消します')}">🗑 このサブルートを消す</button>` : ''}
       <button class="mini" onclick="rptSeedKaisou()">🅿 分かっている地点から下書き</button>
       ${unsaved?`<span style="font-size:12px;color:#c0392b;">※ まだ保存していない送迎が${unsaved}件あります。保存すると選べます。</span>`:''}
     </div>`;
