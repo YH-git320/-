@@ -1115,7 +1115,7 @@ function _refDeparture(){
   for(const f of forms){ for(const t of (f.gekou_departures||[])){ if(t) return t; } }
   return '';
 }
-async function selectCourse(id){ selCourseId = id; selVerId = latestVerId(id); _nvOpen=false; rptSelIdx=null; rptPick={}; if(selVerId) await loadVersionInto(id, selVerId); selRefD = _refDeparture() || '14:00'; renderCourseList(); renderEditor(); }
+async function selectCourse(id){ selCourseId = id; loadFormUsage(id); selVerId = latestVerId(id); _nvOpen=false; rptSelIdx=null; rptPick={}; if(selVerId) await loadVersionInto(id, selVerId); selRefD = _refDeparture() || '14:00'; renderCourseList(); renderEditor(); }
 async function changeVersion(verId){ selVerId = Number(verId); await loadVersionInto(selCourseId, selVerId); selRefD = _refDeparture() || '14:00'; renderEditor(); }
 function _nextApril(){ const d=new Date(); const y=d.getFullYear(); const ny=(d.getMonth()+1>=4)?y+1:y; return ny+'-04-01'; }
 // 編集タブ（主要・登校便／下校便／添乗員送迎）。再描画せず表示切替＝入力途中も保持・軽快
@@ -1217,6 +1217,8 @@ function renderEditor(){
       <div class="line" style="flex-wrap:wrap;"><label class="fld" style="margin:0;">日課</label>
         <input type="text" value="${escAttr(f.form_name)}" placeholder="例：A" onchange="updFormName(${fi},this.value)" style="width:80px;">
         ${carSel}
+        ${(function(){ const n=_usageOf((f.form_name||'').trim());
+          return n ? `<span class="muted" style="font-size:11.5px;">月間予定で <b>${n}日</b> 使用中</span>` : ''; })()}
         <button class="link" onclick="delForm(${fi})" style="margin-left:auto;">この日課を削除</button></div>
       ${carPlace}
       ${bins}
@@ -1299,6 +1301,7 @@ function renderEditor(){
     <div class="line" style="margin:0 0 8px;flex-wrap:wrap;font-size:12px;align-items:center;gap:4px;">
       <span class="muted" style="flex:0 0 auto;">配車＝下校便出発の</span><input type="number" min="0" id="haLeadM" value="${c.gekou_haisha_lead!=null?c.gekou_haisha_lead:''}" onchange="updHaishaLead()" style="flex:0 0 auto;width:64px;text-align:center;"><span class="muted" style="flex:0 0 auto;">分前</span>
     </div>
+    ${_orphanFormBox()}
     ${formsHtml}
     <button class="mini" onclick="addForm()">＋日課を追加</button>
 
@@ -1471,7 +1474,11 @@ function delForm(fi){
   const f = arr[fi]; if(!f) return;
   const nm = (f.form_name||'').trim();
   const n = nm ? _routePtsOfForm(nm) : 0;
-  if(n && !confirm(`日課「${nm}」を消します。\n\n④に入っている ${n}地点の道は、どの日課にも属さなくなります（消えはしません）。\n④の画面に「使われていない日課」として残るので、あとで他の日課へコピーできます。\n\nよろしいですか。`)) return;
+  const days = nm ? _usageOf(nm) : 0;
+  if((n || days) && !confirm(`日課「${nm}」を消します。`
+    + (days ? `\n\n⚠️ 月間予定で ${days}日分 使われています。消すと、その日の日課が行き先を失います。\n　　（②を保存したあと、この画面の上に「置き換える」が出ます）` : '')
+    + (n ? `\n\n④に入っている ${n}地点の道は、どの日課にも属さなくなります（消えはしません）。\n　　④の画面に「使われていない日課」として残るので、あとで他の日課へコピーできます。` : '')
+    + `\n\nよろしいですか。`)) return;
   arr.splice(fi, 1);
   if(selRForm === nm) selRForm = '';
   renderEditor();
@@ -1745,6 +1752,73 @@ function _diffBox(){
       <button class="mini" onclick="rptFillFromStops()" title="②のバス停だけで作り直します。曲がり角の目印は消えます">②から全部作り直す</button>
       <span class="muted" style="font-size:11.5px;">⚠️ バス停を外しても地点は道の目印として残ります。差し込んだ場合は前後の道をご確認ください</span>
     </div>
+  </div>`;
+}
+
+/* ②の日課が、月間予定で何日使われているか（2026-08-26）。
+   ⚠️ 日課を消す前・名前を変える前に影響が見えるようにする。
+      また、月間予定に「いまは無い日課」が残っていないかを知らせる。
+   八重樫さん：「マスタを保存したらそれに連動するように対応してもらいたい」 */
+let FORM_USAGE = {};   // course_id → [{form_name, days, first_date, last_date, exists_now}]
+async function loadFormUsage(cid){
+  const k = String(cid);
+  try{
+    const r = await fetch(`${REST_URL}/rpc/course_form_usage`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ p_course_id: cid }) });
+    FORM_USAGE[k] = r.ok ? (await r.json() || []) : [];
+  }catch(e){ FORM_USAGE[k] = []; }
+}
+function _usageOf(nm){
+  const list = FORM_USAGE[String(selCourseId)] || [];
+  const u = list.find(x => x.form_name === nm);
+  return u ? u.days : 0;
+}
+/** 月間予定に残っているが、いまは無い日課 */
+function _orphanUsage(){
+  return (FORM_USAGE[String(selCourseId)] || []).filter(x => !x.exists_now);
+}
+/** 迷子になっている日課を、いまある日課へまとめて置き換える */
+async function fixOrphanForm(from, sel){
+  const to = (sel && sel.value) ? sel.value : '';
+  if(!to){ _saveMsg('置き換え先の日課を選んでください。', false); return; }
+  const u = (FORM_USAGE[String(selCourseId)] || []).find(x => x.form_name === from);
+  const n = u ? u.days : 0;
+  if(!confirm(`月間予定の「${from}」（${n}日分）を「${to}」に置き換えます。\n\n`
+    + `※ その日に走る便の数と時刻は「${to}」の内容になります。\n`
+    + `※ 月間予定の画面（yotei.html）からも直せます。\n\nよろしいですか。`)) return;
+  await ensureFreshToken();
+  const r = await fetch(`${REST_URL}/rpc/rename_course_form`, { method:'POST', headers:getH(),
+    body: JSON.stringify({ p_course_id: selCourseId, p_from: from, p_to: to }) });
+  if(!r.ok){ const t = await r.text(); _saveMsg('置き換えに失敗：' + t.slice(0,120), false); return; }
+  const cnt = await r.json();
+  await loadFormUsage(selCourseId);
+  renderEditor();
+  _saveMsg(`月間予定の「${from}」${cnt}日分を「${to}」に置き換えました。`, true);
+}
+/** 迷子の知らせ（②の日課一覧の上に出す） */
+function _orphanFormBox(){
+  const orphans = _orphanUsage();
+  if(!orphans.length) return '';
+  const opts = (FORMS[String(selCourseId)] || [])
+    .filter(f => (f.form_name||'').trim())
+    .map(f => {
+      const deps = (f.gekou_departures||[]).filter(t=>t);
+      return `<option value="${escAttr(f.form_name.trim())}">${escHtml(f.form_name.trim())}（${deps.length}便 ${escHtml(deps.join('・'))}）</option>`;
+    }).join('');
+  if(!opts) return '';
+  return `<div style="background:#fdf6e8;border:1px solid #e0c6a2;border-radius:10px;padding:10px 12px;margin:0 0 10px;">
+    <div style="font-weight:700;color:#8a6d1f;font-size:13px;">⚠️ 月間予定に、いまは無い日課が使われています</div>
+    <div style="font-size:12px;color:#5b6b63;margin:4px 0 6px;line-height:1.7;">
+      日課の名前を変えるとふつうは月間予定も一緒に変わりますが、これは<b>その仕組みができる前に変えられたもの</b>です。<br>
+      置き換え先を選んで「置き換える」を押すと直ります。<b>その日に走る便の数と時刻は、置き換え先の内容になります。</b>
+    </div>
+    ${orphans.map(o=>`<div class="line" style="gap:6px;flex-wrap:wrap;align-items:center;margin:3px 0;font-size:12.5px;">
+      <span style="font-weight:700;color:#b0451f;">${escHtml(o.form_name)}</span>
+      <span class="muted">${o.days}日分（${escHtml(String(o.first_date||''))} 〜 ${escHtml(String(o.last_date||''))}）</span>
+      <span class="muted">→</span>
+      <select id="orph-${escAttr(o.form_name)}" style="font-size:12px;padding:3px 6px;">${opts}</select>
+      <button class="mini" onclick="fixOrphanForm('${escAttr(o.form_name)}', document.getElementById('orph-${escAttr(o.form_name)}'))">置き換える</button>
+    </div>`).join('')}
   </div>`;
 }
 
@@ -2892,6 +2966,7 @@ async function saveCourse(){
         else { const t=await rr.text(); _saveMsg('予定表の日課名の付け替えに失敗：'+t.slice(0,100), false); return; }
       }
       if(ren.length) FORM_RENAMES[key] = [];
+      await loadFormUsage(c.id);   // 名前を変えたあとの使用状況を読み直す
     }
     // 3) バス停・ルート（このコースを置き換え）
     const stopsCount = (STOPS[key]||[]).filter(s=>(s.name||'').trim()||(s.address||'').trim()).length;
