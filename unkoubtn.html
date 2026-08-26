@@ -108,6 +108,9 @@
     padding:14px 16px;font-size:16px;font-weight:700;margin-bottom:14px;}
   .prev{background:var(--amber-tint);border:2px solid #e6d3a8;color:var(--amber);border-radius:12px;
     padding:12px 15px;font-size:15px;font-weight:700;margin-bottom:14px;}
+  .nextseg{margin:14px 0 4px;}
+  .nextseg button{font-family:inherit;width:100%;font-size:19px;font-weight:700;border-radius:12px;
+    padding:16px 14px;border:2px solid var(--brand);background:var(--brand);color:#fff;cursor:pointer;}
   .segbtns{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
   .segbtns button{font-family:inherit;font-size:16px;font-weight:700;border-radius:10px;padding:10px 16px;
     border:2px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;}
@@ -277,7 +280,9 @@ function render(){
     else if(evOf('到着', ns.seq)) act = '出発';
     _t.textContent = '▶ ' + ns.label + '　' + act;
   } else {
-    _t.textContent = '✓ ' + cur.label + ' は終わりました';
+    const _n2 = nextSeg();
+    _t.textContent = '✓ ' + cur.label + ' は終わりました'
+                   + (_n2 ? '　▶ 次は ' + _n2.label : '');
   }
   _s.textContent = (INFO.course_label||'') + '　' + cur.label + '　'
                  + dateJp(INFO.work_date) + (PREVIEW?'　【見本】':'');
@@ -338,6 +343,8 @@ function render(){
       </div>
       <div class="passrow">${passBtn(i)}</div>`;
       h += legLinks(s);
+    } else if(s.type==='info'){
+      h += legLinks(s);              // 案内だけ。ボタンは出さない
     } else if(i===nowIdx && s.type==='one'){
       h += `<div class="actrow">${actBtn(i,s.kind,s.btn,one)}</div>`;
       h += legLinks(s);              // 帰庫のときは「車庫までの道案内」が出る
@@ -358,16 +365,29 @@ function render(){
     }
     h += '</div>';
   });
+  // この便が全部済んだら、次の便へ進むボタンを大きく出す（朝から順に操作するとき）
+  const _nx = nextSeg();
+  if(nowIdx >= steps.length && _nx){
+    h += `<div class="nextseg"><button onclick="goNextSeg()">▶ 次は ${esc(_nx.label)}</button></div>`;
+  }
   h += '<p class="hint">人数は、運行が一区切りついてから入れても構いません。あとから直せます。</p>';
 
   app.innerHTML = h;
   scrollToNow(nowIdx);
 }
 
-/** 手順を組み立てる：出庫 → 各バス停（着いた→出発） → 帰庫
+/** 手順を組み立てる：出庫 → 🔁回送 → 各バス停（着いた→出発） → 🔁回送 → 帰庫
  *  バス停は「着いた」と「出発」の2段。着いてから出発までの間に乗降と人数入力を行う。
  *  この間は画面を動かさず、**出発を押したときだけ次へ進む**（2026-08-20 八重樫さんの要望）。
- *  曲がり角の目印はボタンにしないが、注意書きがあれば次のバス停にまとめて出す（見落とし防止） */
+ *  曲がり角の目印はボタンにしないが、注意書きがあれば次のバス停にまとめて出す（見落とし防止）
+ *
+ *  ⚠️ 2026-08-26 八重樫さんの指示で、④で決めた回送を**運行の時系列どおり**に並べた。
+ *     それまで回送は出庫・帰庫のカードに畳まれていて、独立して見えなかった。
+ *     回送に**ボタンは付けない**（運転中の操作を増やさない）。次のバス停へ進めば自動で済みになる。
+ *
+ *     この便に入る回送   前の便から（便間回送）＞ 出庫回送 ＞ 車庫＋送迎の乗降地点
+ *     この便を出る回送   次の便へ（便間回送）… あるときは帰庫を出さない
+ *                        無ければ帰庫（帰庫回送 ＞ 送迎の乗降地点＋車庫） */
 function buildSteps(seg){
   const pts = seg.points;
   const gar = garagePoint();                    // そのコースの車庫（座標が入っていれば）
@@ -378,8 +398,26 @@ function buildSteps(seg){
                      '出庫 ' + (tm.shukko  ? String(tm.shukko ).slice(0,5) : '—')].join('　') : null;
   steps.push({ type:'one', kind:'出庫', seq:null, label:'出庫', btn:'出庫した',
                note: plan ? ('この便は添乗員の送迎があります　予定 ' + plan) : null });
+
+  // ── ① この便に入ってくる回送。出庫のすぐ次に置く ──
+  const kaiPrev = kaisouPoints(seg.segment, '前便から');   // 前の便から続いている（2回目以降）
+  const kaiIn   = kaisouPoints(seg.segment, '出庫');
+  const headPts = kaiPrev.length ? kaiPrev
+                : (kaiIn.length ? kaiIn
+                : (gar ? [gar] : []).concat(transferPoints(seg.segment, '前')));
+  const iFirst  = pts.findIndex(p => p.is_stop);
+  let headCard = false;
+  if(headPts.length && iFirst >= 0){
+    steps.push({ type:'info', kind:null, seq:null,
+      label: '🔁 回送　' + (kaiPrev.length ? '前の便から　' : '')
+             + (headPts[0].name || '車庫') + ' → ' + (pts[iFirst].name || ''),
+      legs: chainLegs(dedupePts(headPts.concat(pts.slice(0, iFirst+1)))),
+      subs: kaisouSubs(seg.segment, kaiPrev.length ? '前便から' : '出庫', null, pts.slice(0, iFirst+1)) });
+    headCard = true;
+  }
+
+  // ── ② バス停 ──
   let carry = [];                               // 手前の目印に付いていた注意書き
-  let firstStopDone = false;                    // 最初のバス停＝車庫から来る区間
   pts.forEach((p,idx)=>{
     const n = (p.note||'').trim();
     if(!p.is_stop){ if(n) carry.push(n); return; }
@@ -387,29 +425,43 @@ function buildSteps(seg){
     carry = [];
     steps.push({ type:'stop', seq:p.seq, label:p.name||('地点'+p.seq),
                  note: notes.length ? notes.join('／') : null,
-                 legs: legsTo(pts, idx, gar, seg.segment),
-                 // 渋滞・事故のときに選べるサブルート（会社が用意した道）
-                 subs: firstStopDone ? null : kaisouSubs(seg.segment, '出庫', null, pts.slice(0, idx+1)) });
-    firstStopDone = true;
+                 // 最初のバス停までの道は、上の回送カードが持っている（二重に出さない）
+                 legs: (idx === iFirst && headCard) ? null : legsTo(pts, idx, gar, seg.segment),
+                 subs: null });
   });
   // 最初と最後のバス停に印をつける。
   // 登校便＝最後が学校（全員降りる）／下校便＝最初が学校（全員乗る）
   const stops = steps.filter(s=>s.type==='stop');
   if(stops.length){ stops[0].first = true; stops[stops.length-1].last = true; }
+
+  // ── ③ この便を出る回送 ──
+  // 次の便が続くとき（便間回送）は車庫へ戻らないので、帰庫を出さない
+  const kaiNext = kaisouPoints(seg.segment, '次便へ');
+  if(kaiNext.length && pts.length){
+    const to = kaiNext[kaiNext.length-1];
+    steps.push({ type:'info', kind:null, seq:null,
+      label: '🔁 回送　次の便へ　' + (pts[pts.length-1].name || '') + ' → ' + (to.name || '学校'),
+      note: carry.length ? carry.join('／') : null,
+      legs: chainLegs(dedupePts([pts[pts.length-1]].concat(kaiNext))),
+      subs: kaisouSubs(seg.segment, '次便へ', null, [pts[pts.length-1]]) });
+    return steps;
+  }
   // 便が終わったあとの回送。行き先は車庫とは限らない（登校の後は「他所移動」もある）。
   // ④で道が決まっていれば、その道の**最後の地点が行き先**になる
   const kaiEnd = kaisouPoints(seg.segment, '帰庫');
   const endPt  = kaiEnd.length ? kaiEnd[kaiEnd.length-1] : gar;
+  const tailPts = kaiEnd.length ? kaiEnd : transferPoints(seg.segment,'後').concat(gar ? [gar] : []);
+  if(pts.length && tailPts.length){
+    steps.push({ type:'info', kind:null, seq:null,
+      label: '🔁 回送　' + (pts[pts.length-1].name || '') + ' → ' + (endPt ? (endPt.name || '車庫') : '車庫'),
+      note: carry.length ? carry.join('／') : null,
+      legs: chainLegs(dedupePts([pts[pts.length-1]].concat(tailPts))),
+      subs: (pts.length && gar) ? kaisouSubs(seg.segment, '帰庫', null, [pts[pts.length-1]]) : null });
+    carry = [];
+  }
   steps.push({ type:'one', kind:'帰庫', seq:null, label:'帰庫', btn:'帰庫した',
                note: carry.length ? carry.join('／') : null,
-               mapTo: endPt ? (endPt.name || '車庫') : null,
-               legs: (pts.length && (kaiEnd.length || gar))
-                 ? chainLegs(dedupePts([pts[pts.length-1]].concat(
-                     kaiEnd.length ? kaiEnd
-                                   : transferPoints(seg.segment,'後').concat([gar]))))
-                 : null,
-               subs: (pts.length && gar)
-                 ? kaisouSubs(seg.segment, '帰庫', null, [pts[pts.length-1]]) : null });
+               mapTo: null, legs: null, subs: null });
   return steps;
 }
 
@@ -440,6 +492,7 @@ function garagePoint(){
  *  乗降がなく停まらなかった場合は「通過」だけで完了とする。
  *  最後のバス停だけは「全員降りた」の確認まで済んで完了（置き去り防止） */
 function stepDone(s){
+  if(s.type==='info') return false;   // 案内だけ。押すものが無いので完了にしない
   if(s.type==='stop'){
     const moved = !!(evOf('出発', s.seq) || evOf('通過', s.seq));
     return s.last ? (moved && !!evOf('全員降車確認', s.seq)) : moved;
@@ -508,7 +561,10 @@ function legsTo(pts, toIdx, gar, segName){
   // ・入っていなければ、送迎の乗降地点だけを通す（道はナビ任せ）
   // ④で回送の道が決まっていれば、**その道が起点（車庫や他所）を持っている**ので車庫を足さない。
   // 決まっていなければ、車庫から送迎の乗降地点を通す（道はナビ任せ）
-  const kai = kaisouPoints(segName, '出庫');
+  // ⚠️ 前の便から続いているとき（2回目・3回目）は車庫から来ていない。
+  //    便間の回送が入っていれば、そちらを起点にする（2026-08-26）
+  const kaiPrev = kaisouPoints(segName, '前便から');
+  const kai = kaiPrev.length ? kaiPrev : kaisouPoints(segName, '出庫');
   const head = kai.length ? kai : (gar ? [gar] : []).concat(transferPoints(segName, '前'));
   return chainLegs(dedupePts(head.concat(pts.slice(0, toIdx+1))));
 }
@@ -602,6 +658,19 @@ function transferPoints(segName, when){
     .filter(Boolean);
 }
 
+/** 朝から順に操作するとき、便が終わったら次の便へすっと進めるようにする（2026-08-26 八重樫さん）。
+ *  ⚠️ 勝手には切り替えない。運転中に画面が変わると危ないので、押していただく形にする */
+function _segsInOrder(){
+  const order = { '登校':0, '下校①':1, '下校②':2, '下校③':3 };
+  return INFO.segments.filter(s=>s.points.length)
+    .slice().sort((a,b)=>(order[a.segment]??9)-(order[b.segment]??9));
+}
+function nextSeg(){
+  const ss = _segsInOrder();
+  const i = ss.findIndex(s=>s.segment===SEG);
+  return (i >= 0 && i+1 < ss.length) ? ss[i+1] : null;
+}
+function goNextSeg(){ const n = nextSeg(); if(n){ setSeg(n.segment); window.scrollTo(0,0); } }
 function evOf(kind, seq){ return EVENTS[SEG+'|'+kind+'|'+(seq==null?'':seq)] || null; }
 function setSeg(s){ SEG=s; _lastNow=-1; render(); }
 
