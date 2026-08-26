@@ -895,7 +895,7 @@ function _stopsOrderSig(stops){
   return { toukou, gekou };
 }
 let STOPS_ORIG_SIG = {};   // course_id(String) -> {toukou, gekou}（版を読み込んだ時点の並び）
-/** ②のバス停一覧から、指定した便(seg)の経路点を作る（rptFillFromStops と同じ元ロジック）。
+/** バス停一覧から、指定した便(seg)の経路点を作る（rptFillFromStops と同じ元ロジック）。
    座標の入っていない停は飛ばす。曲がり角（split_here 等の手作業の点）は含まない＝作り直すと消える。 */
 function _rptFromStops(stops, seg){
   const src = (seg==='登校') ? stops.filter(s=>!s.gekou_only) : _gekouIdxOf(stops).map(i=>stops[i]);
@@ -1017,7 +1017,7 @@ function _cmpForm(a,b){
 async function loadFormsLatest(){
   const buf = {};
   const res = await fetch(`${REST_URL}/course_schedule_forms?select=course_id,version_id,form_name,gekou_departures,after_toukou,after_toukou_place,after_toukou_addr,after_toukou_coord,dep_overrides&order=form_name`, { headers: getH() });
-  if(!res.ok){ _saveMsg('② 下校便（日課）の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
+  if(!res.ok){ _saveMsg('「②下校便」（日課）の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   (await res.json()).forEach(r=>{ if(r.version_id!==latestVerId(r.course_id)) return; const k=String(r.course_id); (buf[k]=buf[k]||[]).push(_mapForm(r)); });
   Object.keys(buf).forEach(k=>buf[k].sort(_cmpForm));
   FORMS = buf;
@@ -1025,7 +1025,7 @@ async function loadFormsLatest(){
 async function loadStops(){
   const buf = {};   // 読み終えるまで STOPS には触らない（途中で空になる瞬間を作らない）
   const res = await fetch(`${REST_URL}/course_locations?select=course_id,version_id,name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_seq,gekou_overrides&order=seq.nullslast,name`, { headers: getH() });
-  if(!res.ok){ _saveMsg('バス停（①②）の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
+  if(!res.ok){ _saveMsg('バス停・登校ルートの読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   (await res.json()).forEach(r=>{ if(r.version_id!==latestVerId(r.course_id)) return; const k=String(r.course_id); (buf[k]=buf[k]||[]).push(_mapStop(r)); });
   STOPS = buf;
 }
@@ -1033,7 +1033,7 @@ async function loadStops(){
 async function loadRoutePointsLatest(){
   const buf = {};
   const res = await fetch(`${REST_URL}/course_route_points?select=course_id,version_id,form_name,segment,scenario_id,route_name,seq,name,lat,lng,is_stop,split_here,note&order=segment,seq`, { headers: getH() });
-  if(!res.ok){ _saveMsg('④ ルート詳細の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
+  if(!res.ok){ _saveMsg('「④ルート詳細」の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   (await res.json()).forEach(r=>{ if(r.version_id!==latestVerId(r.course_id)) return; const k=String(r.course_id);
     if(R_SEGS.indexOf(r.segment) < 0) return;
     buf[k] = buf[k] || _emptyRpts();
@@ -1049,12 +1049,12 @@ async function loadVersionInto(cid, verId){
   // 空で上書きすると、その状態で保存されたときに消えてしまう（2026-08-19 の事故）
   const rf = await fetch(`${REST_URL}/course_schedule_forms?version_id=eq.${verId}&select=form_name,gekou_departures,after_toukou,after_toukou_place,after_toukou_addr,after_toukou_coord,dep_overrides&order=form_name`, { headers: getH() });
   if(rf.ok){ FORMS[k] = (await rf.json()).map(_mapForm); FORMS[k].sort(_cmpForm); }
-  else { _saveMsg('② 下校便（日課）の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
+  else { _saveMsg('「②下校便」（日課）の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   const rs = await fetch(`${REST_URL}/course_locations?version_id=eq.${verId}&select=name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_seq,gekou_overrides&order=seq.nullslast,name`, { headers: getH() });
   if(rs.ok){ STOPS[k] = (await rs.json()).map(_mapStop); }
-  else { _saveMsg('バス停（①②）の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
+  else { _saveMsg('バス停・登校ルートの読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   const rr = await fetch(`${REST_URL}/course_route_points?version_id=eq.${verId}&select=form_name,segment,scenario_id,route_name,seq,name,lat,lng,is_stop,split_here,note&order=segment,seq`, { headers: getH() });
-  if(!rr.ok){ _saveMsg('④ ルート詳細の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
+  if(!rr.ok){ _saveMsg('「④ルート詳細」の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   const box = _emptyRpts();
   (await rr.json()).forEach(r=>{
     if(R_SEGS.indexOf(r.segment) < 0) return;
@@ -1068,14 +1068,14 @@ async function loadVersionInto(cid, verId){
 async function loadScenarios(){
   const buf = {}, byId = {};     // 読み終えるまで SCEN には触らない
   const res = await fetch(`${REST_URL}/course_scenarios?select=id,course_id,segment,label,seq&order=segment,seq.nullslast,id`, { headers: getH() });
-  if(!res.ok){ _saveMsg('③ 添乗員送迎の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
+  if(!res.ok){ _saveMsg('「③添乗員送迎」の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   (await res.json()).forEach(r=>{ const k=String(r.course_id); const o={dbId:r.id, segment:r.segment, label:r.label||'', pts:[], ps:{}}; (buf[k]=buf[k]||[]).push(o); byId[r.id]=o; });
   // 残り2つは互いに独立しているので同時に取る
   const [rp, rq] = await Promise.all([
     fetch(`${REST_URL}/course_transfer_points?scenario_id=not.is.null&select=scenario_id,phase,kind,seq,name,address,coord,bus_time,time_lead&order=seq.nullslast,id`, { headers: getH() }),
     fetch(`${REST_URL}/course_phase_settings?select=scenario_id,phase,shussha,shukko,shukko_lead`, { headers: getH() })
   ]);
-  if(!rp.ok || !rq.ok){ _saveMsg('③ 添乗員送迎の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
+  if(!rp.ok || !rq.ok){ _saveMsg('「③添乗員送迎」の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   (await rp.json()).forEach(r=>{ const o=byId[r.scenario_id]; if(o) o.pts.push({ phase:r.phase, kind:r.kind||'乗車', name:r.name||'', address:r.address||'', coord:r.coord||'', bus_time:r.bus_time||'', time_lead:(r.time_lead==null?null:r.time_lead) }); });
   (await rq.json()).forEach(r=>{ const o=byId[r.scenario_id]; if(o) o.ps[r.phase]={ shussha:r.shussha||'', shukko:r.shukko||'', shukko_lead:(r.shukko_lead==null?null:r.shukko_lead) }; });
   SCEN = buf;
@@ -1167,13 +1167,13 @@ async function createVersion(){
     ]);
     const forms=(sf.ok?await sf.json():[]).map(r=>({ course_id:c.id, version_id:newId, form_name:r.form_name, gekou_departures:r.gekou_departures, after_toukou:r.after_toukou, after_toukou_place:r.after_toukou_place, after_toukou_addr:r.after_toukou_addr, after_toukou_coord:r.after_toukou_coord, dep_overrides:r.dep_overrides||{} }));
     const stops=(ss.ok?await ss.json():[]).map(r=>({ course_id:c.id, version_id:newId, name:r.name, address:r.address, seq:r.seq, toukou_time:r.toukou_time, gekou_offset:r.gekou_offset, gekou_only:r.gekou_only, coord:r.coord, gekou_seq:r.gekou_seq, gekou_overrides:r.gekou_overrides||{}, in_gekou:(r.gekou_offset!=null) }));
-    if(forms.length){ const r=await fetch(`${REST_URL}/course_schedule_forms`, { method:'POST', headers:getH(), body:JSON.stringify(forms) }); if(!r.ok){ const t=await r.text(); _saveMsg('② 下校便（日課）の複製に失敗：'+t.slice(0,120), false); return; } }
+    if(forms.length){ const r=await fetch(`${REST_URL}/course_schedule_forms`, { method:'POST', headers:getH(), body:JSON.stringify(forms) }); if(!r.ok){ const t=await r.text(); _saveMsg('「②下校便」（日課）の複製に失敗：'+t.slice(0,120), false); return; } }
     // 回送は「便・送迎・ルート」で分かれているので、その3つも一緒に複製する
     const rpts=(sr.ok?await sr.json():[]).map(r=>({ course_id:c.id, version_id:newId, segment:r.segment,
       form_name:r.form_name, scenario_id:r.scenario_id, route_name:r.route_name, seq:r.seq,
       name:r.name, lat:r.lat, lng:r.lng, is_stop:r.is_stop, split_here:r.split_here, note:r.note }));
-    if(stops.length){ const r=await fetch(`${REST_URL}/course_locations`, { method:'POST', headers:getH(), body:JSON.stringify(stops) }); if(!r.ok){ const t=await r.text(); _saveMsg('バス停（①②）の複製に失敗：'+t.slice(0,120), false); return; } }
-    if(rpts.length){ const r=await fetch(`${REST_URL}/course_route_points`, { method:'POST', headers:getH(), body:JSON.stringify(rpts) }); if(!r.ok){ const t=await r.text(); _saveMsg('④ ルート詳細の複製に失敗：'+t.slice(0,120), false); return; } }
+    if(stops.length){ const r=await fetch(`${REST_URL}/course_locations`, { method:'POST', headers:getH(), body:JSON.stringify(stops) }); if(!r.ok){ const t=await r.text(); _saveMsg('バス停・登校ルートの複製に失敗：'+t.slice(0,120), false); return; } }
+    if(rpts.length){ const r=await fetch(`${REST_URL}/course_route_points`, { method:'POST', headers:getH(), body:JSON.stringify(rpts) }); if(!r.ok){ const t=await r.text(); _saveMsg('「④ルート詳細」の複製に失敗：'+t.slice(0,120), false); return; } }
     await loadVersions(); selVerId=newId; await loadVersionInto(c.id, newId);
     _nvOpen=false; selRefD=_refDeparture()||'14:00'; renderEditor();
     _saveMsg('✅ 新しい版を作成しました。内容を確認して保存してください。', true);
@@ -1273,17 +1273,17 @@ function renderEditor(){
         <button class="${c.active?'':'primary'}" onclick="toggleActive()">${c.active?'✅ 有効（クリックで廃止）':'🚫 廃止中（クリックで有効）'}</button>
       </div>
       ${renderVersionBar(c)}
-      <div class="line" style="gap:4px;margin:2px 0 -1px;flex-wrap:wrap;">${_tabBtn('main','① 主要情報・登校便')}${_tabBtn('gekou','② 下校便')}${_tabBtn('tensou','③ 添乗員送迎')}${_tabBtn('keiro','④ ルート詳細')}</div>
+      <div class="line" style="gap:4px;margin:2px 0 -1px;flex-wrap:wrap;">${_tabBtn('main','① 主要情報・登校便')}${_tabBtn('gekou','② 下校便')}${_tabBtn('tensou','「③添乗員送迎」')}${_tabBtn('keiro','④ ルート詳細')}</div>
     </div>
 
     <div id="tab-main" style="display:${selTab==='main'?'':'none'};">
-    <label class="fld">① 【登校便】出社・出庫の時刻（コース共通）</label>
+    <label class="fld">【登校便】出社・出庫の時刻（コース共通）</label>
     <div class="line" style="margin-bottom:16px;">
       <span class="muted" style="min-width:44px;">出社</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(c.toukou_shussha))}" onchange="updToukou('toukou_shussha',tnorm(this))" style="width:64px;text-align:center;">
       <span class="muted" style="min-width:44px;margin-left:8px;">出庫</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(c.toukou_shukko))}" onchange="updToukou('toukou_shukko',tnorm(this))" style="width:64px;text-align:center;">
     </div>
 
-    <label class="fld">② 🚏 登校便のルート（バス停一覧＝順路）— 上から順に、各停の登校時刻</label>
+    <label class="fld">🚏 バス停一覧（＝登校便の順路）— 上から順に、各停の登校時刻</label>
     ${toukouHtml}
     <button class="mini" onclick="addStop()">＋バス停を追加</button>
     <div class="line" style="margin-top:8px;flex-wrap:wrap;"><span class="muted">登校後の車両（既定）</span>
@@ -1293,7 +1293,7 @@ function renderEditor(){
     </div>
 
     <div id="tab-gekou" style="display:${selTab==='gekou'?'':'none'};">
-    <label class="fld" style="margin-top:2px;">③ 【下校便（時程）】${(function(){const v=curVer();return v?('適用 '+escHtml(String(v.valid_from))+'〜'):'';})()} — 日課ごとの下校便の学校出発時刻</label>
+    <label class="fld" style="margin-top:2px;">【下校便】日課ごとの時程 ${(function(){const v=curVer();return v?('適用 '+escHtml(String(v.valid_from))+'〜'):'';})()} — 日課ごとの下校便の学校出発時刻</label>
     <div class="muted" style="font-size:11px;margin:-4px 0 6px;">最初の日課が基準になります。次の日課の出発時刻を入れると、下の「自動生成」に各停の時刻が自動で入ります（あとで手修正も可）。</div>
     <div class="line" style="margin:0 0 4px;flex-wrap:wrap;font-size:12px;align-items:center;gap:4px;">
       <span class="muted" style="flex:0 0 auto;">出庫＝下校便出発の</span><input type="number" min="0" id="shLeadH" value="${c.gekou_shukko_lead!=null?Math.floor(c.gekou_shukko_lead/60):''}" onchange="updShukkoLead()" style="flex:0 0 auto;width:64px;text-align:center;"><span class="muted" style="flex:0 0 auto;">時間</span><input type="number" min="0" max="59" id="shLeadM" value="${c.gekou_shukko_lead!=null?(c.gekou_shukko_lead%60):''}" onchange="updShukkoLead()" style="flex:0 0 auto;width:64px;text-align:center;"><span class="muted" style="flex:0 0 auto;">分前</span>
@@ -1305,10 +1305,10 @@ function renderEditor(){
     ${formsHtml}
     <button class="mini" onclick="addForm()">＋日課を追加</button>
 
-    <label class="fld" style="margin-top:18px;">④ 🔁 下校便のルート・時刻（上から順に回る順路）</label>
+    <label class="fld" style="margin-top:18px;">🔁 【下校便】バス停と時刻（上から順に回る順路）</label>
     ${ refD
         ? `<div class="line" style="margin-bottom:8px;"><span class="muted">基準＝最初の日課${firstFormName?`「${escHtml(firstFormName)}」`:''}の下校便 <b>${escHtml(refD)}</b>。この便での各停の時刻を入れてください → 他の日課は自動。</span></div>`
-        : `<div class="line" style="margin-bottom:8px;"><span class="muted">先に③で日課を1つ（下校便の出発時刻つき）追加してください。最初の日課が基準になります。</span></div>` }
+        : `<div class="line" style="margin-bottom:8px;"><span class="muted">先に上の【下校便】日課ごとの時程で日課を1つ（下校便の出発時刻つき）追加してください。最初の日課が基準になります。</span></div>` }
     ${gekouTools}
     ${gekouHtml}
     <button class="mini" onclick="addGekouOnly()">＋下校専用のバス停</button>
@@ -1366,7 +1366,7 @@ function renderGekouPreview(){
   }).join('');
   const toukouBlock = `<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e2ede6;">
     <div style="font-weight:700;color:#2d4a38;margin-bottom:2px;">▼ 登校便　<span style="font-size:11px;color:#5a7a65;">出社 ${shussha||'—'} ／ 出庫 ${shukko||'—'}</span></div>
-    ${ toCells ? `<div>${toCells}<span style="font-size:11px;color:#5a7a65;margin-left:4px;">→ 学校</span></div>` : '<span class="muted">②で登校ルートを入れると、各停の時刻がここに出ます。</span>' }
+    ${ toCells ? `<div>${toCells}<span style="font-size:11px;color:#5a7a65;margin-left:4px;">→ 学校</span></div>` : '<span class="muted">「①主要情報・登校便」タブで登校ルートを入れると、各停の時刻がここに出ます。</span>' }
   </div>`;
 
   // ── 下校便（日課の入力順。各停は下校の並び＝offsetの小さい順）
@@ -1374,8 +1374,8 @@ function renderGekouPreview(){
   const forms = FORMS[String(selCourseId)]||[];
   const anyDep = forms.some(f=>(f.gekou_departures||[]).some(t=>t));
   let gekouBlock;
-  if(!anyDep){ gekouBlock = '<span class="muted">③で日課に下校便の出発時刻を入れると、ここに時刻表が出ます。</span>'; }
-  else if(!timed.length){ gekouBlock = '<span class="muted">④で下校の各停の時刻を入れると、日課ごとの時刻表がここに出ます。各時刻は個別に手修正できます。</span>'; }
+  if(!anyDep){ gekouBlock = '<span class="muted">【下校便】日課ごとの時程で出発時刻を入れると、ここに時刻表が出ます。</span>'; }
+  else if(!timed.length){ gekouBlock = '<span class="muted">【下校便】バス停と時刻で各停の時刻を入れると、日課ごとの時刻表がここに出ます。各時刻は個別に手修正できます。</span>'; }
   else {
     gekouBlock = forms.map((f,fi)=>{
       const deps=(f.gekou_departures||[]).filter(t=>t);
@@ -1467,7 +1467,7 @@ function updFormName(fi, val){
   }
   if(selRForm === from) selRForm = to;
   renderEditor();
-  if(moved) _saveMsg(`「${from}」→「${to}」に変えました。④の経路 ${moved}地点も一緒に付け替えました（保存すると確定します）。`, true);
+  if(moved) _saveMsg(`「${from}」→「${to}」に変えました。「④ルート詳細」の経路 ${moved}地点も一緒に付け替えました（保存すると確定します）。`, true);
 }
 function delForm(fi){
   const arr = FORMS[String(selCourseId)] || [];
@@ -1476,8 +1476,8 @@ function delForm(fi){
   const n = nm ? _routePtsOfForm(nm) : 0;
   const days = nm ? _usageOf(nm) : 0;
   if((n || days) && !confirm(`日課「${nm}」を消します。`
-    + (days ? `\n\n⚠️ 月間予定で ${days}日分 使われています。消すと、その日の日課が行き先を失います。\n　　（②を保存したあと、この画面の上に「置き換える」が出ます）` : '')
-    + (n ? `\n\n④に入っている ${n}地点の道は、どの日課にも属さなくなります（消えはしません）。\n　　④の画面に「使われていない日課」として残るので、あとで他の日課へコピーできます。` : '')
+    + (days ? `\n\n⚠️ 月間予定で ${days}日分 使われています。消すと、その日の日課が行き先を失います。\n　　（保存したあと、この画面の上に「置き換える」が出ます）` : '')
+    + (n ? `\n\n「④ルート詳細」に入っている ${n}地点の道は、どの日課にも属さなくなります（消えはしません）。\n　　「④ルート詳細」に「使われていない日課」として残るので、あとで他の日課へコピーできます。` : '')
     + `\n\nよろしいですか。`)) return;
   arr.splice(fi, 1);
   if(selRForm === nm) selRForm = '';
@@ -1743,13 +1743,13 @@ function _diffBox(){
          <span style="color:#2d5f96;font-weight:700;">${escHtml(n)}</span>
          <button class="mini" onclick="rptAddStop('${escAttr(n)}')" title="道の目印として既にあれば印を付けるだけ。無ければ正しい位置に差し込みます">バス停にする</button></span>`;
   return `<div style="background:#fdf6e8;border:1px solid #e0c6a2;border-radius:10px;padding:10px 12px;margin-bottom:8px;">
-    <div style="font-weight:700;color:#8a6d1f;font-size:13.5px;">⚠️ ②と食い違っています</div>
-    ${d.extra.length ? `<div style="margin-top:5px;font-size:12.5px;color:#5b6b63;">この便は通りません（④でバス停になっています）${d.extra.map(n=>chip(n,'extra')).join('')}</div>` : ''}
-    ${d.missing.length ? `<div style="margin-top:5px;font-size:12.5px;color:#5b6b63;">この便は通ります（④でバス停になっていません）${d.missing.map(n=>chip(n,'miss')).join('')}</div>` : ''}
-    ${(!d.extra.length && !d.missing.length && d.orderNg) ? `<div style="margin-top:5px;font-size:12.5px;color:#5b6b63;">停は揃っていますが、<b>並び順が②と違います</b>。</div>` : ''}
+    <div style="font-weight:700;color:#8a6d1f;font-size:13.5px;">⚠️ バス停の設定と食い違っています</div>
+    ${d.extra.length ? `<div style="margin-top:5px;font-size:12.5px;color:#5b6b63;">この便は通りません（「④ルート詳細」でバス停になっています）${d.extra.map(n=>chip(n,'extra')).join('')}</div>` : ''}
+    ${d.missing.length ? `<div style="margin-top:5px;font-size:12.5px;color:#5b6b63;">この便は通ります（「④ルート詳細」でバス停になっていません）${d.missing.map(n=>chip(n,'miss')).join('')}</div>` : ''}
+    ${(!d.extra.length && !d.missing.length && d.orderNg) ? `<div style="margin-top:5px;font-size:12.5px;color:#5b6b63;">停は揃っていますが、<b>並び順がバス停の設定と違います</b>。</div>` : ''}
     <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
       ${(d.extra.length + d.missing.length > 1) ? `<button class="mini" onclick="rptFixAll()">まとめて直す</button>` : ''}
-      <button class="mini" onclick="rptFillFromStops()" title="②のバス停だけで作り直します。曲がり角の目印は消えます">②から全部作り直す</button>
+      <button class="mini" onclick="rptFillFromStops()" title="バス停一覧だけで作り直します。曲がり角の目印は消えます">バス停一覧から全部作り直す</button>
       <span class="muted" style="font-size:11.5px;">⚠️ バス停を外しても地点は道の目印として残ります。差し込んだ場合は前後の道をご確認ください</span>
     </div>
   </div>`;
@@ -1847,7 +1847,7 @@ function _expectedStops(form, seg){
   seg = seg || selRSeg;
   const stops = _stops();
   if(seg === '登校') return stops.filter(s=>!s.gekou_only).map(s=>(s.name||'').trim()).filter(Boolean);
-  if(R_GEKOU_MAIN.indexOf(seg) < 0) return [];   // 回送は②のバス停と対応しない
+  if(R_GEKOU_MAIN.indexOf(seg) < 0) return [];   // 回送はバス停一覧と対応しない
   const skip = _skipNames(form, seg);
   return _gekouStopIdx().map(i=>(stops[i].name||'').trim())
     .filter(n=>n && skip.indexOf(n) < 0);
@@ -1909,7 +1909,7 @@ function rptAddStop(name){
   const stops = _stops();
   const src = stops.find(s=>(s.name||'').trim() === name);
   const c = src && dmsToDecimal(src.coord);
-  if(!c){ _saveMsg(`「${name}」の座標が②で空です。先に②で座標を入れてください。`, false); return; }
+  if(!c){ _saveMsg(`「${name}」の座標がバス停一覧で空です。先にそちらで座標を入れてください。`, false); return; }
   const want = _expectedStops();
   const wi = want.indexOf(name);
   let at = list.length;
@@ -1927,7 +1927,7 @@ function rptAddStop(name){
 function rptFixAll(){
   const d = _diffVs2();
   if(!d) return;
-  if(!confirm(`②に合わせて直します。\n　バス停の印を外す：${d.extra.length}停（地点は道の目印として残します）\n　バス停にする：${d.missing.length}停\n\n※ 差し込んだ前後の道が合っているかご確認ください。`)) return;
+  if(!confirm(`バス停の設定に合わせて直します。\n　バス停の印を外す：${d.extra.length}停（地点は道の目印として残します）\n　バス停にする：${d.missing.length}停\n\n※ 差し込んだ前後の道が合っているかご確認ください。`)) return;
   const list = _rpts();
   d.extra.forEach(n=>{ const i=list.findIndex(p=>p.is_stop && (p.name||'').trim()===n); if(i>=0) list[i].is_stop = false; });
   const want = _expectedStops();
@@ -1948,7 +1948,7 @@ function rptFixAll(){
   });
   rptSelIdx = null; rptPick = {};
   renderEditor();
-  _saveMsg('②に合わせて直しました。前後の目印をご確認ください。', true);
+  _saveMsg('バス停の設定に合わせて直しました。前後の目印をご確認ください。', true);
 }
 function setRSeg(seg){
   rptSyncFromInputs();
@@ -2003,9 +2003,9 @@ function rptDelRoute(){
   _saveMsg(`サブルート「${nm}」（${n}地点）を消しました。保存すると確定します。`, true);
 }
 
-/* ===== 出発地・到着地は①②で決まる =====
+/* ===== 出発地・到着地は「①主要情報・登校便」タブで決まる =====
    経路の両端は独立した項目ではなく「並びの1番目と最後」そのもの。
-   その2つは①②（車庫・バス停・登校後の行き先）に書いてある事実なので、
+   その2つは「①主要情報・登校便」タブ（車庫・バス停・登校後の行き先）に書いてある事実なので、
    ④からは**書き換えられない**ようにする。
    ・画面に出す前に①②の値を入れ直す（rptLockEnds）
    ・その行は入力できない・消せない・動かせない・その外側には差し込めない
@@ -2075,9 +2075,9 @@ function rptAdd(at){
   if(at==null) at = (rptSelIdx==null) ? _rptAddTail() : rptSelIdx;
   if(at<0) at=0; if(at>pts.length) at=pts.length;
   if(lock.from && at===0){
-    _saveMsg('出発地の前には足せません。出発地は①②（車庫・バス停・登校後の行き先）で決まります。', false); return; }
+    _saveMsg('出発地の前には足せません。出発地は「①主要情報・登校便」タブ（車庫・バス停・登校後の行き先）で決まります。', false); return; }
   if(lock.to && at>=pts.length){
-    _saveMsg('到着地の後ろには足せません。到着地は①②（車庫・バス停・登校後の行き先）で決まります。', false); return; }
+    _saveMsg('到着地の後ろには足せません。到着地は「①主要情報・登校便」タブ（車庫・バス停・登校後の行き先）で決まります。', false); return; }
   pts.splice(at, 0, { name:'', lat:'', lng:'', is_stop:false, split_here:false, note:'' });
   // 差し込んだ位置より下の行は1つずつ下がる。選んでいた行もそれに合わせて動かす
   // （選んだ行の上に足した場合は選択がその行を追い続けるので、続けて足すと進行方向どおりに並ぶ）
@@ -2093,7 +2093,7 @@ function rptMove(i,dir){
   const pts=_rpts(), j=i+dir;
   if(j<0||j>=pts.length) return;
   if(_rptIsLocked(i) || _rptIsLocked(j)){
-    _saveMsg('出発地・到着地は動かせません。①②（車庫・バス停・登校後の行き先）で決まります。', false); return; }
+    _saveMsg('出発地・到着地は動かせません。「①主要情報・登校便」タブ（車庫・バス停・登校後の行き先）で決まります。', false); return; }
   [pts[i],pts[j]]=[pts[j],pts[i]];
   rptPick = {};
   if(rptSelIdx===i) rptSelIdx=j; else if(rptSelIdx===j) rptSelIdx=i;
@@ -2102,7 +2102,7 @@ function rptMove(i,dir){
 function rptDel(i){
   rptSyncFromInputs();
   if(_rptIsLocked(i)){
-    _saveMsg('出発地・到着地は消せません。①②（車庫・バス停・登校後の行き先）で決まります。'
+    _saveMsg('出発地・到着地は消せません。「①主要情報・登校便」タブ（車庫・バス停・登校後の行き先）で決まります。'
       + 'この道ごと要らない場合は、中の地点を消してから両端を消してください。', false); return; }
   _rpts().splice(i,1);
   if(rptSelIdx===i) rptSelIdx=null; else if(rptSelIdx!=null && rptSelIdx>i) rptSelIdx--;
@@ -2133,7 +2133,7 @@ function rptCoordIn(el){
   rptRecalc();
 }
 
-/** ②のバス停一覧から下書きを作る。登校＝順路どおり、下校＝②下校便で並べた順 */
+/** バス停一覧から下書きを作る。登校＝順路どおり、下校＝②下校便で並べた順 */
 function rptFillFromStops(){
   const stops=_stops();
   /* ⚠️ ②の「この便は通らない」を反映する（2026-08-26）。
@@ -2148,7 +2148,7 @@ function rptFillFromStops(){
     if(c) pts.push({ name:s.name||'', lat:String(c.lat), lng:String(c.lng), is_stop:true, split_here:false, note:'' });
     else if((s.name||'').trim()) skipped.push(s.name);
   });
-  if(!pts.length){ _saveMsg('②のバス停に座標が入っていません。先にバス停の「座標」欄を埋めてください。', false); return; }
+  if(!pts.length){ _saveMsg('バス停一覧に座標が入っていません。先にバス停の「座標」欄を埋めてください。', false); return; }
   RPTS[String(selCourseId)][_rkey()] = pts;
   rptSelIdx = null; rptPick = {};
   renderEditor();
@@ -2158,7 +2158,7 @@ function rptFillFromStops(){
 /** 回送の下書き。すでに分かっている地点を並べる：
  *  出庫＝ 車庫 →（その送迎の乗降地点）→ その便の最初のバス停
  *  帰庫＝ その便の最後の地点 →（乗降地点）→ 車庫
- *  あとは曲がり角の目印を間に差し込むだけにする（②のバス停から作る下書きと同じ考え方） */
+ *  あとは曲がり角の目印を間に差し込むだけにする（バス停一覧から作る下書きと同じ考え方） */
 /** いま見ている回送の「どこから → どこまで」。画面の見出しに出す。
  *  登校の後・下校の前は、コース設定（帰庫／他所移動／学校留置き）で行き先が変わる */
 function _kaiEnds(){
@@ -2175,7 +2175,7 @@ function _kaiEnds(){
   if(selRSeg==='帰庫回送登校' || selRSeg==='出庫回送下校'){
     if(c.after_toukou === '他所移動'){
       hub = (c.after_toukou_place||'').trim() || '他所（名前が未入力）';
-      if(!dmsToDecimal(c.after_toukou_coord)) warn = '⚠️ 他所の座標が①のタブで空です。入れないと下書きが作れません。';
+      if(!dmsToDecimal(c.after_toukou_coord)) warn = '⚠️ 他所の座標が「①主要情報・登校便」タブで空です。入れないと下書きが作れません。';
     }else if(c.after_toukou === '学校留置き'){
       hub = '学校に置いたまま';
       warn = '⚠️ このコースは登校の後「学校留置き」です。車庫へ戻らないので、この道は不要かもしれません。';
@@ -2227,7 +2227,7 @@ function rptSeedKaisou(){
   const away = ac ? mk((c.after_toukou_place||'他所'), ac.lat, ac.lng) : null;
   const hub = (selRSeg==='帰庫回送登校' || selRSeg==='出庫回送下校') ? (away || gar) : gar;
   if(!away && (selRSeg==='帰庫回送登校' || selRSeg==='出庫回送下校') && c.after_toukou==='他所移動'){
-    _saveMsg('登校の後は「他所移動」ですが、行き先の座標が空です。①のタブで入れてください。いまは車庫で下書きを作ります。', false);
+    _saveMsg('登校の後は「他所移動」ですが、行き先の座標が空です。「①主要情報・登校便」タブで入れてください。いまは車庫で下書きを作ります。', false);
   }
   const pts = (_kaiWhich()==='出庫')
     ? [hub].concat(tps, [mk(firstStop.name||'最初のバス停', firstStop.lat, firstStop.lng)])
@@ -2259,7 +2259,7 @@ function rptCopyFrom(i){
   box[here] = src.map(p=>({ name:p.name, lat:p.lat, lng:p.lng, is_stop:p.is_stop, split_here:p.split_here, note:p.note }));
   rptSelIdx = null; rptPick = {};
   renderEditor();
-  _saveMsg(o.label + `から ${src.length}地点をコピーしました。②との食い違いが出ていないかご確認ください。`, true);
+  _saveMsg(o.label + `から ${src.length}地点をコピーしました。バス停の設定との食い違いが出ていないかご確認ください。`, true);
 }
 
 /* ===== 経路のコピー／貼り付け（コースをまたぐ） =====
@@ -2312,7 +2312,7 @@ function _clipHere(){
 /** コピーは1つ。
  *  ・「コピー」列にチェックがあれば、その地点だけ
  *  ・チェックが無ければ、中（2番目〜最後から2番目）をまとめて
- *  出発地・到着地は①②で決まるので、どちらの場合も控えには入れない
+ *  出発地・到着地は「①主要情報・登校便」タブで決まるので、どちらの場合も控えには入れない
  *  （2026-08-21 八重樫さんの案で、2つあったボタンを1つにまとめた） */
 function rptClipCopy(){
   if(!selCourseId){ _saveMsg('先にコースを選んでください。', false); return; }
@@ -2326,7 +2326,7 @@ function rptClipCopy(){
   // 名前も緯度も経度も空の行は、控えに入れない
   const pts = pick.filter(p => String(p.lat).trim()!=='' || String(p.lng).trim()!=='' || String(p.name||'').trim()!=='');
   if(!pts.length){
-    _saveMsg(idx.length ? '選んだ地点が空です。' : 'コピーできる地点がありません（出発地と到着地は①②で決まるのでコピーしません）。', false); return; }
+    _saveMsg(idx.length ? '選んだ地点が空です。' : 'コピーできる地点がありません（出発地と到着地は「①主要情報・登校便」タブで決まるのでコピーしません）。', false); return; }
   const c  = _c() || {};
   const sc = _isKaisou(selRSeg) ? _scenList().find(x=>String(x.dbId)===String(selRScen)) : null;
   const o = {
@@ -2353,7 +2353,7 @@ function _endPtsHere(){
   const num = p => (p && String(p.lat).trim()!=='' && String(p.lng).trim()!=='')
     ? { name:p.name||'', lat:Number(p.lat), lng:Number(p.lng) } : null;
   if(!_isKaisou(selRSeg)){
-    /* 本線＝②のバス停の並び。登校は先頭から、下校は②下校便で並べた順（gekou_seq）。
+    /* 本線＝バス停一覧の並び。登校は先頭から、下校は②下校便で並べた順（gekou_seq）。
        ⚠️ 以前は「登校の逆順」だったため、下校がロの字で戻るコースでは
        到着地が登校の1番目になってしまっていた（2026-08-24 修正） */
     const stops = _stops();
@@ -2393,7 +2393,7 @@ function _pasteEnds(clipPts){
   const cv  = (clipPts||[]).filter(p=>String(p.lat).trim()!=='' && String(p.lng).trim()!=='');
   const want = _endPtsHere();
   const pick = (w, mine, theirs) => {
-    if(w) return { pt:w, src:'①②' };
+    if(w) return { pt:w, src:'①主要情報・登校便' };
     if(mine) return { pt:mine, src:'いまの道' };
     if(theirs) return { pt:theirs, src:'コピー元' };
     return { pt:null, src:'' };
@@ -2424,7 +2424,7 @@ function rptClipPaste(){
     const at = Math.max(0, Math.min(rptSelIdx, pts.length));
     if(lock.from && at === 0){
       _saveMsg('出発地の前には差し込めません。ここは出発地「' + (pts[0].name||'名前なし') + '」です。'
-        + '出発地は①②（車庫・バス停・登校後の行き先）で決まります。'
+        + '出発地は「①主要情報・登校便」タブ（車庫・バス停・登校後の行き先）で決まります。'
         + '入れたい場所の行をクリックしてから押してください。', false); return; }
     pts.splice(at, 0, ...add);
     rptSelIdx = null; rptPick = {};
@@ -2436,7 +2436,7 @@ function rptClipPaste(){
   /* ── 行を選んでいない＝中を入れ替える ── */
   const ends = _pasteEnds(o.pts);
   if(!ends.from.pt || !ends.to.pt){
-    _saveMsg('出発地か到着地が決められません。①で車庫・バス停の座標を入れてから貼り付けてください。'
+    _saveMsg('出発地か到着地が決められません。「①主要情報・登校便」タブで車庫・バス停の座標を入れてから貼り付けてください。'
       + '（入れたい場所の行をクリックしてから押すと、差し込みになります）', false); return;
   }
   const mk = p => ({ name:p.name||'', lat:String(p.lat), lng:String(p.lng),
@@ -2642,7 +2642,7 @@ function renderRoutePoints(){
     + '<span style="align-self:center;color:#cfe0d5;">｜</span>'
     + (_rForms.length
         ? _rForms.map(f=>_formBtn(f.name, escHtml(f.name)+(f.deps.length>1?`<span style="font-weight:400;opacity:.8;"> ${f.deps.length}便</span>`:''), selRForm===f.name, _cntFor(f.name))).join('')
-        : '<span class="muted" style="align-self:center;font-size:12px;">②下校便のタブで日課を作ると、ここに並びます</span>')
+        : '<span class="muted" style="align-self:center;font-size:12px;">「②下校便」タブで日課を作ると、ここに並びます</span>')
     + _orphanForms().map(o=>_formBtn(o.name,
         '⚠️ 使われていない日課：' + escHtml(o.name), selRForm===o.name, o.n)).join('');
   // 段2
@@ -2788,7 +2788,7 @@ function renderRoutePoints(){
     <summary style="cursor:pointer;padding:7px 12px;font-size:13px;color:#2d4a38;font-weight:700;list-style:none;">▸ 使い方（クリックで開く）</summary>
     <div class="muted" style="font-size:12px;line-height:1.9;padding:2px 12px 10px;">
       <b>この画面は何か</b>：運転手のタブレットで<b>Googleマップの道案内</b>を開くための地点です。バスは道幅・長さの制約で通れる道が決まっているため、<b>曲がり角の手前に目印の地点を足す</b>ほど、狙った道を通らせやすくなります。渋滞状況や到着予定時刻はGoogleマップ本体がその場で出すので、こちら側で経路の計算はしません（費用はかかりません）。この地点はこの<b>版</b>に属し、新版を作ると一緒に複製されます。<hr style="border:none;border-top:1px solid #e2ede6;margin:7px 0;">
-      <b>出発地と到着地は①②で決まります。</b>灰色の行は直せません（消す・動かす・その外側に足すもできません）。変えたいときは<b>①のタブ</b>（車庫・バス停・登校後の行き先）を直してください。ここは自動でついてきます。<hr style="border:none;border-top:1px solid #e2ede6;margin:7px 0;">
+      <b>出発地と到着地は「①主要情報・登校便」タブで決まります。</b>灰色の行は直せません（消す・動かす・その外側に足すもできません）。変えたいときは<b>「①主要情報・登校便」タブ</b>（車庫・バス停・登校後の行き先）を直してください。ここは自動でついてきます。<hr style="border:none;border-top:1px solid #e2ede6;margin:7px 0;">
       <b>地点を足す</b>：入れたい場所の<b>下の行をクリックして選ぶ</b>（薄い緑）→「＋ ◯番の上に差し込む」。各行の <b>＋</b> でも同じです。緯度・経度は、Googleマップで場所を右クリック→出てきた数字を<b>緯度の欄にそのまま貼れば</b>2つに分かれて入ります。<hr style="border:none;border-top:1px solid #e2ede6;margin:7px 0;">
       <b>その座標がどこか確かめる</b>：各行の経度のとなりの <b>🗺</b> で、その地点だけをGoogleマップで開きます。コピーする前に場所を確かめられます。<hr style="border:none;border-top:1px solid #e2ede6;margin:7px 0;">
       <b>コピーと貼り付け</b>：「コピー」列で選んだ地点だけをコピーします。<b>何も選ばなければ、中（2番目〜最後から2番目）をまとめて</b>コピーします（「全部」でも同じです）。<br>
@@ -2813,10 +2813,10 @@ function renderRoutePoints(){
     const isEnd = (i===0 && lock.from) || (i===pts.length-1 && lock.to);
     const ro = isEnd ? ' readonly' : '';
     const roS = isEnd ? 'background:#f1f5f2;color:#5b6f62;cursor:default;' : '';
-    const roT = isEnd ? (i===0?'出発地':'到着地')+'です。①②（車庫・バス停・登校後の行き先）で決まるので、ここでは直せません。' : '';
+    const roT = isEnd ? (i===0?'出発地':'到着地')+'です。「①主要情報・登校便」タブ（車庫・バス停・登校後の行き先）で決まるので、ここでは直せません。' : '';
     return `<tr class="rp-row" onclick="rptSelect(${i})" style="cursor:pointer;${on?'background:#eef4ef;':(warn?'background:#fff8e8;':'')}" title="${warn?'並び順が逆になっていないか確認してください':(roT||'この行を選ぶと、上に地点を差し込めます')}">
       <td class="muted" style="text-align:right;padding:5px 6px;font-size:14px;${warn?'color:#8a6d1a;font-weight:700;':''}">${warn?'⚠':''}${i+1}</td>
-      <td style="text-align:center;padding:5px 4px;">${isEnd?'<span class="muted" style="font-size:11px;" title="出発地・到着地は①②で決まるのでコピーしません">—</span>'
+      <td style="text-align:center;padding:5px 4px;">${isEnd?'<span class="muted" style="font-size:11px;" title="出発地・到着地は「①主要情報・登校便」タブで決まるのでコピーしません">—</span>'
         :`<input type="checkbox" class="rp-pick" ${rptPick[i]?'checked':''} onclick="event.stopPropagation()" onchange="rptPickToggle(${i},this)" title="この地点をコピーの対象にする" style="width:17px;height:17px;">`}</td>
       <td style="padding:5px 6px;"><input type="text" class="rp-name" value="${escAttr(p.name||'')}"${ro} placeholder="例：○○交差点" title="${escAttr(roT)}" style="width:100%;min-width:100px;font-size:15px;padding:7px 9px;${roS}"></td>
       <td style="padding:5px 6px;"><input type="text" class="rp-lat" value="${escAttr(p.lat)}"${ro} placeholder="35.xxxxxx" onchange="rptCoordIn(this)" title="${escAttr(roT||'「35.5442, 139.7043」のまま貼っても分けて入ります')}" style="width:112px;font-size:15px;padding:7px 9px;${roS}"></td>
@@ -2837,7 +2837,7 @@ function renderRoutePoints(){
           return `<button onclick="event.stopPropagation();rptAdd(${i})" ${(i===0&&lock.from)?'disabled':''} title="${(i===0&&lock.from)?'出発地の前には足せません':'この行の上に地点を差し込む'}" style="${ib}color:var(--g);font-weight:700;${(i===0&&lock.from)?off:''}">＋</button>
         <button onclick="event.stopPropagation();rptMove(${i},-1)" ${noUp?'disabled':''} title="${lk(i)?'出発地・到着地は動かせません':'上へ'}" style="${ib}color:var(--g);${noUp?off:''}">▲</button>
         <button onclick="event.stopPropagation();rptMove(${i},1)" ${noDn?'disabled':''} title="${lk(i)?'出発地・到着地は動かせません':'下へ'}" style="${ib}color:var(--g);${noDn?off:''}">▼</button>
-        <button onclick="event.stopPropagation();rptDel(${i})" ${lk(i)?'disabled':''} title="${lk(i)?'出発地・到着地は消せません（①②で決まります）':'この地点を削除'}" style="${ib}color:#c0392b;${lk(i)?off:''}">✕</button>`;
+        <button onclick="event.stopPropagation();rptDel(${i})" ${lk(i)?'disabled':''} title="${lk(i)?'出発地・到着地は消せません（「①主要情報・登校便」タブで決まります）':'この地点を削除'}" style="${ib}color:#c0392b;${lk(i)?off:''}">✕</button>`;
         })()}
       </td>
     </tr>`
@@ -2854,9 +2854,9 @@ function renderRoutePoints(){
       ${diffBox}
       ${legRowMain}
       <div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;">
-        ${_isKaisou(selRSeg) ? '' : '<button class="mini" onclick="rptFillFromStops()" title="②のバス停の並びから、この便の地点を作り直します（曲がり角の目印は消えます）">②のバス停から並びを作る</button>'}
+        ${_isKaisou(selRSeg) ? '' : '<button class="mini" onclick="rptFillFromStops()" title="バス停一覧の並びから、この便の地点を作り直します（曲がり角の目印は消えます）">バス停一覧から並びを作る</button>'}
         <button class="mini" id="rptAddBtn" onclick="rptAdd()">${_rptAddLabel()}</button>
-        ${(lock.from||lock.to)?`<span class="muted" style="font-size:12px;">🔒 ${lock.from&&lock.to?'出発地と到着地':(lock.from?'出発地':'到着地')}（灰色の行）は①②で決まります</span>`:''}
+        ${(lock.from||lock.to)?`<span class="muted" style="font-size:12px;">🔒 ${lock.from&&lock.to?'出発地と到着地':(lock.from?'出発地':'到着地')}（灰色の行）は「①主要情報・登校便」タブで決まります</span>`:''}
       </div>
     </div>
     ${scenRow}
@@ -2889,7 +2889,7 @@ function renderRoutePoints(){
         <th style="width:64px;text-align:right;padding:7px 6px;font-size:13px;color:#6b7d72;">累計km</th>
         <th style="width:124px;"></th>
       </tr></thead>
-      <tbody>${rows||'<tr><td colspan="10" class="muted" style="padding:10px 6px;">まだ地点がありません。「②のバス停から並びを作る」で下書きを作れます。</td></tr>'}</tbody>
+      <tbody>${rows||'<tr><td colspan="10" class="muted" style="padding:10px 6px;">まだ地点がありません。「バス停一覧から並びを作る」で下書きを作れます。</td></tr>'}</tbody>
     </table></div>
     `;
 }
@@ -2922,7 +2922,7 @@ async function saveCourse(){
   if(!selVerId){ _saveMsg('版がありません。まず版を作成してください。', false); return; }
   if(!isLatestVer()){ _saveMsg('過去版は保存できません。最新版を選ぶか、「新版を作成」してから編集してください。', false); return; }
   const key=String(c.id);
-  let _stopsChanged = [];   // ②のバス停が変わった側（保存後に④の確認をうながす）
+  let _stopsChanged = [];   // バス停一覧が変わった側（保存後に④の確認をうながす）
   let _flagOn = [], _flagOff = [];   // ②に合わせて④のバス停の印を付けた／外した停
   let _calRenamed = [];              // 予定表の日課名を付け替えたもの
   // 押している間ずっと分かるようにする（無反応に見えて何度も押されるのを防ぐ）
@@ -2939,7 +2939,7 @@ async function saveCourse(){
       const nm = (FORMS[key]||[]).map(f=>(f.form_name||'').trim()).filter(Boolean);
       const dup = nm.filter((v,i)=>nm.indexOf(v) !== i);
       if (dup.length){
-        _saveMsg('日課名が重なっています：' + [...new Set(dup)].join('、') + '。同じ名前があると④の道が消えてしまうため、別の名前にしてから保存してください。', false); return;
+        _saveMsg('日課名が重なっています：' + [...new Set(dup)].join('、') + '。同じ名前があると「④ルート詳細」の道が消えてしまうため、別の名前にしてから保存してください。', false); return;
       }
     }
     if ((FORMS[key]||[]).some(f => !(f.form_name||'').trim() && (f.gekou_departures||[]).some(t=>t))){
@@ -2947,7 +2947,7 @@ async function saveCourse(){
     }
     // 1) 登校時刻・有効フラグ（courses）
     const r1 = await fetch(`${REST_URL}/courses?id=eq.${c.id}`, { method:'PATCH', headers:getH(), body:JSON.stringify({ toukou_shussha:c.toukou_shussha||null, toukou_shukko:c.toukou_shukko||null, active:c.active, after_toukou:c.after_toukou||'帰庫', after_toukou_place:(c.after_toukou==='他所移動'?(c.after_toukou_place||null):null), after_toukou_addr:(c.after_toukou==='他所移動'?(c.after_toukou_addr||null):null), after_toukou_coord:(c.after_toukou==='他所移動'?(c.after_toukou_coord||null):null), gekou_shukko_lead:(c.gekou_shukko_lead==null?null:c.gekou_shukko_lead), gekou_haisha_lead:(c.gekou_haisha_lead==null?null:c.gekou_haisha_lead) }) });
-    if(!r1.ok){ const t=await r1.text(); _saveMsg('① 主要情報の保存に失敗：'+t.slice(0,100), false); return; }
+    if(!r1.ok){ const t=await r1.text(); _saveMsg('「①主要情報・登校便」の保存に失敗：'+t.slice(0,100), false); return; }
     // 2) 下校フォーム（この年度・このコースを置き換え）
     const formsCount = (FORMS[key]||[]).filter(f=>(f.form_name||'').trim()).length;
     if(!(await _confirmWipe(`course_schedule_forms?version_id=eq.${selVerId}`, formsCount, '日課'))){ _saveMsg('保存を中止しました。', false); return; }
@@ -2955,7 +2955,7 @@ async function saveCourse(){
     // 2026-08-25：削除＋入れ直しを1つのDB関数にまとめた（00_データを壊さない書き方）
     { const r2=await fetch(`${REST_URL}/rpc/save_course_schedule_forms`, { method:'POST', headers:getH(),
         body:JSON.stringify({ p_course_id:c.id, p_version_id:selVerId, p_rows:forms }) });
-      if(!r2.ok){ const t=await r2.text(); _saveMsg('② 下校便（日課）の保存に失敗（元のデータは残っています）：'+t.slice(0,100), false); return; } }
+      if(!r2.ok){ const t=await r2.text(); _saveMsg('「②下校便」（日課）の保存に失敗（元のデータは残っています）：'+t.slice(0,100), false); return; } }
     // 2.5) 日課名を変えていたら、予定表（月間予定）の日課名も付け替える
     {
       const ren = (FORM_RENAMES[key] || []).filter(r => r[0] && r[1] && r[0] !== r[1]);
@@ -2992,7 +2992,7 @@ async function saveCourse(){
     // 途中で失敗しても元のデータが残る（消えたのに入れ直せない、という事故を防ぐ）。
     const r3 = await fetch(`${REST_URL}/rpc/save_course_locations`, { method:'POST', headers:getH(),
       body:JSON.stringify({ p_course_id:c.id, p_version_id:selVerId, p_rows:rows }) });
-    if(!r3.ok){ const t=await r3.text(); _saveMsg('バス停・ルート（①②）の保存に失敗（元のデータは残っています）：'+t.slice(0,100), false); return; }
+    if(!r3.ok){ const t=await r3.text(); _saveMsg('バス停・登校ルートの保存に失敗（元のデータは残っています）：'+t.slice(0,100), false); return; }
     // 3.5) 経路点（この版の4便ぶんをまとめて置き換え）
     rptSyncFromInputs();
     /* ⚠️ 2026-08-26：②を変えても④の本線を勝手に作り直さないようにした。
@@ -3001,7 +3001,7 @@ async function saveCourse(){
        「バス停の順番が総入れ替えになり、最終バス停まで変わったときは、
          残っているルートに価値がないので消えてよい」というもので、
        名前を1文字直しただけで消えてよい、という意味ではなかった。
-       これからは④の画面で②との食い違いを知らせ、
+       これからは④の画面でバス停の設定との食い違いを知らせ、
        「その停だけ足し引きする」か「作り直す」かを人が選ぶ。 */
     {
       const nowSig  = _stopsOrderSig(keep);
@@ -3018,7 +3018,7 @@ async function saveCourse(){
          そうでない                                                  → バス停の印を外す
 
        ⚠️ 地点は消さない。道をたどる目印として残す。
-       ⚠️ ②のバス停に無い名前（曲がり角の目印など）は触らない。
+       ⚠️ バス停一覧に無い名前（曲がり角の目印など）は触らない。
        ⚠️ ④に地点そのものが無い停は、ここでは足さない（道の形が変わるため）。
           ④の食い違いの枠から「バス停にする」を押していただく。 */
     {
@@ -3038,7 +3038,7 @@ async function saveCourse(){
       Object.keys(box).forEach(kk=>{
         const q  = _rkeyParse(kk);
         const gi = R_GEKOU_MAIN.indexOf(q.seg);
-        if(gi < 0) return;   // 下校の本線だけ（回送は②のバス停と対応しない）
+        if(gi < 0) return;   // 下校の本線だけ（回送はバス停一覧と対応しない）
         let skip = [];
         const f = q.form ? fmap[q.form] : null;
         if(f){ const t = f.deps[gi]; const o = t ? f.ov[t] : null;
@@ -3046,7 +3046,7 @@ async function saveCourse(){
         (box[kk]||[]).forEach(p=>{
           const n = (p.name||'').trim();
           if(!n || n === schoolName) return;
-          if(!(n in inGekou)) return;            // ②のバス停でない＝曲がり角の目印。触らない
+          if(!(n in inGekou)) return;            // バス停一覧でない＝曲がり角の目印。触らない
           const want = inGekou[n] && skip.indexOf(n) < 0;
           if(p.is_stop && !want){ p.is_stop = false; off[n] = true; }
           else if(!p.is_stop && want){ p.is_stop = true; on[n] = true; }
@@ -3069,7 +3069,7 @@ async function saveCourse(){
     // 2026-08-25：削除＋入れ直しを1つのDB関数にまとめた（00_データを壊さない書き方）
     { const r35=await fetch(`${REST_URL}/rpc/save_course_route_points`, { method:'POST', headers:getH(),
         body:JSON.stringify({ p_course_id:c.id, p_version_id:selVerId, p_rows:rptRows }) });
-      if(!r35.ok){ const t=await r35.text(); _saveMsg('④ ルート詳細の保存に失敗（元のデータは残っています）：'+t.slice(0,100), false); return; } }
+      if(!r35.ok){ const t=await r35.text(); _saveMsg('「④ルート詳細」の保存に失敗（元のデータは残っています）：'+t.slice(0,100), false); return; } }
     // 4) 送迎シナリオ（このコースを置き換え）— scenarios削除で points/settings も連動削除
     const scenHasContent = s => s.pts.some(p=>(p.name||'').trim()||(p.address||'').trim()||(p.coord||'').trim())
       || Object.keys(s.ps||{}).some(ph=>((s.ps[ph]||{}).shussha||'').trim()||((s.ps[ph]||{}).shukko||'').trim())
@@ -3101,14 +3101,14 @@ async function saveCourse(){
       const row = { course_id:c.id, segment:s.segment, label:(s.label||'').trim(), seq:i+1 };
       if(s.dbId){
         const r = await fetch(`${REST_URL}/course_scenarios?id=eq.${s.dbId}`, { method:'PATCH', headers:getH(), body:JSON.stringify(row) });
-        if(!r.ok){ const t=await r.text(); _saveMsg('③ 添乗員送迎の更新に失敗：'+t.slice(0,100), false); return; }
+        if(!r.ok){ const t=await r.text(); _saveMsg('「③添乗員送迎」の更新に失敗：'+t.slice(0,100), false); return; }
         sidList.push(s.dbId);
       }else{
         const r = await fetch(`${REST_URL}/course_scenarios`, { method:'POST', headers:getH(), body:JSON.stringify([row]) });
-        if(!r.ok){ const t=await r.text(); _saveMsg('③ 添乗員送迎の保存に失敗：'+t.slice(0,100), false); return; }
+        if(!r.ok){ const t=await r.text(); _saveMsg('「③添乗員送迎」の保存に失敗：'+t.slice(0,100), false); return; }
         const ins = await r.json();
         const nid = ins && ins[0] && ins[0].id;
-        if(!nid){ _saveMsg('③ 添乗員送迎の保存に失敗しました（idが返りません）。', false); return; }
+        if(!nid){ _saveMsg('「③添乗員送迎」の保存に失敗しました（idが返りません）。', false); return; }
         s.dbId = nid; sidList.push(nid);
       }
     }
@@ -3131,7 +3131,7 @@ async function saveCourse(){
       });
       const rtp = await fetch(`${REST_URL}/rpc/save_course_transfer_and_phase`, { method:'POST', headers:getH(),
         body:JSON.stringify({ p_course_id:c.id, p_scenario_ids:sidList, p_points:allPts, p_settings:allPs }) });
-      if(!rtp.ok){ const t=await rtp.text(); _saveMsg('③ 添乗員送迎（乗降場所・局面）の保存に失敗（元のデータは残っています）：'+t.slice(0,100), false); return; }
+      if(!rtp.ok){ const t=await rtp.text(); _saveMsg('「③添乗員送迎」（乗降場所・局面）の保存に失敗（元のデータは残っています）：'+t.slice(0,100), false); return; }
     }
     // 保存後の読み直しは**このコースだけ**にする。
     // 以前は毎回64コース分（停留所331行・日課238行）を取り直しており、
@@ -3142,7 +3142,7 @@ async function saveCourse(){
     //    renderEditor() は編集欄をまるごと作り直すので、先に出すとメッセージごと消える。
     //    2026-08-19 に読み直しを速くしたことで、見える間もなく消えるようになっていた
     //    （2026-08-21 八重樫さんが「保存しましたが表示されませんでした」と発見）
-    _saveMsg('✅ 保存しました' + (_calRenamed.length ? `（月間予定の日課名も付け替えました：${_calRenamed.join('・')}）` : '') + (_flagOn.length ? `（④で「${_flagOn.join('・')}」をバス停にしました）` : '') + (_flagOff.length ? `（④で「${_flagOff.join('・')}」のバス停の印を外しました。地点は道の目印として残しています）` : '') + (_stopsChanged.length ? `（⚠️ ${_stopsChanged.join('・')}のバス停が変わりました。④ルート詳細で②との食い違いをご確認ください。④の道はそのまま残してあります）` : ''), true);
+    _saveMsg('✅ 保存しました' + (_calRenamed.length ? `（月間予定の日課名も付け替えました：${_calRenamed.join('・')}）` : '') + (_flagOn.length ? `（「④ルート詳細」で「${_flagOn.join('・')}」をバス停にしました）` : '') + (_flagOff.length ? `（「④ルート詳細」で「${_flagOff.join('・')}」のバス停の印を外しました。地点は道の目印として残しています）` : '') + (_stopsChanged.length ? `（⚠️ ${_stopsChanged.join('・')}のバス停が変わりました。④ルート詳細でバス停の設定との食い違いをご確認ください。④の道はそのまま残してあります）` : ''), true);
   }catch(e){ _saveMsg('保存エラー：'+e.message, false); }
   finally{
     // どの抜け方をしても必ず鍵を外し、ボタンを戻す

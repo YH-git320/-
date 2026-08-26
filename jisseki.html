@@ -1079,7 +1079,7 @@ function uRenderCandidates(){
     ${withRoute < U_CAND.length ? `<div class="muted" style="font-size:11px;margin-top:6px;line-height:1.8;">
       🚌 運行ボタンは<b>経路が登録されているコース</b>でしか使えません。経路のない方には
       <b>運行ボタンのリンクを入れずに</b>送ります（📝 運転日報だけになります）。<br>
-      経路は「運行時程マスタ」の<b>④ ルート詳細</b>タブで登録します。</div>` : ''}
+      経路は「運行時程マスタ」の<b>「④ルート詳細」</b>タブで登録します。</div>` : ''}
     <div id="uSendResult" style="margin-top:8px;"></div>
   </div>
   <div style="overflow:auto;"><table><thead><tr>
@@ -1207,7 +1207,7 @@ async function uMailOne(staffId){
   const w = { btn: want.btn && uHasRoute(c), nip: want.nip };
   if(!w.btn && !w.nip){
     alert(`${c.name} さんのコース（${U_COURSE[c.mainCourse]||'コース未設定'}）は経路がまだ登録されていません。\n`
-        + `運行ボタンのリンクは送れません。\n\n「📝 運転日報」にもチェックを入れるか、先に運行時程マスタの「④ ルート詳細」で経路を登録してください。`);
+        + `運行ボタンのリンクは送れません。\n\n「📝 運転日報」にもチェックを入れるか、先に運行時程マスタの「④ルート詳細」タブで経路を登録してください。`);
     return;
   }
   if(want.btn && !w.btn &&
