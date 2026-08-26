@@ -4709,9 +4709,24 @@ async function siApply() {
   btn.disabled = true; btn.textContent = '登録しています…';
   try {
     const res = await _siRpc('staff_import_apply', { p_batch: _si.batch, p_overwrite_name: ow });
-    showStatus('si-status3','success',
-      '登録しました（更新' + res['更新'] + '件・変更なし' + (res['変更なし']||0) + '件・新規' + res['新規'] + '件・保留' + res['保留'] + '件'
-      + (res['氏名を既存のまま残した'] ? '・氏名を今のまま残した' + res['氏名を既存のまま残した'] + '件' : '') + '）');
+    const u = res['更新']||0, sm = res['変更なし']||0, nw = res['新規']||0, hd = res['保留']||0;
+    const kept = res['氏名を既存のまま残した']||0;
+    // ⚠️ showStatus は成功を5秒で消してしまう。結果は残す
+    document.getElementById('si-status3').innerHTML =
+      `<div style="border:1px solid #b4d4c0;background:#eef7f1;border-radius:10px;padding:11px 14px;margin-top:6px;">
+         <div style="font-weight:700;color:#2f6b45;font-size:13.5px;">✅ 登録しました</div>
+         <div style="font-size:13px;color:#3d5a48;line-height:1.9;margin-top:5px;">
+           　書き換えた　　<b>${u}件</b><br>
+           　変わらなかった　<b>${sm}件</b><br>
+           　新しく登録　　<b>${nw}件</b>${hd ? `<br>　何もしない　　<b>${hd}件</b>（保留）` : ''}
+           ${kept ? `<br>　氏名を今のまま残した　<b>${kept}件</b>` : ''}
+         </div>
+         <div style="font-size:12px;color:#5b6b63;margin-top:7px;line-height:1.7;">
+           ${u === 0 && nw === 0
+             ? '書き換わった項目はありませんでした。<b>TKCと従業員マスタの中身が一致しています。</b>'
+             : '書き換えた内容は、従業員マスタの「変更履歴」から1件ずつ確認できます。'}
+         </div>
+       </div>`;
     await siLoadResult();
     btn.style.display = 'none';
     if (typeof loadEmployees === 'function') loadEmployees();
@@ -4741,6 +4756,16 @@ function siReset() {
   document.getElementById('si-status3').innerHTML = '';
 }
 
+// 日時を、この端末の時刻（日本時間）で表示する
+// ⚠️ created_at は世界標準時で返るため、そのまま切り出すと9時間ずれる（2026-08-26 修正）
+function siLocalTime(v) {
+  if (!v) return '';
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return String(v).replace('T', ' ').slice(0, 16);
+  const p2 = n => ('0' + n).slice(-2);
+  return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate())
+       + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+}
 async function siHistory() {
   try {
     const list = await _siRpc('staff_import_batches', { p_limit: 10 });
@@ -4749,7 +4774,7 @@ async function siHistory() {
     el.innerHTML = `<div class="preview-wrap"><table class="preview-table">
       <thead><tr><th>日時</th><th>ファイル</th><th>行数</th><th>状態</th><th>実行者</th></tr></thead>
       <tbody>${list.map(b=>`<tr>
-        <td>${esc((b.created_at||'').replace('T',' ').slice(0,16))}</td>
+        <td>${esc(siLocalTime(b.created_at))}</td>
         <td>${esc(b.file_name||'')}</td><td>${b.row_count}</td>
         <td>${esc(b.status)}</td><td>${esc(b.applied_by||b.created_by||'')}</td></tr>`).join('')}</tbody>
       </table></div>`;
