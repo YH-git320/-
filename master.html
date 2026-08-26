@@ -379,27 +379,30 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
           <div class="si-map" id="si-map"></div>
           <div id="si-sample" style="margin:10px 0;"></div>
           <button class="btn btn-primary" onclick="siRunMatch()" id="si-btn-match">🔍 照合する</button>
-          <button class="btn" onclick="siReset()" style="margin-left:6px;">やり直す</button>
+          <button class="btn" onclick="siReset()" style="margin-left:6px;">🗑 読み込みを取り消す</button>
           <div id="si-status2" style="margin-top:8px;"></div>
         </div>
 
         <div id="si-step3" style="display:none;margin-top:14px;">
           <h3 style="font-size:14px;color:#4d7a5e;margin:0 0 4px;">② 照合の結果</h3>
-          <div id="si-summary" style="font-size:13px;margin-bottom:6px;"></div>
-          <div class="si-tabs" id="si-tabs"></div>
-          <div id="si-list"></div>
-
-          <div style="border-top:1px solid #dfeae3;margin-top:14px;padding-top:12px;">
-            <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:#5b6b63;cursor:pointer;margin-bottom:8px;">
-              <input type="checkbox" id="si-overwrite-name" style="width:16px;height:16px;">
-              <span>CSVの氏名・フリガナで<b>上書きする</b>（既定は上書きしません。TKCは略字「國広」、こちらは正式な字「國廣」というずれがあるためです）</span>
-            </label>
-            <button class="btn btn-success" onclick="siApply()" id="si-btn-apply">✅ この内容で登録する</button>
-            <button class="btn" onclick="siCancel()" style="margin-left:6px;">この取込をやめる</button>
+          <div style="position:sticky;top:0;z-index:6;background:#fff;padding:8px 0 10px;border-bottom:1px solid #dfeae3;margin-bottom:10px;">
+            <div id="si-summary" style="font-size:13px;margin-bottom:6px;"></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <button class="btn btn-success" onclick="siApply()" id="si-btn-apply">✅ この内容で登録する</button>
+              <button class="btn" onclick="siCancel()">🗑 読み込みを取り消す</button>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#5b6b63;cursor:pointer;">
+                <input type="checkbox" id="si-overwrite-name" style="width:15px;height:15px;">
+                <span>氏名・フリガナもCSVで上書きする</span>
+              </label>
+            </div>
+            <div style="font-size:11.5px;color:#8a9a91;margin-top:5px;">
+              上書きしない場合、今の登録の字がそのまま残ります（TKCは略字「国広」、こちらは正式な字「國廣」のため）。
+            </div>
             <div id="si-status3" style="margin-top:8px;"></div>
           </div>
+          <div class="si-tabs" id="si-tabs"></div>
+          <div id="si-list"></div>
         </div>
-
         <div style="border-top:1px solid #dfeae3;margin-top:18px;padding-top:12px;">
           <h3 style="font-size:14px;color:#4d7a5e;margin:0 0 6px;">これまでの取込</h3>
           <div id="si-history" style="font-size:12.5px;"></div>
@@ -1742,15 +1745,52 @@ async function deleteEmployee(id, name) {
 function handleEmpFile(input) { if (input.files[0]) parseEmpCSV(input.files[0]); }
 function parseEmpCSV(file) {
   const reader = new FileReader();
-  reader.onload = e => showEmpCSVPreview(e.target.result);
-  reader.readAsText(file, 'UTF-8');
+  reader.onload = e => showEmpCSVPreview(siDecode(e.target.result));
+  reader.readAsArrayBuffer(file);   // 文字コードは siDecode が自動で見分ける
+}
+// 読み込んだ内容を、取り込まずに消す
+function clearEmpCSV() {
+  const box = document.getElementById('preview-emp');
+  if (box) box.innerHTML = '';
+  const f = document.getElementById('file-emp');
+  if (f) f.value = '';
+  showStatus('status-employees','success','読み込んだ内容を消しました（何も取り込んでいません）');
+}
+function _empStop(title, body) {
+  document.getElementById('preview-emp').innerHTML =
+    `<div style="border:1px solid #e6c9c4;background:#fdf2f2;border-radius:10px;padding:12px 14px;margin:10px 0;">
+       <div style="color:#c0392b;font-weight:700;font-size:13.5px;">⚠️ ${title}</div>
+       <div style="font-size:12.5px;color:#5b6b63;line-height:1.7;margin-top:6px;">${body}</div>
+       <button class="btn" style="margin-top:10px;" onclick="clearEmpCSV()">🗑 読み込みを取り消す</button>
+     </div>`;
 }
 function showEmpCSVPreview(text) {
   const cols = ['name','email','phone','employee_code','license_number','license_expiry','note'];
   const labels = ['氏名','メール','電話番号','社員番号','免許番号','免許有効期限','備考'];
-  const lines = text.split(/\r?\n/).filter(l => l.trim()).slice(1);
-  if (!lines.length) { document.getElementById('preview-emp').innerHTML = '<p style="color:#c0392b;font-size:12px;">データ行がありません</p>'; return; }
-  const parsed = lines.map((line,i) => {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) { _empStop('データの行がありません。', 'ファイルの中身をご確認ください。'); return; }
+
+  // ① 文字化けしていたら取り込ませない
+  if ((text.match(/�/g) || []).length > 3) {
+    _empStop('文字が正しく読めませんでした。',
+      'この欄は簡易的な取込のため、ファイルによっては文字化けします。<br>'
+      + '<b>そのまま取り込むと、化けたままの従業員が新しく作られてしまいます。</b><br>'
+      + 'お手数ですが、左の <b>「📥 社員データ取込」</b> をお使いください。');
+    return;
+  }
+
+  // ② TKCの社員データらしければ、専用の画面へ誘導する
+  const head = lines[0];
+  if (/フリガナ|生年月日|部課|現住所|入社年月日|退職年月日/.test(head) || splitCSV(head).length > 9) {
+    _empStop('TKCの社員データのようです。この欄では取り込めません。',
+      'この欄は「氏名, メール, 電話番号, 社員番号, 免許番号, 免許有効期限, 備考」の7列だけの簡易的な取込で、'
+      + '<b>照合をせずに全員を新しく追加します。</b><br>'
+      + 'TKCのCSVは、左の <b>「📥 社員データ取込」</b> をお使いください。'
+      + '同じ人がもう1件できないよう照合し、迷うものは登録の前に確認できます。');
+    return;
+  }
+
+  const parsed = lines.slice(1).map((line,i) => {
     const vals = splitCSV(line);
     const row = {}; const errs = [];
     cols.forEach((k,ci) => { row[k] = vals[ci]?.replace(/^"|"$/g,'').trim() || ''; });
@@ -1758,15 +1798,21 @@ function showEmpCSVPreview(text) {
     return { row, errs, hasErr: errs.length > 0, lineNum: i+2 };
   });
   const valid = parsed.filter(p => !p.hasErr).length;
-  let html = `<div style="margin:10px 0;font-size:13px;">
-    <span class="badge badge-green">${valid}件 取込可能</span>
-    ${parsed.length-valid > 0 ? `<span class="badge" style="background:#fadbd8;color:#c0392b;margin-left:4px;">${parsed.length-valid}件 エラー</span>` : ''}
+  const html = `<div style="position:sticky;top:0;z-index:5;background:#fff;padding:10px 0 8px;border-bottom:1px solid #dfeae3;margin-bottom:8px;">
+    <div style="margin-bottom:8px;font-size:13px;">
+      <span class="badge badge-green">${valid}件 取込可能</span>
+      ${parsed.length-valid > 0 ? `<span class="badge" style="background:#fadbd8;color:#c0392b;margin-left:4px;">${parsed.length-valid}件 エラー</span>` : ''}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      ${valid > 0 ? `<button class="btn btn-success" onclick="importEmployees(${esc(JSON.stringify(JSON.stringify(parsed)))})">✅ ${valid}件を取込む</button>` : ''}
+      <button class="btn" onclick="clearEmpCSV()">🗑 読み込みを取り消す</button>
+      ${valid > 0 ? `<span style="font-size:11.5px;color:#8a6d1f;">⚠️ 照合はしません。全員が新しく追加されます</span>` : ''}
+    </div>
   </div>
   <div class="preview-wrap"><table class="preview-table">
     <thead><tr><th>行</th>${labels.map(l=>`<th>${l}</th>`).join('')}<th>状態</th></tr></thead>
-    <tbody>${parsed.map(p=>`<tr class="${p.hasErr?'error-row':''}"><td>${p.lineNum}</td>${cols.map(k=>`<td>${esc(p.row[k]||'')}</td>`).join('')}<td class="${p.hasErr?'err':''}">${p.hasErr?'⚠ '+p.errs.join('/') :'✓'}</td></tr>`).join('')}</tbody>
+    <tbody>${parsed.map(p=>`<tr class="${p.hasErr?'error-row':''}"><td>${p.lineNum}</td>${cols.map(k=>`<td>${esc(p.row[k]||'')}</td>`).join('')}<td class="${p.hasErr?'err':''}">${p.hasErr?'⚠ '+esc(p.errs.join('/')):'OK'}</td></tr>`).join('')}</tbody>
   </table></div>`;
-  if (valid > 0) html += `<button class="btn btn-success" onclick="importEmployees(${JSON.stringify(JSON.stringify(parsed))})">✅ ${valid}件を取込む</button>`;
   document.getElementById('preview-emp').innerHTML = html;
 }
 async function importEmployees(parsedJson) {
