@@ -109,6 +109,32 @@ select:focus, input:focus { outline: none; border-color: #4d7a5e; box-shadow: 0 
 .add-form-details > summary:hover { background: #eef7f1; }
 .add-form-details[open] > summary { background: #eef7f1; }
 
+/* ===== 社員データ取込 ===== */
+.si-drop { border: 2px dashed #b4d4c0; border-radius: 12px; padding: 22px 14px; text-align: center;
+           color: #4d7a5e; cursor: pointer; background: #fbfdfc; font-size: 13px; }
+.si-drop:hover, .si-drop.dragover { background: #eef7f1; border-color: #4d7a5e; }
+.si-drop input[type=file] { display: none; }
+.si-kind { display: inline-block; padding: 3px 10px; border-radius: 9px; font-size: 12px; font-weight: 700; }
+.si-kind.k-match { background: #e4f0e8; color: #2f6b45; }
+.si-kind.k-check { background: #fdf3d8; color: #8a6d1f; }
+.si-kind.k-new   { background: #e6f0fa; color: #2d5f96; }
+.si-card { border: 1px solid #c8d8cc; border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; background: #fff; }
+.si-card.decided { background: #f6faf7; }
+.si-cmp { width: 100%; border-collapse: collapse; font-size: 12.5px; margin: 8px 0; }
+.si-cmp th { text-align: left; background: #e4f0e8; color: #4d7a5e; padding: 5px 8px; border: 1px solid #b4d4c0; white-space: nowrap; }
+.si-cmp td { padding: 5px 8px; border: 1px solid #c8d8cc; vertical-align: top; }
+.si-cmp tr.diff td { background: #fdf3d8; }
+.si-cmp tr.diff td:first-child { background: #fbeccb; font-weight: 700; }
+.si-empty { color: #9aa5a0; }
+.si-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+.si-tab { padding: 6px 14px; border: 1px solid #b4d4c0; border-radius: 9px; background: #fff;
+          color: #4d7a5e; cursor: pointer; font-size: 13px; font-weight: 700; }
+.si-tab.active { background: #4d7a5e; color: #fff; border-color: #4d7a5e; }
+.si-map { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; margin: 10px 0; }
+.si-map label { font-size: 12px; color: #4d7a5e; font-weight: 700; display: block; margin-bottom: 3px; }
+.si-map select { width: 100%; padding: 5px 6px; border: 1px solid #b4d4c0; border-radius: 8px; font-size: 12px; }
+@media (max-width: 700px) { .si-map { grid-template-columns: 1fr; } }
+
 .import-zone {
   border: 2px dashed #b4d4c0; border-radius: 12px; padding: 16px;
   text-align: center; color: #7fa88a; font-size: 13px; cursor: pointer; transition: background 0.2s; margin-bottom: 10px;
@@ -320,9 +346,66 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     <div class="sidebar-item" onclick="switchSection('offices')">🏢 営業所</div>
     <div class="sidebar-item" onclick="switchSection('permits')">📋 営業許可</div>
     <div class="sidebar-item" onclick="switchSection('admins')">🔑 管理者</div>
+    <div class="sidebar-item" onclick="switchSection('staffimport')">📥 社員データ取込</div>
   </div>
 
   <div class="main">
+
+    <!-- ===== 社員データ取込 ===== -->
+    <div id="sec-staffimport" class="section-content">
+      <div class="panel">
+        <h2>📥 社員データ取込</h2>
+        <p style="font-size:13px;color:#5b6b63;line-height:1.7;margin:6px 0 12px;">
+          TKC（給与システム）から出したCSVで従業員マスタを最新化します。<br>
+          <b>同じ人がもう1件できてしまわないよう、フリガナ・生年月日・電話・住所・氏名で照合し、
+          迷うものは登録の前に1件ずつ確認していただきます。</b>
+        </p>
+
+        <div id="si-step1">
+          <div class="si-drop" onclick="document.getElementById('si-file').click()" id="si-zone">
+            <div style="font-size:22px;">📄</div>
+            <div style="margin-top:6px;font-weight:700;">CSVファイルを選ぶ／ここにドロップ</div>
+            <div style="margin-top:4px;font-size:11.5px;color:#8a9a91;">Shift-JIS・UTF-8のどちらでも読めます</div>
+            <input type="file" id="si-file" accept=".csv,.CSV,.txt" onchange="siPickFile(this)">
+          </div>
+        </div>
+
+        <div id="si-step2" style="display:none;margin-top:14px;">
+          <h3 style="font-size:14px;color:#4d7a5e;margin:0 0 4px;">① 列の対応づけ</h3>
+          <p style="font-size:12px;color:#5b6b63;margin:0 0 6px;">
+            CSVのどの列がどの項目かを確かめてください。よく使う名前は自動で選んであります。
+            <b>使わない列は「（使わない）」のままで構いません。</b>
+          </p>
+          <div class="si-map" id="si-map"></div>
+          <div id="si-sample" style="margin:10px 0;"></div>
+          <button class="btn btn-primary" onclick="siRunMatch()" id="si-btn-match">🔍 照合する</button>
+          <button class="btn" onclick="siReset()" style="margin-left:6px;">やり直す</button>
+          <div id="si-status2" style="margin-top:8px;"></div>
+        </div>
+
+        <div id="si-step3" style="display:none;margin-top:14px;">
+          <h3 style="font-size:14px;color:#4d7a5e;margin:0 0 4px;">② 照合の結果</h3>
+          <div id="si-summary" style="font-size:13px;margin-bottom:6px;"></div>
+          <div class="si-tabs" id="si-tabs"></div>
+          <div id="si-list"></div>
+
+          <div style="border-top:1px solid #dfeae3;margin-top:14px;padding-top:12px;">
+            <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:#5b6b63;cursor:pointer;margin-bottom:8px;">
+              <input type="checkbox" id="si-overwrite-name" style="width:16px;height:16px;">
+              <span>CSVの氏名・フリガナで<b>上書きする</b>（既定は上書きしません。TKCは略字「國広」、こちらは正式な字「國廣」というずれがあるためです）</span>
+            </label>
+            <button class="btn btn-success" onclick="siApply()" id="si-btn-apply">✅ この内容で登録する</button>
+            <button class="btn" onclick="siCancel()" style="margin-left:6px;">この取込をやめる</button>
+            <div id="si-status3" style="margin-top:8px;"></div>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid #dfeae3;margin-top:18px;padding-top:12px;">
+          <h3 style="font-size:14px;color:#4d7a5e;margin:0 0 6px;">これまでの取込</h3>
+          <div id="si-history" style="font-size:12.5px;"></div>
+        </div>
+      </div>
+    </div>
 
     <!-- ===== 従業員マスタ ===== -->
     <div id="sec-employees" class="section-content active">
@@ -1041,7 +1124,7 @@ let allCoursesData    = [];          // コース名マスタ
 let vehicleCourseMap  = {};          // vehicleId → [course_name, ...]
 
 // ===== セクション切り替え =====
-const SECTIONS = ['employees','jobtypes','courses','vehicles','offices','permits','admins'];
+const SECTIONS = ['employees','jobtypes','courses','vehicles','offices','permits','admins','staffimport'];
 function switchSection(key) {
   document.querySelectorAll('.section-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
@@ -1055,10 +1138,17 @@ function switchSection(key) {
   else if (key === 'offices') loadSimple('offices');
   else if (key === 'permits') loadSimple('permits');
   else if (key === 'admins') loadAccounts();
+  else if (key === 'staffimport') { siInitZone(); siHistory(); }
 }
 
 // ===== ロール・権限に応じたセクション制御 =====
 function applySectionPermissions() {
+  // 社員データ取込：従業員の編集権限（super_admin または staff_edit）がある人だけ
+  {
+    const _si_idx = SECTIONS.indexOf('staffimport');
+    const _si_items = document.querySelectorAll('.sidebar-item');
+    if (_si_idx >= 0 && _si_items[_si_idx]) _si_items[_si_idx].style.display = _canEditStaff() ? '' : 'none';
+  }
   const role  = sessionStorage.getItem('takao_role');
   const perms = getPermissions();
   const isSuperAdmin = role === 'super_admin';
@@ -1126,6 +1216,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (_wantV !== null && !isNaN(_wantV)) { _pendingVehicleOpen = _wantV; _savedSection = 'vehicles'; }
   }
   if (_savedSection === 'admins' && _role !== 'super_admin') _savedSection = 'employees';
+  if (_savedSection === 'staffimport' && !_canEditStaff()) _savedSection = 'employees';
   if (_role === 'operator') {
     const _perms = getPermissions();
     if (_perms[_savedSection] === false) {
@@ -4161,6 +4252,340 @@ function _loadQRLib(cb) {
 
 
 
+
+
+// ===== 社員データ取込（TKC CSV） =====
+const SI_FIELDS = [
+  ['employee_code','社員番号'], ['name','氏名'], ['name_kana','フリガナ'],
+  ['birth_date','生年月日'], ['phone','電話'], ['postal_code','郵便番号'],
+  ['address','住所'], ['department','部署'], ['hire_date','入社日'],
+  ['retirement_date','退職日'], ['email','メール']
+];
+// 推測の順番が大事：「氏名カナ」を氏名と取り違えないよう、フリガナを先に見る
+const SI_GUESS_ORDER = ['name_kana','employee_code','birth_date','postal_code','address',
+                        'department','hire_date','retirement_date','email','phone','name'];
+const SI_GUESS = {
+  employee_code: ['社員番号','社員コード','従業員番号','社員no','コード'],
+  name:          ['氏名','名前','社員名','従業員名'],
+  name_kana:     ['フリガナ','ふりがな','カナ','かな','ヨミ','よみ'],
+  birth_date:    ['生年月日','誕生日'],
+  phone:         ['携帯','電話','tel'],
+  postal_code:   ['郵便'],
+  address:       ['住所'],
+  department:    ['部課','部署','所属'],
+  hire_date:     ['入社'],
+  retirement_date:['退職'],
+  email:         ['メール','mail','アドレス']
+};
+let _si = { batch:null, rows:[], missing:[], tab:'要確認', headers:[], data:[], map:{} };
+
+function _siRpc(name, body) {
+  return fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
+    method:'POST', headers:getH(), body: JSON.stringify(body || {})
+  }).then(async res => {
+    const t = await res.text();
+    let j = null; try { j = t ? JSON.parse(t) : null; } catch(e) {}
+    if (!res.ok) throw new Error((j && (j.message || j.hint)) || t || ('通信に失敗しました（' + res.status + '）'));
+    return j;
+  });
+}
+
+// CSVを配列の配列にする（引用符・改行入りセルに対応）
+function siParseCSV(text) {
+  const rows = []; let row = [], cur = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i+1] === '"') { cur += '"'; i++; } else q = false; }
+      else cur += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') { row.push(cur); cur = ''; }
+    else if (c === '\n') { row.push(cur); cur = ''; rows.push(row); row = []; }
+    else if (c !== '\r') cur += c;
+  }
+  if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+  return rows.filter(r => r.some(v => (v || '').trim() !== ''));
+}
+
+// 文字コードを見分けて読む（Shift-JIS優先。化けが少ないほうを採る）
+function siDecode(buf) {
+  const bytes = new Uint8Array(buf);
+  const BOM = (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF);
+  if (BOM) return new TextDecoder('utf-8').decode(buf).replace(/^﻿/, '');
+  let sj = null, u8 = null;
+  try { sj = new TextDecoder('shift_jis').decode(buf); } catch(e) {}
+  try { u8 = new TextDecoder('utf-8').decode(buf); } catch(e) {}
+  const bad = s => s === null ? Infinity : (s.match(/�/g) || []).length;
+  const out = bad(sj) <= bad(u8) ? sj : u8;
+  return (out || '').replace(/^﻿/, '');
+}
+
+function siPickFile(input) { if (input.files && input.files[0]) siReadFile(input.files[0]); }
+
+function siReadFile(file) {
+  _si.fileName = file.name;
+  const r = new FileReader();
+  r.onload = e => {
+    const rows = siParseCSV(siDecode(e.target.result));
+    if (rows.length < 2) { alert('データの行がありません。'); return; }
+    _si.headers = rows[0].map(h => (h || '').trim());
+    _si.data    = rows.slice(1);
+    siBuildMap();
+    document.getElementById('si-step1').style.display = 'none';
+    document.getElementById('si-step2').style.display = '';
+    document.getElementById('si-step3').style.display = 'none';
+  };
+  r.readAsArrayBuffer(file);
+}
+
+function siBuildMap() {
+  const used = {};
+  _si.map = {};
+  SI_GUESS_ORDER.forEach(key => {
+    const words = SI_GUESS[key] || [];
+    for (let i = 0; i < _si.headers.length; i++) {
+      if (used[i]) continue;
+      const h = _si.headers[i].toLowerCase();
+      if (words.some(w => h.indexOf(w.toLowerCase()) >= 0)) { _si.map[key] = i; used[i] = true; break; }
+    }
+  });
+  document.getElementById('si-map').innerHTML = SI_FIELDS.map(([k,label]) => {
+    const opts = ['<option value="">（使わない）</option>'].concat(
+      _si.headers.map((h,i) => `<option value="${i}"${_si.map[k]===i?' selected':''}>${esc(h||('第'+(i+1)+'列'))}</option>`)
+    ).join('');
+    return `<div><label>${label}${k==='name'?' <span style="color:#c0392b;">必須</span>':''}</label>
+            <select onchange="_si.map['${k}']=this.value===''?undefined:parseInt(this.value,10); siSample();">${opts}</select></div>`;
+  }).join('');
+  siSample();
+}
+
+function siSample() {
+  const rows = _si.data.slice(0, 3);
+  const use = SI_FIELDS.filter(([k]) => _si.map[k] !== undefined);
+  document.getElementById('si-sample').innerHTML = !use.length ? '' :
+    `<div style="font-size:12px;color:#5b6b63;margin-bottom:4px;">読み取れている例（先頭3行／全${_si.data.length}行）</div>
+     <div class="preview-wrap"><table class="preview-table">
+     <thead><tr>${use.map(([,l])=>`<th>${l}</th>`).join('')}</tr></thead>
+     <tbody>${rows.map(r=>`<tr>${use.map(([k])=>`<td>${esc((r[_si.map[k]]||'').trim())}</td>`).join('')}</tr>`).join('')}</tbody>
+     </table></div>`;
+}
+
+async function siRunMatch() {
+  if (_si.map.name === undefined) { alert('「氏名」の列を選んでください。'); return; }
+  const btn = document.getElementById('si-btn-match');
+  btn.disabled = true; btn.textContent = '照合しています…';
+  try {
+    const payload = _si.data.map(r => {
+      const o = {};
+      SI_FIELDS.forEach(([k]) => { if (_si.map[k] !== undefined) o[k] = (r[_si.map[k]] || '').trim(); });
+      return o;
+    }).filter(o => (o.name || '').trim() !== '');
+    if (!payload.length) { alert('氏名が入っている行がありません。'); return; }
+    const res = await _siRpc('staff_import_load', { p_file_name: _si.fileName || null, p_rows: payload });
+    _si.batch = res.batch_id;
+    _si.tab = res['要確認'] > 0 ? '要確認' : '一致';
+    document.getElementById('si-summary').innerHTML = `<b>${res.row_count}行</b>を読み込みました。`;
+    await siLoadResult();
+    document.getElementById('si-step2').style.display = 'none';
+    document.getElementById('si-step3').style.display = '';
+  } catch (e) {
+    showStatus('si-status2','error', e.message);
+  } finally { btn.disabled = false; btn.textContent = '🔍 照合する'; }
+}
+
+async function siLoadResult() {
+  const rows    = await _siRpc('staff_import_rows', { p_batch: _si.batch });
+  const missing = await _siRpc('staff_import_missing', { p_batch: _si.batch });
+  _si.rows = rows || []; _si.missing = missing || [];
+  siRender();
+  siHistory();
+}
+
+function _siCount(kind) { return _si.rows.filter(r => r.match_kind === kind).length; }
+
+function siRender() {
+  const undecided = _si.rows.filter(r => r.match_kind === '要確認' && !r.decision).length;
+  const tabs = [
+    ['要確認', '⚠️ 要確認 ' + _siCount('要確認') + (undecided ? '（未判断' + undecided + '）' : '（済）')],
+    ['一致',   '✅ 一致 ' + _siCount('一致')],
+    ['新規',   '🆕 新規 ' + _siCount('新規')],
+    ['不足',   '❗ CSVに無い在籍者 ' + _si.missing.length]
+  ];
+  document.getElementById('si-tabs').innerHTML = tabs.map(([k,l]) =>
+    `<div class="si-tab${_si.tab===k?' active':''}" onclick="_si.tab='${k}';siRender();">${l}</div>`).join('');
+
+  const el = document.getElementById('si-list');
+  if (_si.tab === '要確認') el.innerHTML = siRenderCheck();
+  else if (_si.tab === '不足') el.innerHTML = siRenderMissing();
+  else el.innerHTML = siRenderPlain(_si.tab);
+}
+
+function _siVal(v) { return (v === null || v === undefined || v === '') ? '<span class="si-empty">（なし）</span>' : esc(String(v)); }
+
+function siCompareTable(data, ex) {
+  return `<table class="si-cmp">
+    <thead><tr><th style="width:90px;">項目</th><th>取り込むデータ</th><th>今の登録${ex?('（#'+ex.id+'）'):''}</th></tr></thead>
+    <tbody>${SI_FIELDS.map(([k,label]) => {
+      const a = (data && data[k]) || '', b = ex ? (ex[k] || '') : '';
+      const diff = ex && String(a).trim() !== '' && String(a).trim() !== String(b).trim();
+      return `<tr class="${diff?'diff':''}"><td>${label}</td><td>${_siVal(a)}</td><td>${_siVal(b)}</td></tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+function siRenderCheck() {
+  const rows = _si.rows.filter(r => r.match_kind === '要確認');
+  if (!rows.length) return '<p style="font-size:13px;color:#5b6b63;">確認が必要な行はありません。</p>';
+  return rows.map(r => {
+    const cands = r.candidates || [];
+    const sel = r.decided_staff_id || (cands[0] && cands[0].staff_id);
+    const pick = cands.length > 1
+      ? `<div style="font-size:12px;margin:6px 0;">候補が${cands.length}人います：
+          <select id="si-pick-${r.id}" style="padding:4px 6px;border:1px solid #b4d4c0;border-radius:8px;font-size:12px;">
+          ${cands.map(c=>`<option value="${c.staff_id}"${c.staff_id===sel?' selected':''}>${esc(c.name)} #${c.staff_id}（${c.score}点 ${(c.reasons||[]).join('+')}）${c.active?'':' ※退職'}</option>`).join('')}
+          </select></div>`
+      : `<div style="font-size:12px;margin:6px 0;">候補：<b>${cands[0]?(esc(cands[0].name)+' #'+cands[0].staff_id):'—'}</b>
+          （${cands[0]?cands[0].score:0}点 ${((cands[0]&&cands[0].reasons)||[]).join('+')}）
+          <input type="hidden" id="si-pick-${r.id}" value="${sel||''}"></div>`;
+    const done = r.decision
+      ? `<div style="font-size:12.5px;color:#2f6b45;font-weight:700;">→ 「${esc(r.decision)}」で決定済み${r.decided_staff_id?('（#'+r.decided_staff_id+'）'):''}
+           <button class="btn" style="margin-left:8px;padding:3px 10px;font-size:11.5px;" onclick="siDecide(${r.id},'保留')">やり直す</button></div>`
+      : `<div style="display:flex;gap:6px;flex-wrap:wrap;">
+           <button class="btn btn-success" style="padding:5px 12px;font-size:12.5px;" onclick="siDecide(${r.id},'同じ人')">同じ人（この番号を付ける）</button>
+           <button class="btn btn-primary" style="padding:5px 12px;font-size:12.5px;" onclick="siDecide(${r.id},'別人')">別人（新しく登録）</button>
+           <button class="btn" style="padding:5px 12px;font-size:12.5px;" onclick="siDecide(${r.id},'保留')">保留（何もしない）</button>
+         </div>`;
+    return `<div class="si-card${r.decision?' decided':''}">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span class="si-kind k-check">要確認</span>
+        <b style="font-size:14px;">${esc(r.data.name||'')}</b>
+        <span style="font-size:11.5px;color:#8a9a91;">CSV ${r.row_no}行目</span>
+      </div>
+      ${pick}
+      ${siCompareTable(r.data, r.existing)}
+      ${done}
+    </div>`;
+  }).join('');
+}
+
+function siRenderPlain(kind) {
+  const rows = _si.rows.filter(r => r.match_kind === kind);
+  if (!rows.length) return '<p style="font-size:13px;color:#5b6b63;">該当する行はありません。</p>';
+  if (kind === '一致') {
+    return '<p style="font-size:12.5px;color:#5b6b63;">社員番号が一致した行です。<b>色が付いた項目が書き換わります。</b></p>' +
+      rows.map(r => `<div class="si-card">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span class="si-kind k-match">一致</span>
+          <b style="font-size:14px;">${esc(r.data.name||'')}</b>
+          <span style="font-size:11.5px;color:#8a9a91;">CSV ${r.row_no}行目 → #${r.match_staff_id}</span>
+        </div>${siCompareTable(r.data, r.existing)}</div>`).join('');
+  }
+  return `<p style="font-size:12.5px;color:#5b6b63;">どの在籍者とも合わなかった行です。<b>新しく登録されます。</b></p>
+    <div class="preview-wrap"><table class="preview-table">
+    <thead><tr><th>行</th>${SI_FIELDS.map(([,l])=>`<th>${l}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(r=>`<tr><td>${r.row_no}</td>${SI_FIELDS.map(([k])=>`<td>${esc(r.data[k]||'')}</td>`).join('')}</tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
+function siRenderMissing() {
+  if (!_si.missing.length) return '<p style="font-size:13px;color:#5b6b63;">在籍者は全員CSVに載っています。</p>';
+  return `<p style="font-size:12.5px;color:#8a6d1f;">
+      ⚠️ <b>CSVに載っていない在籍者です。退職の登録が漏れているかもしれません。</b>
+      この画面では何もしません（勝手に退職にはしません）。従業員マスタでご確認ください。</p>
+    <div class="preview-wrap"><table class="preview-table">
+    <thead><tr><th>ID</th><th>氏名</th><th>社員番号</th><th>部署</th></tr></thead>
+    <tbody>${_si.missing.map(m=>`<tr><td>${m.id}</td><td>${esc(m.name||'')}</td><td>${esc(m.employee_code||'')}</td><td>${esc(m.department||'')}</td></tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
+async function siDecide(rowId, decision) {
+  try {
+    let sid = null;
+    if (decision === '同じ人') {
+      const el = document.getElementById('si-pick-' + rowId);
+      sid = el && el.value ? parseInt(el.value, 10) : null;
+      if (!sid) { alert('どの社員と同じ人かを選んでください。'); return; }
+    }
+    await _siRpc('staff_import_decide', { p_row_id: rowId, p_decision: decision, p_staff_id: sid });
+    await siLoadResult();
+  } catch (e) { showStatus('si-status3','error', e.message); }
+}
+
+async function siApply() {
+  const undecided = _si.rows.filter(r => r.match_kind === '要確認' && !r.decision).length;
+  if (undecided) { alert('まだ判断が済んでいない行が' + undecided + '件あります。'); _si.tab='要確認'; siRender(); return; }
+  const same  = _si.rows.filter(r => r.decision === '同じ人').length;
+  const other = _si.rows.filter(r => r.decision === '別人').length;
+  const hold  = _si.rows.filter(r => r.decision === '保留').length;
+  const ow = document.getElementById('si-overwrite-name').checked;
+  const msg = '次の内容で登録します。よろしいですか？\n\n'
+    + '　既存を更新　' + (_siCount('一致') + same) + '件（一致' + _siCount('一致') + '＋同じ人' + same + '）\n'
+    + '　新しく登録　' + (_siCount('新規') + other) + '件（新規' + _siCount('新規') + '＋別人' + other + '）\n'
+    + '　何もしない　' + hold + '件（保留）\n\n'
+    + '　氏名・フリガナ：' + (ow ? 'CSVで上書きします' : '今の登録のまま残します') + '\n\n'
+    + '※ 従業員データは削除されません。変更はすべて変更履歴に残ります。';
+  if (!confirm(msg)) return;
+  const btn = document.getElementById('si-btn-apply');
+  btn.disabled = true; btn.textContent = '登録しています…';
+  try {
+    const res = await _siRpc('staff_import_apply', { p_batch: _si.batch, p_overwrite_name: ow });
+    showStatus('si-status3','success',
+      '登録しました（更新' + res['更新'] + '件・新規' + res['新規'] + '件・保留' + res['保留'] + '件'
+      + (res['氏名を既存のまま残した'] ? '・氏名を今のまま残した' + res['氏名を既存のまま残した'] + '件' : '') + '）');
+    await siLoadResult();
+    btn.style.display = 'none';
+    if (typeof loadEmployees === 'function') loadEmployees();
+  } catch (e) {
+    showStatus('si-status3','error', e.message);
+    btn.disabled = false; btn.textContent = '✅ この内容で登録する';
+  }
+}
+
+async function siCancel() {
+  if (!confirm('この取込をやめます。読み込んだ内容は登録されません。よろしいですか？')) return;
+  try {
+    await _siRpc('staff_import_cancel', { p_batch: _si.batch, p_note: '画面から取消' });
+    siReset(); siHistory();
+  } catch (e) { showStatus('si-status3','error', e.message); }
+}
+
+function siReset() {
+  _si = { batch:null, rows:[], missing:[], tab:'要確認', headers:[], data:[], map:{} };
+  document.getElementById('si-step1').style.display = '';
+  document.getElementById('si-step2').style.display = 'none';
+  document.getElementById('si-step3').style.display = 'none';
+  const b = document.getElementById('si-btn-apply');
+  if (b) { b.style.display = ''; b.disabled = false; b.textContent = '✅ この内容で登録する'; }
+  const f = document.getElementById('si-file'); if (f) f.value = '';
+  document.getElementById('si-status2').innerHTML = '';
+  document.getElementById('si-status3').innerHTML = '';
+}
+
+async function siHistory() {
+  try {
+    const list = await _siRpc('staff_import_batches', { p_limit: 10 });
+    const el = document.getElementById('si-history');
+    if (!list || !list.length) { el.innerHTML = '<span style="color:#8a9a91;">まだ取込はありません。</span>'; return; }
+    el.innerHTML = `<div class="preview-wrap"><table class="preview-table">
+      <thead><tr><th>日時</th><th>ファイル</th><th>行数</th><th>状態</th><th>実行者</th></tr></thead>
+      <tbody>${list.map(b=>`<tr>
+        <td>${esc((b.created_at||'').replace('T',' ').slice(0,16))}</td>
+        <td>${esc(b.file_name||'')}</td><td>${b.row_count}</td>
+        <td>${esc(b.status)}</td><td>${esc(b.applied_by||b.created_by||'')}</td></tr>`).join('')}</tbody>
+      </table></div>`;
+  } catch (e) { /* 履歴は失敗しても本体に影響させない */ }
+}
+
+function siInitZone() {
+  const zone = document.getElementById('si-zone');
+  if (!zone || zone._bound) return;
+  zone._bound = true;
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('dragover');
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) siReadFile(e.dataTransfer.files[0]);
+  });
+}
 
 </script>
 
