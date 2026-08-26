@@ -2624,14 +2624,14 @@ function renderRoutePoints(){
   const dist=rptDistances();
   const _box = RPTS[String(selCourseId)] || {};
   const _segBtn = (val,label,on,n) =>
-    `<button onclick="setRSeg('${val}')" style="border:1px solid ${on?'#4d7a5e':'#cfe0d5'};background:${on?'#4d7a5e':'#fff'};color:${on?'#fff':'#2d4a38'};padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:${on?'700':'500'};font-family:inherit;">${label}${n?`（${n}）`:'（未入力）'}</button>`;
+    `<button onclick="setRSeg('${val}')" style="border:1px solid ${on?'#4d7a5e':'#cfe0d5'};background:${on?'#4d7a5e':'#fff'};color:${on?'#fff':'#2d4a38'};padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:${on?'700':'500'};font-family:inherit;">${label}${n?'':'（未入力）'}</button>`;
   // 本線（登校・下校）は1段目、回送は2段目。折り返し任せにせず、間に区切りを入れて位置を固定する
   /* 段1＝何の経路か（登校便 ／ ②で作った日課）
      段2＝その中のどこか（便・回送）
      ⚠️ 下校は日課によって通るバス停が違う（茅ケ崎：14:05は松が丘2丁目、15:20は東海岸北）
         ので、日課ごとに持つ。登校便は毎日同じなので日課に関係しない。 */
   const _formBtn = (name,label,on,n) =>
-    `<button onclick="setRForm('${escAttr(name)}')" style="border:1px solid ${on?'#2d4a38':'#cfe0d5'};background:${on?'#2d4a38':'#fff'};color:${on?'#fff':'#2d4a38'};padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:${on?'700':'500'};font-family:inherit;">${label}${n?`（${n}）`:''}</button>`;
+    `<button onclick="setRForm('${escAttr(name)}')" style="border:1px solid ${on?'#2d4a38':'#cfe0d5'};background:${on?'#2d4a38':'#fff'};color:${on?'#fff':'#2d4a38'};padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:${on?'700':'500'};font-family:inherit;">${label}${n?'':'（未入力）'}</button>`;
   const _rForms = _routeForms();
   const _cntFor = (form) => {   // その日課に入っている地点の総数
     let n=0; const pre = (form||'') + RK;
