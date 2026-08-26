@@ -1588,13 +1588,14 @@ async function hSave(){
   }
 }
 
-/* 月間予定と便の食い違い（2026-08-26）。
-   ⚠️ 便は月間予定から作られた結果で、月間予定を直しても自動では作り直されない。
-      「便の作成／更新」は無い便を足すだけで、余分な便は消さない。
-      日課の便数を減らす変更をすると、余分な便が残る。ここで気づけるようにする。
-   八重樫さんの線引き：
-      予定（これから走る）… 直してよい。乗務の割り当ても一緒に外れてよい
-      記録（実際に走った）… 直さない（人数が入っている・運行ボタンの記録がある便） */
+/* 配置環境の変化（2026-08-26）。
+   運行経路データ（運行時程マスタ）を変えると、先に作ってあった便と食い違う。
+     便を減らした → 配置した便が取り消しになる（乗務員の割り当ても一緒に外れる）
+     便を増やした → 配置する便が増える（「便の作成／更新」で足す）
+   ⚠️ 取り消しは自動にしない。1件ずつ確認してから（八重樫さんの指示：事故のきっかけになるため）。
+   ⚠️ 記録（人数が入っている・運行ボタンの記録がある）は取り消さない。
+   ⚠️ 日課名そのものがマスタに無いとき（form_exists=false）は対処が逆。
+      先に月間予定の日課名を直す。名前が合わない日は便が1本も作られないため。 */
 let MISMATCH = [];
 async function hLoadMismatch(){
   const ym = _ym();
@@ -1606,52 +1607,82 @@ async function hLoadMismatch(){
     MISMATCH = r.ok ? (await r.json() || []) : [];
   }catch(e){ MISMATCH = []; }
 }
+function _hMDate(d){
+  const t = String(d).split('-');
+  const w = ['日','月','火','水','木','金','土'][new Date(+t[0], +t[1]-1, +t[2]).getDay()];
+  return `${+t[1]}/${+t[2]}（${w}）`;
+}
 function hRenderMismatch(){
   const el = document.getElementById('hMismatch');
   if(!el) return;
   if(!MISMATCH.length){ el.innerHTML = ''; return; }
-  const extra = MISMATCH.filter(m => m.kind === '余分');
-  const lack  = MISMATCH.filter(m => m.kind === '足りない');
-  const why = m => m.passengers != null ? `人数（${m.passengers}人）が入っています`
-                 : m.has_record ? '運行ボタンの記録があります' : '';
-  const rows = extra.map((m,i) => {
-    const blocked = why(m);
-    return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:4px 0;font-size:12.5px;padding:4px 0;border-top:1px solid #f0e4d0;">
-      <span style="font-weight:700;min-width:86px;">${escHtml(String(m.work_date))}</span>
-      <span style="min-width:180px;">${escHtml(m.course_label)}</span>
-      <span class="muted">日課 ${escHtml(m.form_name)}</span>
-      <span style="color:#b0451f;font-weight:700;">${escHtml(m.segment)} ${escHtml(m.start_time||'')}</span>
-      ${m.crew_names ? `<span style="color:#8a6d1f;">外れる乗務：${escHtml(m.crew_names)}</span>` : '<span class="muted">乗務なし</span>'}
-      ${blocked
-        ? `<span style="color:#c0392b;font-size:11.5px;">🔒 ${escHtml(blocked)}ので消せません</span>`
-        : `<button class="mini" onclick="hDeleteDuty(${m.duty_id}, ${i})">この便を消す</button>`}
+  const gone = MISMATCH.filter(m => m.kind === '余分');
+  const add  = MISMATCH.filter(m => m.kind === '足りない');
+  const locked = m => m.passengers != null ? `人数（${m.passengers}人）が入っています`
+                    : m.has_record ? '運行ボタンの記録があります' : '';
+  const noForm = [...new Set(MISMATCH.filter(m => !m.form_exists).map(m => m.form_name))];
+  const nameWarn = noForm.length ? `<div style="background:#fdecea;border:1px solid #e6b0aa;border-radius:7px;padding:8px 10px;margin:7px 0;font-size:12px;line-height:1.75;color:#943126;">
+      ⚠️ 月間予定の日課「<b>${noForm.map(escHtml).join('」「')}</b>」が、運行経路データに見当たりません。<br>
+      <b>先に月間予定の日課名を直してください。</b>日課名が合っていないと、便を作り直しても1本も作られません。
+    </div>` : '';
+
+  const goneRows = gone.map(m => {
+    const lk = locked(m);
+    const why = m.form_exists
+      ? `日課「${escHtml(m.form_name)}」の下校便は <b>${escHtml(m.form_times || 'なし')}</b> になりました`
+      : `日課「${escHtml(m.form_name)}」が運行経路データにありません`;
+    return `<div style="padding:7px 0;border-top:1px solid #f0e0d6;font-size:12.5px;line-height:1.8;">
+      <div><b>${escHtml(_hMDate(m.work_date))}</b>　${escHtml(m.course_label)}　
+        <span style="color:#b0451f;font-weight:700;">${escHtml(m.segment)} ${escHtml(m.start_time||'')}</span></div>
+      <div class="muted" style="font-size:11.5px;">${why}</div>
+      <div style="margin-top:2px;">${m.crew_names
+        ? `配置：<b style="color:#8a6d1f;">${escHtml(m.crew_names)}</b>`
+        : '<span class="muted">配置なし</span>'}</div>
+      <div style="margin-top:4px;">${lk
+        ? `<span style="color:#c0392b;font-size:11.5px;">🔒 ${escHtml(lk)}。実際に走った記録なので取り消せません。</span>`
+        : `<button class="mini" onclick="hDeleteDuty(${m.duty_id})">この便の配置を取り消す</button>`}</div>
     </div>`;
   }).join('');
-  const lackRows = lack.length ? `<div style="margin-top:8px;font-size:12.5px;color:#2d5f96;">
-      <b>足りない便が${lack.length}件あります。</b>「🔄 この月の便を作成／更新」で足せます（既にある便は触りません）。<br>
-      <span class="muted">${lack.slice(0,8).map(m=>escHtml(String(m.work_date)+' '+m.course_label+' '+m.segment+' '+(m.start_time||''))).join('／')}${lack.length>8?' ほか':''}</span>
+
+  const addRows = add.length ? `<div style="margin-top:11px;padding-top:9px;border-top:2px solid #e0c6a2;">
+      <div style="font-weight:700;color:#2d5f96;font-size:13px;">配置する便が増えました（${add.length}件）</div>
+      <div style="font-size:12px;color:#5b6b63;line-height:1.75;margin-top:3px;">
+        上の「<b>🔄 この月の便を作成／更新</b>」を押すと足せます。いまある便と配置はそのままです。
+      </div>
+      <div class="muted" style="font-size:11.5px;margin-top:3px;line-height:1.8;">
+        ${add.slice(0,10).map(m => escHtml(_hMDate(m.work_date)+'　'+m.course_label+'　'+m.segment+' '+(m.start_time||''))).join('<br>')}
+        ${add.length>10 ? '<br>ほか'+(add.length-10)+'件' : ''}
+      </div>
     </div>` : '';
+
   el.innerHTML = `<div style="background:#fdf6e8;border:1px solid #e0c6a2;border-radius:10px;padding:11px 14px;margin:8px 0;">
-    <div style="font-weight:700;color:#8a6d1f;font-size:13.5px;">⚠️ 月間予定と食い違っている便（${MISMATCH.length}件）</div>
-    <div style="font-size:12px;color:#5b6b63;line-height:1.7;margin:5px 0 4px;">
-      月間予定の日課を変えても、<b>できあがった便は自動では変わりません。</b>
-      便数が減る変更をすると、走らない便が残ります。
-    </div>
-    ${extra.length ? `<div style="font-size:12.5px;font-weight:700;color:#8a6d1f;margin-top:6px;">余分な便（${extra.length}件）</div>${rows}` : ''}
-    ${lackRows}
+    <div style="font-weight:700;color:#8a6d1f;font-size:13.5px;">⚠️ 運行経路データが変更されたため、配置環境が変わりました</div>
+    ${nameWarn}
+    ${gone.length ? `<div style="margin-top:6px;">
+      <div style="font-weight:700;color:#b0451f;font-size:13px;">配置した便が取り消されます（${gone.length}件）</div>
+      <div style="font-size:12px;color:#5b6b63;line-height:1.75;margin-top:3px;">
+        便が減ったため、下の便はもう走りません。取り消すと、配置されている乗務員も一緒に外れます。
+      </div>
+      <div style="max-height:340px;overflow:auto;margin-top:2px;">${goneRows}</div>
+    </div>` : ''}
+    ${addRows}
   </div>`;
 }
-async function hDeleteDuty(id, idx){
+async function hDeleteDuty(id){
   const m = MISMATCH.find(x => x.duty_id === id);
   if(!m) return;
-  const msg = `この便を消します。\n\n`
-    + `　${m.work_date}　${m.course_label}\n`
-    + `　${m.segment} ${m.start_time||''}（日課 ${m.form_name} にはこの便がありません）\n\n`
+  const msg = `運行経路データが変更されたため、この便は走りません。\n`
+    + `配置を取り消します。\n\n`
+    + `　${_hMDate(m.work_date)}　${m.course_label}\n`
+    + `　${m.segment} ${m.start_time||''}\n`
+    + `　${m.form_exists
+          ? `日課「${m.form_name}」の下校便は ${m.form_times || 'なし'} になりました`
+          : `日課「${m.form_name}」が運行経路データにありません`}\n\n`
     + (m.crew_names
-        ? `⚠️ この便に付いている乗務も一緒に外れます：\n　　${m.crew_names}\n\n`
-          + `　※ 従業員の登録や、他の便への割り当ては変わりません。\n`
+        ? `⚠️ 配置されている乗務員も外れます：\n　　${m.crew_names}\n\n`
+          + `　※ 従業員の登録や、同じ人の他の便は変わりません。\n`
           + `　※ 外した記録は変更履歴に残ります。\n\n`
-        : `　この便に乗務は付いていません。\n\n`)
+        : `　この便に配置はありません。\n\n`)
     + `よろしいですか。`;
   if(!confirm(msg)) return;
   try{
@@ -1659,27 +1690,54 @@ async function hDeleteDuty(id, idx){
       body: JSON.stringify({ p_id: id }) });
     const t = await r.text();
     if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
-      status('消せませんでした：' + ((j && j.message) || t).slice(0,150), false); return; }
+      status('取り消せませんでした：' + ((j && j.message) || t).slice(0,150), false); return; }
     const j = JSON.parse(t);
     await hLoadMonth(); await hLoadMismatch(); hRender();
-    status(`便を消しました（${j.work_date} ${j.segment} ${j.start_time||''}）`
-      + (j.crew_count ? ` — 乗務 ${j.crew_count}名（${j.crew}）も外れました` : ''), true);
-  }catch(e){ status('消せませんでした：' + e.message, false); }
+    status(`${_hMDate(j.work_date)} ${j.segment} ${j.start_time||''} の配置を取り消しました`
+      + (j.crew_count ? `（${j.crew} が外れました）` : ''), true);
+  }catch(e){ status('取り消せませんでした：' + e.message, false); }
 }
 
 /* ---------- 便の生成 ---------- */
 async function hGenerate(){
   const ym=_ym(); if(!ym){ status('対象月を選んでください', false); return; }
   const start=ym+'-01', end=ym+'-'+_p2(_dim(ym));
-  if(!confirm(`${ym} の便を月間予定から作成します。\n既にある便はそのまま（担当者は消えません）。よろしいですか？`)) return;
+  if(!confirm(`${ym} の便を、月間予定にあわせます。\n\n`
+    + `　・足りない便を作ります（いまある便と配置はそのまま）\n`
+    + `　・運行経路データの変更で走らなくなった便は取り消します\n`
+    + `　　取り消すと、その便に配置されている乗務員も外れます\n\n`
+    + `⚠️ 取り消すのは今日より先の便だけです。\n`
+    + `　　過去の便、人数が入っている便、運行ボタンの記録がある便は触りません。\n`
+    + `　　月間予定の日課名が運行経路データに無い日も触りません。\n\n`
+    + `よろしいですか？`)) return;
+  let created='?', total='?', removed=[], syncNG='';
   try{
     const r = await fetch(`${REST_URL}/rpc/generate_duties`, { method:'POST', headers:getH(), body:JSON.stringify({p_start:start, p_end:end}) });
     const t = await r.text();
     if(!r.ok){ status('作成に失敗しました：'+t.slice(0,150), false); return; }
     let j={}; try{ j=JSON.parse(t); }catch(e){}
-    await hLoadMonth(); await hLoadMismatch(); hRender();
-    status(`便を作成しました（新規 ${j.created??'?'}件／この月の合計 ${j.total_now??'?'}件）`, true);
-  }catch(e){ status('作成に失敗しました：'+e.message, false); }
+    created = j.created ?? '?'; total = j.total_now ?? '?';
+  }catch(e){ status('作成に失敗しました：'+e.message, false); return; }
+
+  // 走らなくなった「これからの便」を取り消す。権限が無ければ作成だけで止める（画面の知らせは残る）
+  try{
+    const r2 = await fetch(`${REST_URL}/rpc/sync_future_duties`, { method:'POST', headers:getH(), body:JSON.stringify({p_start:start, p_end:end}) });
+    const t2 = await r2.text();
+    if(r2.ok){ const j2 = JSON.parse(t2); removed = j2.removed || []; }
+    else { let j2={}; try{ j2=JSON.parse(t2); }catch(e){} syncNG = (j2 && j2.message) || t2.slice(0,120); }
+  }catch(e){ syncNG = e.message; }
+
+  await hLoadMonth(); await hLoadMismatch(); hRender();
+
+  if(removed.length){
+    alert(`運行経路データが変更されたため、次の便を取り消しました（${removed.length}件）。\n`
+      + `配置されていた乗務員も外れています。\n`
+      + `（従業員の登録は変わりません。外した記録は変更履歴に残ります）\n\n`
+      + removed.map(x => `${x.work_date}　${x.course_label}\n　日課「${x.form_name}」／${x.segment} ${x.start_time||''}\n　外れた配置：${x.crew || 'なし'}`).join('\n\n'));
+  }
+  status(`便を作成しました（新規 ${created}件／この月の合計 ${total}件）`
+    + (removed.length ? `。走らなくなった便 ${removed.length}件を取り消しました` : '')
+    + (syncNG ? `。※取り消しは行えませんでした：${syncNG}` : ''), true);
 }
 
 /* ---------- 起動 ---------- */
