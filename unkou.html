@@ -917,6 +917,10 @@ function _renumGekou(){
    ⚠️ 日課は「名前」で紐づける。②の保存は日課をまとめて消して入れ直すので、
       IDで紐づけると②を保存するたびに経路が巻き添えで消える。 */
 let selRForm = '';    // いま開いている日課名（''＝登校便）
+/* ②で日課名を変えたときの控え。保存のときに予定表（カレンダー）の日課名も付け替える。
+   ⚠️ ④の経路は画面のバッファで付け替えられるが、予定表はデータベースにしか無い。
+      付け替えないと「その日の日課」が見つからず、運転手に正しい経路が出ない（2026-08-26） */
+let FORM_RENAMES = {};   // course_id → [[変更前, 変更後], ...]
 
 const R_TOUKOU_MAIN = ['登校'];
 const R_TOUKOU_KAI  = ['出庫回送登校','帰庫回送登校'];
@@ -1450,7 +1454,14 @@ function updFormName(fi, val){
   }
   f.form_name = val;
   let moved = 0;
-  if(from && to) moved = _renameRouteForm(from, to);
+  if(from && to){
+    moved = _renameRouteForm(from, to);
+    const k = String(selCourseId);
+    const list = FORM_RENAMES[k] = FORM_RENAMES[k] || [];
+    // 続けて何度も変えたときは、いちばん最初の名前から今の名前へ1本にまとめる
+    const prev = list.find(r => r[1] === from);
+    if(prev) prev[1] = to; else list.push([from, to]);
+  }
   if(selRForm === from) selRForm = to;
   renderEditor();
   if(moved) _saveMsg(`「${from}」→「${to}」に変えました。④の経路 ${moved}地点も一緒に付け替えました（保存すると確定します）。`, true);
@@ -2083,9 +2094,13 @@ function rptSeedKaisou(){
   const gc  = off && dmsToDecimal(off.coord);
   if(!gc){ _saveMsg('このコースの車庫に座標が入っていません。営業所マスタ（master.html）で座標を入れてください。', false); return; }
 
-  // その便の本線から、最初のバス停と最後の地点を取る
-  const mainSeg = (_kaiGroup() === '登校') ? '登校' : '下校①';
-  const line = ((RPTS[String(selCourseId)]||{})[mainSeg]||[])
+  /* その便の本線から、最初のバス停と最後の地点を取る。
+     ⚠️ 鍵は日課つきになったので _rkey を通す（2026-08-26 直し漏れ）。
+        帰庫はその日課の最後の便から、便間回送はその前の便から始まる */
+  const mainSeg = (_kaiGroup() === '登校') ? '登校'
+    : (selRSeg === '便間回送②' ? '下校②'
+       : (selRSeg === '帰庫回送下校' ? _lastGekouSeg() : '下校①'));
+  const line = ((RPTS[String(selCourseId)]||{})[_rkey(mainSeg, null, null)]||[])
     .filter(p=>String(p.lat).trim()!=='' && String(p.lng).trim()!=='');
   if(!line.length){ _saveMsg(`${R_SEG_LABEL[mainSeg]}にまだ地点がありません。先にそちらを作ってください。`, false); return; }
   const firstStop = line.find(p=>p.is_stop) || line[0];
@@ -2567,7 +2582,9 @@ function renderRoutePoints(){
     let whoOpts = mk('', '送迎なし');
     all.filter(s=>s.dbId).forEach(s=> whoOpts += mk(String(s.dbId), s.label||('送迎'+s.dbId)));
     // ② メイン／サブ。いま地点が入っているルート名を拾って並べる
-    const pre = selRSeg + '|' + (selRScen||'') + '|';
+    // ⚠️ 鍵は「日課␁便␁送迎␁ルート名」。古い「|」区切りのままだと
+    //    入力済みのサブルートが一覧に出てこない（2026-08-26 直し漏れ）
+    const pre = (_isGekouSide(selRSeg) ? (selRForm||'') : '') + RK + selRSeg + RK + (selRScen||'') + RK;
     const names = {};  names[''] = true;  names[selRRoute||''] = true;
     Object.keys(_box).forEach(kk=>{ if(kk.indexOf(pre)===0) names[kk.slice(pre.length)] = true; });
     const rOpts = Object.keys(names).sort().map(nm=>{
@@ -2803,6 +2820,7 @@ async function saveCourse(){
   const key=String(c.id);
   let _stopsChanged = [];   // ②のバス停が変わった側（保存後に④の確認をうながす）
   let _flagOn = [], _flagOff = [];   // ②に合わせて④のバス停の印を付けた／外した停
+  let _calRenamed = [];              // 予定表の日課名を付け替えたもの
   // 押している間ずっと分かるようにする（無反応に見えて何度も押されるのを防ぐ）
   _saving = true;
   const _btn = document.getElementById('saveBtn');
@@ -2834,6 +2852,17 @@ async function saveCourse(){
     { const r2=await fetch(`${REST_URL}/rpc/save_course_schedule_forms`, { method:'POST', headers:getH(),
         body:JSON.stringify({ p_course_id:c.id, p_version_id:selVerId, p_rows:forms }) });
       if(!r2.ok){ const t=await r2.text(); _saveMsg('② 下校便（日課）の保存に失敗（元のデータは残っています）：'+t.slice(0,100), false); return; } }
+    // 2.5) 日課名を変えていたら、予定表（月間予定）の日課名も付け替える
+    {
+      const ren = (FORM_RENAMES[key] || []).filter(r => r[0] && r[1] && r[0] !== r[1]);
+      for(const [from, to] of ren){
+        const rr = await fetch(`${REST_URL}/rpc/rename_course_form`, { method:'POST', headers:getH(),
+          body:JSON.stringify({ p_course_id:c.id, p_from:from, p_to:to }) });
+        if(rr.ok){ const n = await rr.json(); if(n) _calRenamed.push(`${from}→${to}（${n}日）`); }
+        else { const t=await rr.text(); _saveMsg('予定表の日課名の付け替えに失敗：'+t.slice(0,100), false); return; }
+      }
+      if(ren.length) FORM_RENAMES[key] = [];
+    }
     // 3) バス停・ルート（このコースを置き換え）
     const stopsCount = (STOPS[key]||[]).filter(s=>(s.name||'').trim()||(s.address||'').trim()).length;
     if(!(await _confirmWipe(`course_locations?version_id=eq.${selVerId}`, stopsCount, 'バス停'))){ _saveMsg('保存を中止しました。', false); return; }
@@ -3008,7 +3037,7 @@ async function saveCourse(){
     //    renderEditor() は編集欄をまるごと作り直すので、先に出すとメッセージごと消える。
     //    2026-08-19 に読み直しを速くしたことで、見える間もなく消えるようになっていた
     //    （2026-08-21 八重樫さんが「保存しましたが表示されませんでした」と発見）
-    _saveMsg('✅ 保存しました' + (_flagOn.length ? `（④で「${_flagOn.join('・')}」をバス停にしました）` : '') + (_flagOff.length ? `（④で「${_flagOff.join('・')}」のバス停の印を外しました。地点は道の目印として残しています）` : '') + (_stopsChanged.length ? `（⚠️ ${_stopsChanged.join('・')}のバス停が変わりました。④ルート詳細で②との食い違いをご確認ください。④の道はそのまま残してあります）` : ''), true);
+    _saveMsg('✅ 保存しました' + (_calRenamed.length ? `（月間予定の日課名も付け替えました：${_calRenamed.join('・')}）` : '') + (_flagOn.length ? `（④で「${_flagOn.join('・')}」をバス停にしました）` : '') + (_flagOff.length ? `（④で「${_flagOff.join('・')}」のバス停の印を外しました。地点は道の目印として残しています）` : '') + (_stopsChanged.length ? `（⚠️ ${_stopsChanged.join('・')}のバス停が変わりました。④ルート詳細で②との食い違いをご確認ください。④の道はそのまま残してあります）` : ''), true);
   }catch(e){ _saveMsg('保存エラー：'+e.message, false); }
   finally{
     // どの抜け方をしても必ず鍵を外し、ボタンを戻す
