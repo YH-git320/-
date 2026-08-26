@@ -377,25 +377,44 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
             <b>使わない列は「（使わない）」のままで構いません。</b>
           </p>
           <div class="si-map" id="si-map"></div>
-          <div id="si-sample" style="margin:10px 0;"></div>
-
-          <div style="border:1px solid #dfeae3;border-radius:10px;padding:10px 12px;margin:10px 0;background:#fbfdfc;">
-            <div style="font-size:13px;font-weight:700;color:#4d7a5e;margin-bottom:4px;">取り込む範囲</div>
-            <div style="font-size:12px;color:#5b6b63;line-height:1.7;margin-bottom:7px;">
-              CSVには退職された方も入っています。<b>古い退職者まで取り込むと、その方々が新しく登録されます。</b>
-              2026-08-04 の取込では「在籍者全員＋2025年以降の退職者まで」としました。
-            </div>
-            <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:13px;">
-              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
-                <input type="radio" name="si-scope" value="active" onchange="siScopeChanged()"> 在籍中の方のみ</label>
-              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
-                <input type="radio" name="si-scope" value="since" checked onchange="siScopeChanged()"> 在籍中 ＋
-                <input type="number" id="si-since" value="2025" min="1950" max="2100" style="width:76px;padding:4px 6px;border:1px solid #b4d4c0;border-radius:8px;font-size:12px;" onchange="siScopeChanged()" oninput="siScopeChanged()">
-                年以降の退職者まで</label>
-              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
-                <input type="radio" name="si-scope" value="all" onchange="siScopeChanged()"> 全員</label>
-            </div>
-            <div id="si-scope-count" style="font-size:13px;margin-top:8px;"></div>
+          <div id="si-sample" style="margin:10px 0;"></div>
+
+
+
+          <div style="border:1px solid #dfeae3;border-radius:10px;padding:10px 12px;margin:10px 0;background:#fbfdfc;">
+
+            <div style="font-size:13px;font-weight:700;color:#4d7a5e;margin-bottom:4px;">取り込む範囲</div>
+
+            <div style="font-size:12px;color:#5b6b63;line-height:1.7;margin-bottom:7px;">
+
+              CSVには退職された方も入っています。<b>古い退職者まで取り込むと、その方々が新しく登録されます。</b>
+
+              2026-08-04 の取込では「在籍者全員＋2025年以降の退職者まで」としました。
+
+            </div>
+
+            <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:13px;">
+
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+
+                <input type="radio" name="si-scope" value="active" onchange="siScopeChanged()"> 在籍中の方のみ</label>
+
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+
+                <input type="radio" name="si-scope" value="since" checked onchange="siScopeChanged()"> 在籍中 ＋
+
+                <input type="number" id="si-since" value="2025" min="1950" max="2100" style="width:76px;padding:4px 6px;border:1px solid #b4d4c0;border-radius:8px;font-size:12px;" onchange="siScopeChanged()" oninput="siScopeChanged()">
+
+                年以降の退職者まで</label>
+
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+
+                <input type="radio" name="si-scope" value="all" onchange="siScopeChanged()"> 全員</label>
+
+            </div>
+
+            <div id="si-scope-count" style="font-size:13px;margin-top:8px;"></div>
+
           </div>
           <button class="btn btn-primary" onclick="siRunMatch()" id="si-btn-match">🔍 照合する</button>
           <button class="btn" onclick="siReset()" style="margin-left:6px;">🗑 読み込みを取り消す</button>
@@ -4452,51 +4471,96 @@ function siSample() {
   siScopeChanged();
 }
 
-// 和暦・西暦から「年」だけ取り出す（読めなければ null）
-function siYear(t) {
-  const s = String(t == null ? '' : t)
-    .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).trim();
-  if (!s) return null;
-  const g = s.match(/^(令和|平成|昭和|大正|明治|R|H|S|T|M)\s*(\d+)/);
-  if (g) {
-    const base = { '令和':2018,'R':2018,'平成':1988,'H':1988,'昭和':1925,'S':1925,
-                   '大正':1911,'T':1911,'明治':1867,'M':1867 }[g[1]];
-    return base + parseInt(g[2], 10);
-  }
-  const y = s.match(/^(\d{4})/);
-  return y ? parseInt(y[1], 10) : null;
-}
-
-// 選ばれた範囲に合う行だけを返す
-function siScopeRows() {
-  const el = document.querySelector('input[name="si-scope"]:checked');
-  const mode = el ? el.value : 'all';
-  const since = parseInt((document.getElementById('si-since') || {}).value, 10);
-  const ri = _si.map.retirement_date;
-  return _si.data.filter(r => {
-    if ((r[_si.map.name] || '').trim() === '') return false;
-    if (mode === 'all' || ri === undefined) return true;
-    const rt = (r[ri] || '').trim();
-    if (rt === '') return true;                 // 退職日が空＝在籍中
-    if (mode === 'active') return false;
-    const y = siYear(rt);
-    return y === null ? true : y >= (isNaN(since) ? 0 : since);
-  });
-}
-
-function siScopeChanged() {
-  const rows = siScopeRows();
-  const total = _si.data.filter(r => (r[_si.map.name] || '').trim() !== '').length;
-  const ri = _si.map.retirement_date;
-  const zaiseki = ri === undefined ? total
-    : _si.data.filter(r => (r[_si.map.name]||'').trim() !== '' && (r[ri]||'').trim() === '').length;
-  const el = document.getElementById('si-scope-count');
-  if (!el) return;
-  el.innerHTML = `→ <b style="font-size:15px;color:#2f6b45;">${rows.length}件</b> を取り込みます`
-    + `<span style="color:#8a9a91;font-size:12px;">（CSV全${total}件のうち。在籍中 ${zaiseki}件・退職済み ${total - zaiseki}件）</span>`
-    + (rows.length > 400 ? `<div style="color:#8a6d1f;font-size:12px;margin-top:4px;">⚠️ 件数が多いです。古い退職者まで含んでいないかご確認ください。</div>` : '');
-}
-
+// 和暦・西暦から「年」だけ取り出す（読めなければ null）
+
+function siYear(t) {
+
+  const s = String(t == null ? '' : t)
+
+    .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).trim();
+
+  if (!s) return null;
+
+  const g = s.match(/^(令和|平成|昭和|大正|明治|R|H|S|T|M)\s*(\d+)/);
+
+  if (g) {
+
+    const base = { '令和':2018,'R':2018,'平成':1988,'H':1988,'昭和':1925,'S':1925,
+
+                   '大正':1911,'T':1911,'明治':1867,'M':1867 }[g[1]];
+
+    return base + parseInt(g[2], 10);
+
+  }
+
+  const y = s.match(/^(\d{4})/);
+
+  return y ? parseInt(y[1], 10) : null;
+
+}
+
+
+
+// 選ばれた範囲に合う行だけを返す
+
+function siScopeRows() {
+
+  const el = document.querySelector('input[name="si-scope"]:checked');
+
+  const mode = el ? el.value : 'all';
+
+  const since = parseInt((document.getElementById('si-since') || {}).value, 10);
+
+  const ri = _si.map.retirement_date;
+
+  return _si.data.filter(r => {
+
+    if ((r[_si.map.name] || '').trim() === '') return false;
+
+    if (mode === 'all' || ri === undefined) return true;
+
+    const rt = (r[ri] || '').trim();
+
+    if (rt === '') return true;                 // 退職日が空＝在籍中
+
+    if (mode === 'active') return false;
+
+    const y = siYear(rt);
+
+    return y === null ? true : y >= (isNaN(since) ? 0 : since);
+
+  });
+
+}
+
+
+
+function siScopeChanged() {
+
+  const rows = siScopeRows();
+
+  const total = _si.data.filter(r => (r[_si.map.name] || '').trim() !== '').length;
+
+  const ri = _si.map.retirement_date;
+
+  const zaiseki = ri === undefined ? total
+
+    : _si.data.filter(r => (r[_si.map.name]||'').trim() !== '' && (r[ri]||'').trim() === '').length;
+
+  const el = document.getElementById('si-scope-count');
+
+  if (!el) return;
+
+  el.innerHTML = `→ <b style="font-size:15px;color:#2f6b45;">${rows.length}件</b> を取り込みます`
+
+    + `<span style="color:#8a9a91;font-size:12px;">（CSV全${total}件のうち。在籍中 ${zaiseki}件・退職済み ${total - zaiseki}件）</span>`
+
+    + (rows.length > 400 ? `<div style="color:#8a6d1f;font-size:12px;margin-top:4px;">⚠️ 件数が多いです。古い退職者まで含んでいないかご確認ください。</div>` : '');
+
+}
+
+
+
 async function siRunMatch() {
   if (_si.map.name === undefined) { alert('「氏名」の列を選んでください。'); return; }
   const btn = document.getElementById('si-btn-match');
@@ -4549,58 +4613,110 @@ function siRender() {
   else el.innerHTML = siRenderPlain(_si.tab);
 }
 
-// 日付は「同じ日を指しているか」で比べる（昭和22年01月13日 と 1947-01-13 は同じ）
-const SI_DATE_FIELDS = ['birth_date','hire_date','retirement_date'];
-function siYMD(t) {
-  const s = String(t == null ? '' : t)
-    .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).trim();
-  if (!s) return null;
-  let y = null, m = null, d = null;
-  const g = s.match(/^(令和|平成|昭和|大正|明治|R|H|S|T|M)\s*(\d+)\s*[年./-]\s*(\d+)\s*[月./-]\s*(\d+)/);
-  if (g) {
-    const base = { '令和':2018,'R':2018,'平成':1988,'H':1988,'昭和':1925,'S':1925,
-                   '大正':1911,'T':1911,'明治':1867,'M':1867 }[g[1]];
-    y = base + (+g[2]); m = +g[3]; d = +g[4];
-  } else {
-    const w = s.match(/^(\d{4})\s*[年./-]\s*(\d+)\s*[月./-]\s*(\d+)/);
-    if (!w) return null;
-    y = +w[1]; m = +w[2]; d = +w[3];
-  }
-  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
-  return y + '-' + ('0'+m).slice(-2) + '-' + ('0'+d).slice(-2);
-}
-// 取り込む値と今の値が「実質同じ」か
-function siSameValue(key, a, b) {
-  a = String(a == null ? '' : a).trim();
-  b = String(b == null ? '' : b).trim();
-  if (a === b) return true;
-  if (SI_DATE_FIELDS.indexOf(key) >= 0) {
-    const x = siYMD(a), y = siYMD(b);
-    if (x && y) return x === y;
-  }
-  if (key === 'name')      return _norm_name_js(a) === _norm_name_js(b);
-  if (key === 'name_kana') return _norm_kana_js(a) === _norm_kana_js(b);
-  if (key === 'phone' || key === 'postal_code') return a.replace(/\D/g,'') === b.replace(/\D/g,'');
-  return false;
-}
-// 異体字をならす（データベース側の _norm_name と同じ組）
-function _norm_name_js(s) {
-  const from = '髙﨑濵濱冨栁邊邉嶋國廣齋齊澤眞惠德瀨桒';
-  const to   = '高崎浜浜富柳辺辺島国広斎斎沢真恵徳瀬桑';
-  return String(s||'').replace(/[\s　]/g,'').replace(/./g, c => {
-    const i = from.indexOf(c); return i >= 0 ? to[i] : c; });
-}
-// フリガナを比べるための簡易ならし（全角カナ→半角相当・空白除去）
-function _norm_kana_js(s) {
-  const d = {'ガ':'ｶﾞ','ギ':'ｷﾞ','グ':'ｸﾞ','ゲ':'ｹﾞ','ゴ':'ｺﾞ','ザ':'ｻﾞ','ジ':'ｼﾞ','ズ':'ｽﾞ','ゼ':'ｾﾞ','ゾ':'ｿﾞ',
-             'ダ':'ﾀﾞ','ヂ':'ﾁﾞ','ヅ':'ﾂﾞ','デ':'ﾃﾞ','ド':'ﾄﾞ','バ':'ﾊﾞ','ビ':'ﾋﾞ','ブ':'ﾌﾞ','ベ':'ﾍﾞ','ボ':'ﾎﾞ',
-             'パ':'ﾊﾟ','ピ':'ﾋﾟ','プ':'ﾌﾟ','ペ':'ﾍﾟ','ポ':'ﾎﾟ','ヴ':'ｳﾞ'};
-  const from = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲンァィゥェォャュョッー・';
-  const to   = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜｦﾝｧｨｩｪｫｬｭｮｯｰ･';
-  let v = String(s||'').replace(/[\s　]/g,'').replace(/[―－]/g,'ｰ');
-  v = v.replace(/./g, c => d[c] || c);
-  return v.replace(/./g, c => { const i = from.indexOf(c); return i >= 0 ? to[i] : c; });
-}
+// 日付は「同じ日を指しているか」で比べる（昭和22年01月13日 と 1947-01-13 は同じ）
+
+const SI_DATE_FIELDS = ['birth_date','hire_date','retirement_date'];
+
+function siYMD(t) {
+
+  const s = String(t == null ? '' : t)
+
+    .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).trim();
+
+  if (!s) return null;
+
+  let y = null, m = null, d = null;
+
+  const g = s.match(/^(令和|平成|昭和|大正|明治|R|H|S|T|M)\s*(\d+)\s*[年./-]\s*(\d+)\s*[月./-]\s*(\d+)/);
+
+  if (g) {
+
+    const base = { '令和':2018,'R':2018,'平成':1988,'H':1988,'昭和':1925,'S':1925,
+
+                   '大正':1911,'T':1911,'明治':1867,'M':1867 }[g[1]];
+
+    y = base + (+g[2]); m = +g[3]; d = +g[4];
+
+  } else {
+
+    const w = s.match(/^(\d{4})\s*[年./-]\s*(\d+)\s*[月./-]\s*(\d+)/);
+
+    if (!w) return null;
+
+    y = +w[1]; m = +w[2]; d = +w[3];
+
+  }
+
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+
+  return y + '-' + ('0'+m).slice(-2) + '-' + ('0'+d).slice(-2);
+
+}
+
+// 取り込む値と今の値が「実質同じ」か
+
+function siSameValue(key, a, b) {
+
+  a = String(a == null ? '' : a).trim();
+
+  b = String(b == null ? '' : b).trim();
+
+  if (a === b) return true;
+
+  if (SI_DATE_FIELDS.indexOf(key) >= 0) {
+
+    const x = siYMD(a), y = siYMD(b);
+
+    if (x && y) return x === y;
+
+  }
+
+  if (key === 'name')      return _norm_name_js(a) === _norm_name_js(b);
+
+  if (key === 'name_kana') return _norm_kana_js(a) === _norm_kana_js(b);
+
+  if (key === 'phone' || key === 'postal_code') return a.replace(/\D/g,'') === b.replace(/\D/g,'');
+
+  return false;
+
+}
+
+// 異体字をならす（データベース側の _norm_name と同じ組）
+
+function _norm_name_js(s) {
+
+  const from = '髙﨑濵濱冨栁邊邉嶋國廣齋齊澤眞惠德瀨桒';
+
+  const to   = '高崎浜浜富柳辺辺島国広斎斎沢真恵徳瀬桑';
+
+  return String(s||'').replace(/[\s　]/g,'').replace(/./g, c => {
+
+    const i = from.indexOf(c); return i >= 0 ? to[i] : c; });
+
+}
+
+// フリガナを比べるための簡易ならし（全角カナ→半角相当・空白除去）
+
+function _norm_kana_js(s) {
+
+  const d = {'ガ':'ｶﾞ','ギ':'ｷﾞ','グ':'ｸﾞ','ゲ':'ｹﾞ','ゴ':'ｺﾞ','ザ':'ｻﾞ','ジ':'ｼﾞ','ズ':'ｽﾞ','ゼ':'ｾﾞ','ゾ':'ｿﾞ',
+
+             'ダ':'ﾀﾞ','ヂ':'ﾁﾞ','ヅ':'ﾂﾞ','デ':'ﾃﾞ','ド':'ﾄﾞ','バ':'ﾊﾞ','ビ':'ﾋﾞ','ブ':'ﾌﾞ','ベ':'ﾍﾞ','ボ':'ﾎﾞ',
+
+             'パ':'ﾊﾟ','ピ':'ﾋﾟ','プ':'ﾌﾟ','ペ':'ﾍﾟ','ポ':'ﾎﾟ','ヴ':'ｳﾞ'};
+
+  const from = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲンァィゥェォャュョッー・';
+
+  const to   = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜｦﾝｧｨｩｪｫｬｭｮｯｰ･';
+
+  let v = String(s||'').replace(/[\s　]/g,'').replace(/[―－]/g,'ｰ');
+
+  v = v.replace(/./g, c => d[c] || c);
+
+  return v.replace(/./g, c => { const i = from.indexOf(c); return i >= 0 ? to[i] : c; });
+
+}
+
 function _siVal(v) { return (v === null || v === undefined || v === '') ? '<span class="si-empty">（なし）</span>' : esc(String(v)); }
 
 function siCompareTable(data, ex) {
@@ -4756,16 +4872,26 @@ function siReset() {
   document.getElementById('si-status3').innerHTML = '';
 }
 
-// 日時を、この端末の時刻（日本時間）で表示する
-// ⚠️ created_at は世界標準時で返るため、そのまま切り出すと9時間ずれる（2026-08-26 修正）
-function siLocalTime(v) {
-  if (!v) return '';
-  const d = new Date(v);
-  if (isNaN(d.getTime())) return String(v).replace('T', ' ').slice(0, 16);
-  const p2 = n => ('0' + n).slice(-2);
-  return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate())
-       + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
-}
+// 日時を、この端末の時刻（日本時間）で表示する
+
+// ⚠️ created_at は世界標準時で返るため、そのまま切り出すと9時間ずれる（2026-08-26 修正）
+
+function siLocalTime(v) {
+
+  if (!v) return '';
+
+  const d = new Date(v);
+
+  if (isNaN(d.getTime())) return String(v).replace('T', ' ').slice(0, 16);
+
+  const p2 = n => ('0' + n).slice(-2);
+
+  return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate())
+
+       + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+
+}
+
 async function siHistory() {
   try {
     const list = await _siRpc('staff_import_batches', { p_limit: 10 });

@@ -927,6 +927,104 @@ function _shortName(n){ n=n||'';
   if(n.indexOf('通常')===0) return n.replace('通常','').replace('便','');
   return n;
 }
+/* ⚠️ 月間予定に、運行時程マスタ（②下校便）に無い日課名が入っていないかを知らせる（2026-08-26）。
+
+   八重樫さん：「ABCDであればABCDと月間予定表には入れてもらいたい。問題はその時に運行時程マスタが
+
+   整備されていないという事。もし、名前が違うなどの問題があれば時程マスタと合わない旨を知らせる機能が必要」
+
+
+
+   ⚠️ マスタに無い日課名の日は、generate_duties が便を1本も作らない（登校便も下校便も）。
+
+      黙って何も起きないので、ここで気づけるようにする。
+
+      マスタ側で同じ名前の日課を作れば、そのまま効く（名前で結びつくため）。 */
+
+function _unknownForms(){
+
+  const out = [];
+
+  CY.forEach(c => {
+
+    const cid = String(c.id);
+
+    const known = {};
+
+    (CFORMS[cid] || []).forEach(f => known[f.name] = true);
+
+    const bad = {};
+
+    Object.keys(CDATA[cid] || {}).forEach(date => {
+
+      const v = ((CDATA[cid] || {})[date] || {}).form_name || '';
+
+      if (!v || v === '運休' || known[v] || CAL_EXTRA.indexOf(v) >= 0) return;
+
+      (bad[v] = bad[v] || []).push(date);
+
+    });
+
+    Object.keys(bad).sort().forEach(nm => {
+
+      out.push({ cid: c.id, course: (c.school_name || '') + ' ／ ' + (c.course_name || ''),
+
+                 name: nm, days: bad[nm].length, first: bad[nm].sort()[0] });
+
+    });
+
+  });
+
+  return out;
+
+}
+
+function _unknownFormBox(){
+
+  const bad = _unknownForms();
+
+  if (!bad.length) return '';
+
+  const rows = bad.map(b =>
+
+    `<div style="font-size:12.5px;margin:2px 0;">
+
+       <span style="font-weight:700;">${escHtml(b.course)}</span>
+
+       <span style="color:#b0451f;font-weight:700;margin-left:6px;">${escHtml(b.name)}</span>
+
+       <span class="muted" style="margin-left:6px;">${b.days}日（${escHtml(b.first)}〜）</span>
+
+     </div>`).join('');
+
+  return `<div style="background:#fdf6e8;border:1px solid #e0c6a2;border-radius:10px;padding:11px 14px;margin:0 0 10px;">
+
+    <div style="font-weight:700;color:#8a6d1f;font-size:13.5px;">⚠️ 運行時程マスタに無い日課が使われています（${bad.length}件）</div>
+
+    <div style="font-size:12px;color:#5b6b63;line-height:1.7;margin:5px 0 7px;">
+
+      学校の書類どおりに入れてある日課ですが、<b>運行時程マスタ（②下校便）にその名前の日課がまだありません。</b><br>
+
+      <b>この日は便が1本も作られません（登校便も下校便も）。</b>
+
+      マスタで同じ名前の日課を作れば、そのまま結びついて反映されます。
+
+    </div>
+
+    ${rows}
+
+    <div style="font-size:11.5px;color:#8a9a91;margin-top:7px;">
+
+      表の中では <b>名前(?)</b> と赤く出ています。運行時程マスタは
+
+      <a href="unkou.html" style="color:#4d7a5e;">こちら</a>（②下校便のタブ）。
+
+    </div>
+
+  </div>`;
+
+}
+
 // 略記の後ろに小さく添える語（例：登校＋「のみ」）
 function _shortSuffix(n){ return (n||'').indexOf('登校')===0 ? 'のみ' : ''; }
 function _shortLabel(cid, v){
@@ -937,10 +1035,13 @@ function _shortLabel(cid, v){
   if(CAL_EXTRA.indexOf(v)>=0) return v;
   return v+'(?)';
 }
-function _cellBg(v){ if(v==='運休') return '#eceff0'; if(v==='') return '#fff'; if(CAL_EXTRA.indexOf(v)>=0) return '#e6eefb'; return '#eaf5ee'; }
+function _cellBg(v, cid){ if(v==='運休') return '#eceff0'; if(v==='') return '#fff'; if(CAL_EXTRA.indexOf(v)>=0) return '#e6eefb';
+  // マスタに無い日課は目立たせる
+  if(cid!=null && !(CFORMS[String(cid)]||[]).some(f=>f.name===v)) return '#fdf0e4';
+  return '#eaf5ee'; }
 function _note(cid,date){ return ((CDATA[String(cid)]||{})[date]||{}).note||''; }
 function _kekkin(cid,date){ return ((CDATA[String(cid)]||{})[date]||{}).kekkin||''; }
-function _btnBg(cid,date,v){ if(_kekkin(cid,date)) return '#ffd6d6'; return _note(cid,date) ? '#ffe1b0' : _cellBg(v); }
+function _btnBg(cid,date,v){ if(_kekkin(cid,date)) return '#ffd6d6'; return _note(cid,date) ? '#ffe1b0' : _cellBg(v, cid); }
 function _btnBd(cid,date){ if(_kekkin(cid,date)) return '#d9534f'; return _note(cid,date) ? '#e0821a' : '#cfe0d5'; }
 function _btnHtml(cid,date,v){
   const kk=_kekkin(cid,date);
@@ -953,7 +1054,8 @@ function _btnHtml(cid,date,v){
          + (sx?`<span style="font-size:10px;font-weight:400;">${escHtml(sx)}</span>`:'')
          + (t?` <span style="font-size:10px;">${escHtml(t)}</span>`:''); }
     else if(CAL_EXTRA.indexOf(v)>=0) main=`<b style="font-weight:700;font-size:13px;">${escHtml(v)}</b>`;
-    else main=escHtml(v+'(?)'); }
+    // ⚠️ マスタに無い日課。この日は便が1本も作られない（2026-08-26）
+    else main=`<b style="font-weight:700;font-size:12px;color:#b0451f;">${escHtml(v)}(?)</b>`; }
   return main+' ▾'+(kk?`<div style="font-size:9px;line-height:1.1;color:#b30000;font-weight:700;">${escHtml(kk)}</div>`:'');
 }
 // 日本の国民の祝日を計算（固定日・ハッピーマンデー・春分/秋分・国民の休日・振替休日）。約1980〜2099年で有効。
@@ -1010,9 +1112,9 @@ function calRender(){
     }
     return `<tr>${tds}</tr>`;
   }).join('');
-  document.getElementById('calArea').innerHTML = list.length
+  document.getElementById('calArea').innerHTML = _unknownFormBox() + (list.length
     ? `<table style="border-collapse:separate;border-spacing:0;">${'<thead>'+head+'</thead>'}<tbody>${rows}</tbody></table>`
-    : '<p class="muted" style="padding:16px;">該当コースなし</p>';
+    : '<p class="muted" style="padding:16px;">該当コースなし</p>');
   _calDirtyView();
 }
 function _key(cid,date){ return cid+'|'+date; }
