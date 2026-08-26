@@ -2474,7 +2474,7 @@ async function saveCourse(){
   if(!selVerId){ _saveMsg('版がありません。まず版を作成してください。', false); return; }
   if(!isLatestVer()){ _saveMsg('過去版は保存できません。最新版を選ぶか、「新版を作成」してから編集してください。', false); return; }
   const key=String(c.id);
-  let _rebuiltRoute = [];   // ②の並びが変わったので④を作り直した便（保存完了メッセージで伝える）
+  let _stopsChanged = [];   // ②のバス停が変わった側（保存後に④の確認をうながす）
   // 押している間ずっと分かるようにする（無反応に見えて何度も押されるのを防ぐ）
   _saving = true;
   const _btn = document.getElementById('saveBtn');
@@ -2525,26 +2525,19 @@ async function saveCourse(){
     if(!r3.ok){ const t=await r3.text(); _saveMsg('バス停・ルート（①②）の保存に失敗（元のデータは残っています）：'+t.slice(0,100), false); return; }
     // 3.5) 経路点（この版の4便ぶんをまとめて置き換え）
     rptSyncFromInputs();
-    /* ②（バス停の並び）が、この版を開いたときから変わっていたら、
-       ④の本線（登校・下校①②③）を新しい並びから作り直す。
-       八重樫さんの整理：「①②③を作ってから④」なので、②を変えたら④は作り直してよい
-       （曲がり角の目印も含めて消えてよい）。①（時刻）③（日課）だけ直したときは触らない。
-       2026-08-24　あおば支援学校2コースの件（下校の並びを直したのに④の到着地が古いままだった）から。 */
+    /* ⚠️ 2026-08-26：②を変えても④の本線を勝手に作り直さないようにした。
+       それまでは「バス停の名前か並びが変わったら④を作り直す（曲がり角の目印も消える）」
+       という動きだった。八重樫さんの当初のご趣旨は
+       「バス停の順番が総入れ替えになり、最終バス停まで変わったときは、
+         残っているルートに価値がないので消えてよい」というもので、
+       名前を1文字直しただけで消えてよい、という意味ではなかった。
+       これからは④の画面で②との食い違いを知らせ、
+       「その停だけ足し引きする」か「作り直す」かを人が選ぶ。 */
     {
       const nowSig  = _stopsOrderSig(keep);
       const origSig = STOPS_ORIG_SIG[key] || { toukou:'', gekou:'' };
-      if(nowSig.toukou !== origSig.toukou){
-        const pts = _rptFromStops(keep, '登校');
-        if(pts.length){ RPTS[key]['登校'] = pts; _rebuiltRoute.push('登校'); }   // 座標が1つも無ければ、誤って全消しにしないよう既存のまま残す
-      }
-      if(nowSig.gekou !== origSig.gekou){
-        ['下校①','下校②','下校③'].forEach(seg=>{
-          if(((RPTS[key]||{})[seg]||[]).length){   // 元々使っている便だけ作り直す（下校②③が空なら触らない）
-            const pts = _rptFromStops(keep, seg);
-            if(pts.length){ RPTS[key][seg] = pts; _rebuiltRoute.push(seg); }
-          }
-        });
-      }
+      if(nowSig.toukou !== origSig.toukou) _stopsChanged.push('登校');
+      if(nowSig.gekou  !== origSig.gekou)  _stopsChanged.push('下校');
     }
     const rptRows=[];
     // 回送の鍵は「便|シナリオid|ルート名」。本線は便の名前だけ
@@ -2633,7 +2626,7 @@ async function saveCourse(){
     //    renderEditor() は編集欄をまるごと作り直すので、先に出すとメッセージごと消える。
     //    2026-08-19 に読み直しを速くしたことで、見える間もなく消えるようになっていた
     //    （2026-08-21 八重樫さんが「保存しましたが表示されませんでした」と発見）
-    _saveMsg('✅ 保存しました' + (_rebuiltRoute.length ? `（②の並びが変わったので、④の${_rebuiltRoute.join('・')}を新しい並びで作り直しました。曲がり角の目印を付けていた場合は消えています。④を確認してください）` : ''), true);
+    _saveMsg('✅ 保存しました' + (_stopsChanged.length ? `（⚠️ ${_stopsChanged.join('・')}のバス停が変わりました。④ルート詳細で②との食い違いをご確認ください。` + `④の道はそのまま残してあります）` : ''), true);
   }catch(e){ _saveMsg('保存エラー：'+e.message, false); }
   finally{
     // どの抜け方をしても必ず鍵を外し、ボタンを戻す
