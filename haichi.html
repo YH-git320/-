@@ -105,6 +105,7 @@ button.mini{font-size:12px;padding:6px 10px;}
     </div>
     <div id="hMismatch"></div>
     <div id="hSkips"></div>
+    <div id="hDeleted"></div>
     <div class="muted" style="font-size:11px;margin-top:6px;">
       上部3行＝<b>必要</b>（コースごとの必要人数×便数）／<b>配置</b>（割り当て済み）／<b>不足</b>（赤は要対応）。<br>
       セル内は便ごとの担当者。<b>登</b>=登校便／<b>①②</b>=下校便。未割り当ては「—」。土＝青／日祝＝赤。<br>
@@ -1162,6 +1163,7 @@ function _headHtml(ym,y,m,dim,HOL,firstLabel){
 function hRender(){
   hRenderMismatch();
   hRenderSkips();
+  hRenderDeleted();
   if(TAB==='人別'){ hRenderPerson(); return; }
   if(TAB==='車両別'){ hRenderVehicle(); return; }
   const ym=_ym(); if(!ym) return;
@@ -1594,7 +1596,7 @@ async function hSave(){
       if(!rc.ok){ status('保存に失敗しました（元のデータは残っています）：'+(await rc.text()).slice(0,120), false); return; }
     }
     DIRTY={}; DIRTYV={}; DIRTYS={}; _dirtyView();
-    await hLoadMonth(); await hLoadHist(); await hLoadMismatch(); await hLoadSkips(); hRender();
+    await hLoadMonth(); await hLoadHist(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender();
     status('保存しました', true);
   }catch(e){ status('保存に失敗しました：'+e.message, false); }
   finally{
@@ -1634,7 +1636,7 @@ async function hSetField(id, f){
     if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
       status('変えられませんでした（元のデータは残っています）：' + ((j&&j.message)||t).slice(0,150), false); return; }
     const j = JSON.parse(t);
-    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); hRender();
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender();
     if(CUR) hOpenAsg(CUR.cid, CUR.date);
     status(`${j.work_date} ${j.segment} の${OD_LABEL[f]||f}を「この日だけ」変えました（${j.old||'—'} → ${j.new||'—'}）`, true);
   }catch(e){ status('変えられませんでした：'+e.message, false); }
@@ -1650,7 +1652,7 @@ async function hClearField(id, f){
     if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
       status('戻せませんでした（元のデータは残っています）：' + ((j&&j.message)||t).slice(0,150), false); return; }
     const j = JSON.parse(t);
-    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); hRender();
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender();
     if(CUR) hOpenAsg(CUR.cid, CUR.date);
     status(`${j.work_date} ${j.segment} の${OD_LABEL[f]||f}をマスタに戻しました（${j.old||'—'} → ${j.new||'—'}）`, true);
   }catch(e){ status('戻せませんでした：'+e.message, false); }
@@ -1674,7 +1676,7 @@ async function hSkipDuty(id){
       status('できませんでした（元のデータは残っています）：' + ((j&&j.message)||t).slice(0,150), false); return; }
     const j = JSON.parse(t);
     hCloseAsg();
-    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); hRender();
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender();
     status(`${j.work_date} ${j.segment} を走らせないことにしました`
       + (j.crew_count ? `（${j.crew} が外れました）` : ''), true);
   }catch(e){ status('できませんでした：'+e.message, false); }
@@ -1689,7 +1691,7 @@ async function hUnskipDuty(cid, date, seg){
     if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
       status('戻せませんでした：' + ((j&&j.message)||t).slice(0,150), false); return; }
     const j = JSON.parse(t);
-    await hLoadMonth(); await hLoadSkips(); await hLoadMismatch(); await hLoadSkips(); hRender();
+    await hLoadMonth(); await hLoadSkips(); await hLoadDeleted(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender();
     status(j.restored ? `${j.work_date} ${j.segment} ${j.start_time||''} を戻しました`
                       : `取り消しました（${j.why}）`, true);
   }catch(e){ status('戻せませんでした：'+e.message, false); }
@@ -1721,6 +1723,80 @@ function hRenderSkips(){
       <button class="mini" onclick="hUnskipDuty(${s.course_id},'${escAttr(String(s.work_date))}','${escAttr(s.segment)}')">走らせるに戻す</button>
     </div>`).join('')}
   </div>`;
+}
+
+/* 取り消した便を戻す（2026-08-26）。
+   変更履歴（audit_log）に、消した便と一緒に消えた乗務員が残っている。そこから元に戻す。
+   ⚠️ 便の id は採番し直しになるので、乗務員は「消えたときの duty_id」で拾って付け直している。
+   ⚠️ 過去の日付には戻さない。同じ便が既にあるときも戻さない。
+   ⚠️ この一覧は既定では畳んでおく。ふだん見るものではないため。 */
+let DELETED = [];
+let _delOpen = false;
+async function hLoadDeleted(){
+  const ym=_ym(); if(!ym){ DELETED=[]; return; }
+  const start=ym+'-01', end=ym+'-'+_p2(_dim(ym));
+  try{
+    const r = await fetch(`${REST_URL}/rpc/deleted_duties`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ p_from:start, p_to:end }) });
+    DELETED = r.ok ? (await r.json() || []) : [];
+  }catch(e){ DELETED = []; }
+}
+function hToggleDeleted(){ _delOpen = !_delOpen; hRenderDeleted(); }
+function hRenderDeleted(){
+  const el = document.getElementById('hDeleted');
+  if(!el) return;
+  if(!DELETED.length){ el.innerHTML=''; return; }
+  const can = DELETED.filter(x=>x.can_restore).length;
+  if(!_delOpen){
+    el.innerHTML = `<div style="margin:6px 0;"><button class="mini" onclick="hToggleDeleted()">
+      🗃 取り消した便の記録（${DELETED.length}件${can?`／戻せる ${can}件`:''}）を見る</button></div>`;
+    return;
+  }
+  el.innerHTML = `<div style="background:#f6f6f4;border:1px solid #d8d8d2;border-radius:10px;padding:10px 13px;margin:8px 0;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div style="font-weight:700;color:#5b5b52;font-size:13px;">取り消した便の記録（${DELETED.length}件）</div>
+      <button class="mini" style="margin-left:auto;" onclick="hToggleDeleted()">閉じる</button>
+    </div>
+    <div style="font-size:12px;color:#5b6b63;line-height:1.75;margin-top:3px;">
+      変更履歴に残っているものです。<b>戻すと、一緒に外れた乗務員も付け直します。</b>
+    </div>
+    <div style="max-height:320px;overflow:auto;margin-top:4px;">
+      ${DELETED.map(x=>`<div style="padding:6px 0;border-top:1px solid #e6e6e0;font-size:12.5px;line-height:1.8;">
+        <div><b>${escHtml(String(x.work_date))}</b>　${escHtml(x.course_label||'')}　${escHtml(x.segment)} ${escHtml(x.start_time||'')}</div>
+        <div class="muted" style="font-size:11.5px;">
+          ${escHtml(String(x.deleted_at||'').slice(0,16).replace('T',' '))} に取り消し
+          ${x.deleted_by ? '／' + escHtml(String(x.deleted_by).slice(0,40)) : ''}
+        </div>
+        ${x.crew ? `<div style="color:#8a6d1f;">一緒に外れた乗務員：${escHtml(x.crew)}</div>` : ''}
+        <div style="margin-top:3px;">${x.can_restore
+          ? `<button class="mini" onclick="hRestoreDuty(${x.audit_id})">この便を戻す</button>`
+          : `<span class="muted" style="font-size:11.5px;">戻せません（${escHtml(x.why||'')}）</span>`}</div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+async function hRestoreDuty(aid){
+  const x = DELETED.find(v=>v.audit_id===aid);
+  if(!x) return;
+  if(!confirm(`取り消した便を戻します。\n\n`
+    + `　${x.work_date}　${x.course_label||''}　${x.segment} ${x.start_time||''}\n\n`
+    + (x.crew ? `　一緒に外れた乗務員も付け直します：\n　　${x.crew}\n\n` : '')
+    + `⚠️ 運行時程マスタがこの便を求めていない場合、\n`
+    + `　　次にマスタを保存したときに、また取り消されます。\n`
+    + `　　残すのであれば、マスタか月間予定のほうをご確認ください。\n\n`
+    + `よろしいですか。`)) return;
+  try{
+    const r = await fetch(`${REST_URL}/rpc/restore_deleted_duty`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ p_audit_id: aid }) });
+    const t = await r.text();
+    if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
+      status('戻せませんでした（元のデータは残っています）：' + ((j&&j.message)||t).slice(0,150), false); return; }
+    const j = JSON.parse(t);
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); await hLoadDeleted(); hRender();
+    status(`${j.work_date} ${j.segment} ${j.start_time||''} を戻しました`
+      + (j.crew_count ? `（${j.crew} を付け直しました）` : '')
+      + (j.missing_staff ? `　⚠️ 名簿にいない方 ${j.missing_staff}名 は付け直せませんでした` : ''), true);
+  }catch(e){ status('戻せませんでした：'+e.message, false); }
 }
 
 /* 運行経路データと便の食い違い（2026-08-26）。
@@ -1888,7 +1964,7 @@ async function hRetimeDuty(id){
     if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
       status('直せませんでした（元のデータは残っています）：' + ((j && j.message) || t).slice(0,150), false); return; }
     const j = JSON.parse(t);
-    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); hRender();
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender();
     status(`${_hMDate(j.work_date)} ${j.segment} の時刻を ${j.old_time} → ${j.new_time} に直しました`
       + (j.crew ? `（${j.crew} はそのまま）` : ''), true);
   }catch(e){ status('直せませんでした（元のデータは残っています）：' + e.message, false); }
@@ -1918,7 +1994,7 @@ async function hDeleteDuty(id){
     if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
       status('取り消せませんでした（元のデータは残っています）：' + ((j && j.message) || t).slice(0,150), false); return; }
     const j = JSON.parse(t);
-    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); hRender();
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender();
     status(`${_hMDate(j.work_date)} ${j.segment} ${j.start_time||''} の配置を取り消しました`
       + (j.crew_count ? `（${j.crew} が外れました）` : ''), true);
   }catch(e){ status('取り消せませんでした（元のデータは残っています）：' + e.message, false); }
@@ -1938,7 +2014,7 @@ async function hGenerate(){
     const t = await r.text();
     if(!r.ok){ status('作成に失敗しました（元のデータは残っています）：'+t.slice(0,150), false); return; }
     let j={}; try{ j=JSON.parse(t); }catch(e){}
-    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); hRender();
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender();
     status(`便を作成しました（新規 ${j.created??'?'}件／この月の合計 ${j.total_now??'?'}件）`, true);
   }catch(e){ status('作成に失敗しました（元のデータは残っています）：'+e.message, false); }
 }
@@ -1949,13 +2025,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!ok) return;
   const now=new Date();
   document.getElementById('hMonth').value = `${now.getFullYear()}-${_p2(now.getMonth()+1)}`;
-  document.getElementById('hMonth').addEventListener('change', async ()=>{ await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); hRender(); });
+  document.getElementById('hMonth').addEventListener('change', async ()=>{ await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender(); });
   document.getElementById('hFilter').addEventListener('input', hRender);
   document.getElementById('hPref').addEventListener('change', hRender);
   try{
     await hLoadBase();
     await hLoadMonth();
-    await hLoadMismatch(); await hLoadSkips();
+    await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted();
     hRender();
   }catch(e){ status('読み込みに失敗しました：'+e.message, false); }
 
