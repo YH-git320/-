@@ -999,6 +999,15 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
                 <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" class="adm-perm-cb" data-sec="permits" checked style="accent-color:#4d7a5e;"> 📋 営業許可</label>
               </div>
             </div>
+            <!-- 🔴 マスタごとの変更権限（2026-08-27 八重樫さん）。中身は permission_catalog から作る -->
+            <div id="adm-w-section" style="display:none; margin-top:12px; padding:14px; background:#eef4fa; border-radius:10px; border:1px solid #c6dbef;">
+              <div style="font-size:13px;font-weight:700;color:#1d4f7c;margin-bottom:4px;">✏️ 変更できるもの（マスタごと）</div>
+              <div style="font-size:12px;color:#4a6b7c;margin-bottom:10px;line-height:1.75;">
+                チェックを付けたものだけ<b>保存・追加・削除ができます。</b>付けていないものは見るだけです。<br>
+                ⚠️ あとからいつでも変えられます。<b>迷ったら付けないでおいてください。</b>足りなければ画面に「権限がありません」と出ます。
+              </div>
+              <div id="adm-w-list" style="display:flex;flex-wrap:wrap;gap:9px 20px;"></div>
+            </div>
             <!-- 個人情報の見せ方（admin/operator を個別に指定・サーバー側で強制） -->
             <div id="adm-field-section" style="display:none; margin-top:12px; padding:14px; background:#fff7f0; border-radius:10px; border:1px solid #f0d9b5;">
               <div style="font-size:13px;font-weight:700;color:#8a5a1a;margin-bottom:6px;">🔐 個人情報の見せ方（従業員マスタ）</div>
@@ -1098,6 +1107,20 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" class="perm-cb" data-sec="vehicles" style="accent-color:#4d7a5e;"> 🚗 車両</label>
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" class="perm-cb" data-sec="offices" style="accent-color:#4d7a5e;"> 🏢 営業所</label>
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" class="perm-cb" data-sec="permits" style="accent-color:#4d7a5e;"> 📋 営業許可</label>
+            </div>
+          </div>
+
+          <!-- 🔴 マスタごとの変更権限（2026-08-27 八重樫さん） -->
+          <div id="w-perm-section" style="display:none; margin-top:12px; padding:14px; background:#eef4fa; border-radius:10px; border:1px solid #c6dbef;">
+            <div style="font-size:13px;font-weight:700;color:#1d4f7c;margin-bottom:4px;">✏️ 変更できるもの（マスタごと）</div>
+            <div style="font-size:12px;color:#4a6b7c;margin-bottom:10px;line-height:1.75;">
+              チェックを付けたものだけ<b>保存・追加・削除ができます。</b>付けていないものは見るだけです。<br>
+              ⚠️ あとからいつでも変えられます。<b>迷ったら付けないでおいてください。</b>足りなければ画面に「権限がありません」と出ます。
+            </div>
+            <div id="w-perm-list" style="display:flex;flex-wrap:wrap;gap:9px 20px;"></div>
+            <div id="w-perm-admin-note" style="display:none;font-size:12px;color:#8a5a1a;margin-top:9px;line-height:1.7;">
+              ⚠️ システム管理者（admin）と権限付与者（super_admin）は、<b>チェックに関わらず全部変更できます。</b><br>
+              変えられるものを絞りたいときは、役割を「操作担当者」にしてください。
             </div>
           </div>
 
@@ -3285,6 +3308,7 @@ function onAdmRoleChange() {
   var role = document.getElementById('adm-role').value;
   document.getElementById('adm-perm-section').style.display = (role === 'operator') ? '' : 'none';
   document.getElementById('adm-field-section').style.display = (role === 'operator' || role === 'admin') ? '' : 'none';
+  document.getElementById('adm-w-section').style.display = (role === 'operator') ? '' : 'none';
 }
 
 // 新規作成フォームのsuper_adminオプション: super_adminのみ表示
@@ -3296,8 +3320,40 @@ function _initAdmRoleSelect() {
   if (permOpt) permOpt.style.display = (myRole === 'super_admin') ? '' : 'none';
 }
 
+/* 🔴 マスタごとの変更権限（2026-08-27 八重樫さん）
+   正本：業務管理システム_マスタ連動の原則 ／ 高尾システム_セキュリティ設定履歴
+
+   > 権限では「指示のもとで編集する」と「自分で判断して編集する」を区別できません。
+   > 区別できるのは「書けるか」「記録が残るか」「戻せるか」の3つだけです。（2026-08-27）
+
+   ⚠️ 一覧は permission_catalog（データベース）から作る。
+      権限を増やすときは表に1行足すだけでよく、この画面は直さない。
+   ⚠️ update_user_permissions は permissions を丸ごと入れ替える。
+      この画面が w_ のキーを持っていないと、保存のたびに消える
+      （2026-08-05 に contact_edit で起きた事故と同じ形）。 */
+var PERMCAT = [];
+async function loadPermCatalog() {
+  if (PERMCAT.length) return PERMCAT;
+  try {
+    var r = await fetch(SUPABASE_URL + '/rest/v1/permission_catalog?select=key,label,hint&order=sort_order', { headers: getH() });
+    PERMCAT = r.ok ? (await r.json() || []) : [];
+  } catch(e) { PERMCAT = []; }
+  return PERMCAT;
+}
+function _renderPermList(elId, cls) {
+  var el = document.getElementById(elId);
+  if (!el) return;
+  el.innerHTML = PERMCAT.map(function(p) {
+    return '<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;min-width:210px;">'
+      + '<input type="checkbox" class="' + cls + '" data-wkey="' + esc(p.key) + '" style="accent-color:#1d4f7c;"> '
+      + '<span>' + esc(p.label)
+      + (p.hint ? '<span style="color:#8296a4;font-size:11.5px;">（' + esc(p.hint) + '）</span>' : '')
+      + '</span></label>';
+  }).join('');
+}
+
 // フォームからpermissions JSONBを構築（セクション + 項目スコープ fields + 従業員編集 staff_edit）
-function _buildPermissionsFromForm(cbClass, selClass, seClass, exClass, titleId, ceClass, nsClass) {
+function _buildPermissionsFromForm(cbClass, selClass, seClass, exClass, titleId, ceClass, nsClass, wClass) {
   var perms = {};
   document.querySelectorAll('.' + cbClass).forEach(function(cb) {
     perms[cb.dataset.sec] = cb.checked;
@@ -3329,6 +3385,12 @@ function _buildPermissionsFromForm(cbClass, selClass, seClass, exClass, titleId,
     var ns = document.querySelector('.' + nsClass);
     if (ns && ns.checked) perms.nippo_send = true; // 未許可は省略
   }
+  /* 🔴 マスタごとの変更権限。付けていないものは書かない（他のキーと同じ形） */
+  if (wClass) {
+    document.querySelectorAll('.' + wClass).forEach(function(cb) {
+      if (cb.checked) perms[cb.dataset.wkey] = true;
+    });
+  }
   return perms;
 }
 
@@ -3337,6 +3399,9 @@ var _permTargetId  = null;
 
 async function loadAccounts() {
   _initAdmRoleSelect();
+  await loadPermCatalog();
+  _renderPermList('adm-w-list', 'adm-w-cb');
+  _renderPermList('w-perm-list', 'w-perm-cb');
   var tbody = document.getElementById('tbody-admins');
   if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:20px;">読み込み中...</td></tr>';
   try {
@@ -3411,7 +3476,7 @@ async function createAccount() {
   if (pass.length < 12) { showStatus('status-admins','error','パスワードは12文字以上（英字・数字・記号を含む）で入力してください'); return; }
   var permissions = null;
   if (role === 'operator' || role === 'admin') {
-    permissions = _buildPermissionsFromForm('adm-perm-cb', 'admf', 'admse', 'admex', 'adm-title', 'admce', 'admns');
+    permissions = _buildPermissionsFromForm('adm-perm-cb', 'admf', 'admse', 'admex', 'adm-title', 'admce', 'admns', 'adm-w-cb');
   }
   try {
     var body = { p_email: email, p_password: pass, p_display_name: name, p_role: role, p_mfa_enforced: mfaEnforced };
@@ -3431,8 +3496,10 @@ async function createAccount() {
       var _amce = document.querySelector('.admce'); if (_amce) _amce.checked = false;
       var _amns = document.querySelector('.admns'); if (_amns) _amns.checked = false;
       var _amtitle = document.getElementById('adm-title'); if (_amtitle) _amtitle.value = '';
+      document.querySelectorAll('.adm-w-cb').forEach(function(cb){ cb.checked = false; });
       document.getElementById('adm-perm-section').style.display = 'none';
       document.getElementById('adm-field-section').style.display = 'none';
+      document.getElementById('adm-w-section').style.display = 'none';
       document.getElementById('adm-role').value = 'staff';
       const det = document.getElementById('details-admins-form');
       if (det) det.removeAttribute('open');
@@ -3493,6 +3560,8 @@ function onPermRoleChange() {
   var role = document.getElementById('perm-role').value;
   document.getElementById('perm-section').style.display = (role === 'operator') ? '' : 'none';
   document.getElementById('perm-field-section').style.display = (role === 'operator' || role === 'admin') ? '' : 'none';
+  document.getElementById('w-perm-section').style.display = (role === 'operator' || role === 'admin') ? '' : 'none';
+  document.getElementById('w-perm-admin-note').style.display = (role === 'admin') ? '' : 'none';
 }
 
 function showPermissionsModal(userId, name, role, mfaEnforced, permJson) {
@@ -3519,6 +3588,9 @@ function showPermissionsModal(userId, name, role, mfaEnforced, permJson) {
   if (_pns) _pns.checked = !!(perms && perms.nippo_send);
   var _ptitle = document.getElementById('perm-title');
   if (_ptitle) _ptitle.value = (perms && perms.title) || '';
+  document.querySelectorAll('.w-perm-cb').forEach(function(cb) {
+    cb.checked = !!(perms && perms[cb.dataset.wkey]);
+  });
   onPermRoleChange();
   document.getElementById('perm-modal-err').style.display = 'none';
   document.getElementById('perm-modal').style.display = 'flex';
@@ -3534,7 +3606,7 @@ async function savePermissions() {
   var mfaEnforced = document.getElementById('perm-mfa-enforced').checked;
   var permissions = null;
   if (role === 'operator' || role === 'admin') {
-    permissions = _buildPermissionsFromForm('perm-cb', 'permf', 'permse', 'permex', 'perm-title', 'permce', 'permns');
+    permissions = _buildPermissionsFromForm('perm-cb', 'permf', 'permse', 'permex', 'perm-title', 'permce', 'permns', 'w-perm-cb');
   }
   var errEl = document.getElementById('perm-modal-err');
   errEl.style.display = 'none';
@@ -3613,7 +3685,7 @@ function splitCSV(line) {
   }
   res.push(cur.trim()); return res;
 }
-function showStatus(id, type, msg) {
+function showStatus(id, type, msg) { msg = permMsg(msg);
   const el = document.getElementById(id);
   if (!el) return;
   el.style.display = '';   // インラインstyleをリセット（前回のsuccess非表示を解除）
@@ -3628,6 +3700,72 @@ function showStatus(id, type, msg) {
 
 const AUTH_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/auth/v1';
 const REST_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/rest/v1';
+
+/* 🔴 権限の案内（2026-08-27 八重樫さん）。正本：業務管理システム_マスタ連動の原則
+
+   > 権限では「指示のもとで編集する」と「自分で判断して編集する」を区別できません。
+   > 区別できるのは「書けるか」「記録が残るか」「戻せるか」の3つだけです。（2026-08-27）
+
+   ⚠️ ここは案内だけ。守っているのはデータベース側（RLS と RPC）。
+      画面の判定だけに頼らない（画面は書き換えられる）。
+   ⚠️ 権限が分からないときは止めない。止めるのはサーバーの役目。
+      ここで止めると「通信できないだけ」で仕事が止まる。 */
+const PAGE_PERM = { key: null, what: '' };
+let MYPERM = null;
+async function permLoad(){
+  if (MYPERM) return MYPERM;
+  try {
+    const r = await fetch(`${REST_URL}/rpc/my_permissions`, { method:'POST', headers:getH(), body:'{}' });
+    MYPERM = r.ok ? (await r.json() || []) : [];
+  } catch(e){ MYPERM = []; }
+  return MYPERM;
+}
+function permHas(key){
+  if (!MYPERM || !MYPERM.length) return true;   // 分からないときは止めない
+  const p = MYPERM.find(x => x.key === key);
+  return p ? !!p.allowed : true;
+}
+function permLabel(key){
+  const p = (MYPERM||[]).find(x => x.key === key);
+  return p ? p.label : key;
+}
+/** 変更できないときに、画面の上に帯を出す（押す前に分かるように） */
+async function permGuard(){
+  if (!PAGE_PERM.key) return true;
+  await permLoad();
+  const keys = Array.isArray(PAGE_PERM.key) ? PAGE_PERM.key : [PAGE_PERM.key];
+  if (keys.some(permHas)) return true;
+  const names = keys.map(permLabel).join('・');
+  const d = document.createElement('div');
+  d.style.cssText = 'position:sticky;top:0;z-index:9999;background:#fdf2f2;border-bottom:2px solid #e0a9a2;'
+    + 'color:#8c3b30;padding:10px 16px;font-size:13.5px;line-height:1.85;';
+  d.innerHTML = '⚠️ <b>' + PAGE_PERM.what + 'を変更する権限がありません。</b>'
+    + '見ることはできますが、保存・追加・削除はできません。<br>'
+    + '<span style="font-size:12.5px;">必要でしたら、権限をお持ちの方に「' + names + '」を付けてもらってください。</span>';
+  document.body.insertBefore(d, document.body.firstChild);
+  return false;
+}
+/** サーバーから返る英語のエラーを、何の権限が足りないかに言い換える */
+const _PERM_TBL = {
+  course_schedule_calendar:'月間予定', permits:'営業許可', vehicles:'車両台帳',
+  vehicle_assignments:'車両の割り当て', commute_routes:'通勤経路', courses:'コース',
+  job_types:'業務マスタ', employee_job_types:'業務マスタ', offices:'営業所',
+  duties:'便のその日だけの変更', duty_skips:'便のその日だけの変更',
+  duty_crew:'配置', assignments:'配置（添乗員）', duty_stop_orders:'停への指示',
+  course_schedule_forms:'運行時程マスタ', course_locations:'運行時程マスタ',
+  course_route_points:'運行時程マスタ', course_transfer_points:'運行時程マスタ',
+  course_phase_settings:'運行時程マスタ', course_timetable_versions:'運行時程マスタ',
+  course_scenarios:'運行時程マスタ'
+};
+function permMsg(t){
+  const s = String(t == null ? '' : t);
+  const m = /row-level security policy for table "([a-z_]+)"/.exec(s);
+  if (!m) return t;
+  const n = _PERM_TBL[m[1]] || m[1];
+  return '「' + n + '」を変更する権限がありません。権限をお持ちの方にご相談ください。';
+}
+window.addEventListener('DOMContentLoaded', function(){ permGuard(); });
+
 const ANON_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4ZHlxa3lxdGl6aHRrd3RwdnJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NzYxODEsImV4cCI6MjA5OTQ1MjE4MX0.yVbClXBk2JVeglevsBLY5sH2_m2ybCf71u4i_YYWyHE';
 
 const ROLE_LABEL = { super_admin: '権限付与者', admin: 'システム管理者', operator: '担当者', staff: '事務員' };

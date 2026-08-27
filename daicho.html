@@ -171,6 +171,72 @@ table.list tr:hover td{background:#f7faf8;}
 
 const AUTH_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/auth/v1';
 const REST_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/rest/v1';
+
+/* 🔴 権限の案内（2026-08-27 八重樫さん）。正本：業務管理システム_マスタ連動の原則
+
+   > 権限では「指示のもとで編集する」と「自分で判断して編集する」を区別できません。
+   > 区別できるのは「書けるか」「記録が残るか」「戻せるか」の3つだけです。（2026-08-27）
+
+   ⚠️ ここは案内だけ。守っているのはデータベース側（RLS と RPC）。
+      画面の判定だけに頼らない（画面は書き換えられる）。
+   ⚠️ 権限が分からないときは止めない。止めるのはサーバーの役目。
+      ここで止めると「通信できないだけ」で仕事が止まる。 */
+const PAGE_PERM = { key: 'w_vehicles', what: '車両台帳' };
+let MYPERM = null;
+async function permLoad(){
+  if (MYPERM) return MYPERM;
+  try {
+    const r = await fetch(`${REST_URL}/rpc/my_permissions`, { method:'POST', headers:getH(), body:'{}' });
+    MYPERM = r.ok ? (await r.json() || []) : [];
+  } catch(e){ MYPERM = []; }
+  return MYPERM;
+}
+function permHas(key){
+  if (!MYPERM || !MYPERM.length) return true;   // 分からないときは止めない
+  const p = MYPERM.find(x => x.key === key);
+  return p ? !!p.allowed : true;
+}
+function permLabel(key){
+  const p = (MYPERM||[]).find(x => x.key === key);
+  return p ? p.label : key;
+}
+/** 変更できないときに、画面の上に帯を出す（押す前に分かるように） */
+async function permGuard(){
+  if (!PAGE_PERM.key) return true;
+  await permLoad();
+  const keys = Array.isArray(PAGE_PERM.key) ? PAGE_PERM.key : [PAGE_PERM.key];
+  if (keys.some(permHas)) return true;
+  const names = keys.map(permLabel).join('・');
+  const d = document.createElement('div');
+  d.style.cssText = 'position:sticky;top:0;z-index:9999;background:#fdf2f2;border-bottom:2px solid #e0a9a2;'
+    + 'color:#8c3b30;padding:10px 16px;font-size:13.5px;line-height:1.85;';
+  d.innerHTML = '⚠️ <b>' + PAGE_PERM.what + 'を変更する権限がありません。</b>'
+    + '見ることはできますが、保存・追加・削除はできません。<br>'
+    + '<span style="font-size:12.5px;">必要でしたら、権限をお持ちの方に「' + names + '」を付けてもらってください。</span>';
+  document.body.insertBefore(d, document.body.firstChild);
+  return false;
+}
+/** サーバーから返る英語のエラーを、何の権限が足りないかに言い換える */
+const _PERM_TBL = {
+  course_schedule_calendar:'月間予定', permits:'営業許可', vehicles:'車両台帳',
+  vehicle_assignments:'車両の割り当て', commute_routes:'通勤経路', courses:'コース',
+  job_types:'業務マスタ', employee_job_types:'業務マスタ', offices:'営業所',
+  duties:'便のその日だけの変更', duty_skips:'便のその日だけの変更',
+  duty_crew:'配置', assignments:'配置（添乗員）', duty_stop_orders:'停への指示',
+  course_schedule_forms:'運行時程マスタ', course_locations:'運行時程マスタ',
+  course_route_points:'運行時程マスタ', course_transfer_points:'運行時程マスタ',
+  course_phase_settings:'運行時程マスタ', course_timetable_versions:'運行時程マスタ',
+  course_scenarios:'運行時程マスタ'
+};
+function permMsg(t){
+  const s = String(t == null ? '' : t);
+  const m = /row-level security policy for table "([a-z_]+)"/.exec(s);
+  if (!m) return t;
+  const n = _PERM_TBL[m[1]] || m[1];
+  return '「' + n + '」を変更する権限がありません。権限をお持ちの方にご相談ください。';
+}
+window.addEventListener('DOMContentLoaded', function(){ permGuard(); });
+
 const ANON_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4ZHlxa3lxdGl6aHRrd3RwdnJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NzYxODEsImV4cCI6MjA5OTQ1MjE4MX0.yVbClXBk2JVeglevsBLY5sH2_m2ybCf71u4i_YYWyHE';
 
 const ROLE_LABEL = { super_admin: '権限付与者', admin: 'システム管理者', operator: '担当者', staff: '事務員' };
@@ -888,7 +954,7 @@ function getH(){
 
 function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function escAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
-function status(msg, ok){
+function status(msg, ok){ msg = permMsg(msg);
   const el = document.getElementById('status');
   el.textContent = msg; el.className = ok ? 'ok' : 'err';
   if (ok) setTimeout(()=>{ if(el.textContent===msg) el.className=''; }, 4000);
