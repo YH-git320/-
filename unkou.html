@@ -1181,8 +1181,8 @@ function _refDeparture(){
   for(const f of forms){ for(const t of (f.gekou_departures||[])){ if(t) return t; } }
   return '';
 }
-async function selectCourse(id){ selCourseId = id; loadFormUsage(id); selVerId = latestVerId(id); _nvOpen=false; rptSelIdx=null; rptPick={}; if(selVerId) await loadVersionInto(id, selVerId); selRefD = _refDeparture() || '14:00'; renderCourseList(); renderEditor(); }
-async function changeVersion(verId){ selVerId = Number(verId); await loadVersionInto(selCourseId, selVerId); selRefD = _refDeparture() || '14:00'; renderEditor(); }
+async function selectCourse(id){ selCourseId = id; loadFormUsage(id); selVerId = latestVerId(id); _nvOpen=false; rptSelIdx=null; rptPick={}; _editMode=null; _fixReason=''; _impact=null; _loadImpact().then(_renderEditBar); if(selVerId) await loadVersionInto(id, selVerId); selRefD = _refDeparture() || '14:00'; renderCourseList(); renderEditor(); }
+async function changeVersion(verId){ selVerId = Number(verId); _editMode=null; _fixReason=''; _impact=null; await loadVersionInto(selCourseId, selVerId); selRefD = _refDeparture() || '14:00'; renderEditor(); _loadImpact().then(_renderEditBar); }
 function _nextApril(){ const d=new Date(); const y=d.getFullYear(); const ny=(d.getMonth()+1>=4)?y+1:y; return ny+'-04-01'; }
 // 編集タブ（主要・登校便／下校便／添乗員送迎）。再描画せず表示切替＝入力途中も保持・軽快
 function _tabBtn(k,label){ const on=(selTab===k); return `<button id="tabbtn-${k}" onclick="setTab('${k}')" style="border:1px solid ${on?'#4d7a5e':'#cfe0d5'};background:${on?'#4d7a5e':'#eef4ef'};color:${on?'#fff':'#2d4a38'};padding:7px 13px;border-radius:9px 9px 0 0;cursor:pointer;font-size:13px;font-weight:${on?'700':'500'};font-family:inherit;">${label}</button>`; }
@@ -1192,6 +1192,128 @@ function setTab(t){ selTab=t; ['main','gekou','tensou','keiro'].forEach(k=>{ con
   if(hd) hd.style.position = (t==='keiro' ? 'static' : 'sticky');
   _fitRptSticky();
 }
+
+/* 🔴 保存したら見るだけに戻す（2026-08-27 八重樫さん）
+   正本：業務管理システム_添乗員の出勤指示時刻と版管理
+
+   > 情報を保存した場合はそれ以降編集ボタンを押さない限り編集できないようにしませんか。
+   > 編集ボタンを押した場合、このデータで管理された過去のデータにも影響しますと
+   > 注意書きを残すのはどうでしょう。ミスによる修正であればこれが良いと思います。
+   > 編集ボタンというより訂正ボタンでしょうか。（八重樫さん 2026-08-27）
+
+   ⚠️ 2026-08-26 に湘南 西コースのバス停「河内」が黙って消えた。
+      入れ直す中身が6件あったので、いままでの見張り（_confirmWipe）は素通りしていた。
+      編集する意思を持って押していなければ、そもそも触れない形にする。
+
+   ⚠️ 一般的な注意書きにしない。実際の件数を数えて出す。
+      「過去に影響します」より「便32件・配置12件」のほうが手が止まる。
+
+   ⚠️ 道は2つに分ける。途中の確認画面は読み飛ばされる。
+      📅 ○月○日から変える … 決まりが変わった。新しい版を作る。過去は残る
+      ✏️ 訂正する          … 入力の間違い。いまの版の中身が変わる。理由が要る */
+let _editMode = null;   // null=見るだけ ／ 'fix'=訂正中 ／ 'new'=新しい版を作った直後
+let _fixReason = '';
+let _impact = null;     // いまの版が前提になっている便・配置の件数
+
+async function _loadImpact(){
+  const c = _c();
+  if(!c || !selVerId){ _impact = null; return null; }
+  try{
+    const r = await fetch(`${REST_URL}/rpc/version_impact`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ p_course_id: c.id, p_version_id: selVerId }) });
+    _impact = r.ok ? await r.json() : null;
+  }catch(e){ _impact = null; }
+  return _impact;
+}
+
+/** 見るだけのときは入力欄を触れなくする。🗺地図だけは見られるように残す */
+function _applyLock(){
+  const lock = (_editMode === null);
+  ['tab-main','tab-gekou','tab-tensou','tab-keiro'].forEach(id=>{
+    const el = document.getElementById(id); if(!el) return;
+    el.querySelectorAll('input,select,textarea').forEach(x=>{ x.disabled = lock; });
+    el.querySelectorAll('button').forEach(b=>{
+      const txt = (b.textContent||'').trim();
+      b.disabled = lock && !/^🗺/.test(txt);
+    });
+    el.style.opacity = lock ? '0.9' : '';
+  });
+}
+
+function _renderEditBar(){
+  const el = document.getElementById('editBar');
+  if(!el) return;
+
+  if(_editMode === null){
+    const im = _impact || {};
+    const line = _impact
+      ? 'この改正は <b>' + escHtml(String(im.valid_from || '—')) + '</b> から使われています'
+        + '（便 ' + (im.duties||0) + '件・配置 ' + (im.crew||0) + '件）'
+      : '<span class="muted">影響を確認しています…</span>';
+    el.innerHTML =
+      '<div style="font-size:12.5px;color:#4a5d52;margin-bottom:8px;line-height:1.7;">' + line + '</div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+      + '<button class="primary" style="flex:1;min-width:190px;padding:11px;" onclick="startChange()">'
+      + '📅 ○月○日から変える</button>'
+      + '<button style="flex:1;min-width:190px;padding:11px;background:#fdf2f2;border:1px solid #e0a9a2;'
+      + 'color:#8c3b30;font-weight:700;border-radius:9px;cursor:pointer;font-family:inherit;font-size:14px;" '
+      + 'onclick="startFix()">✏️ 訂正する</button>'
+      + '</div>'
+      + '<div class="muted" style="font-size:11.5px;margin-top:6px;line-height:1.75;">'
+      + '<b>📅 ○月○日から変える</b>… 決まりが変わったとき。過去はそのまま残ります<br>'
+      + '<b>✏️ 訂正する</b>… ⚠️ 入力の間違いを直すとき。過去の分の前提も変わります'
+      + '</div>';
+    return;
+  }
+
+  const head = (_editMode === 'fix')
+    ? '<div style="font-size:12.5px;color:#8c3b30;margin-bottom:8px;font-weight:700;">'
+      + '✏️ 訂正中：' + escHtml(_fixReason) + '</div>'
+    : '<div style="font-size:12.5px;color:#2e7d52;margin-bottom:8px;font-weight:700;">'
+      + '📅 新しい改正を編集中</div>';
+  el.innerHTML = head
+    + '<div style="display:flex;gap:8px;">'
+    + '<button id="saveBtn" class="primary" style="flex:1;padding:12px;" onclick="saveCourse()">'
+    + '💾 このコースを保存</button>'
+    + '<button class="mini" style="padding:12px 16px;" onclick="cancelEdit()">やめる</button>'
+    + '</div>';
+}
+
+/** 📅 ○月○日から変える → 新版を作るパネルを開く */
+function startChange(){ _nvOpen = true; renderEditor(); }
+
+/** ✏️ 訂正する → 影響を見せて、理由を書いていただく */
+async function startFix(){
+  const c = _c(); if(!c) return;
+  if(!isLatestVer()){ _saveMsg('過去の版は訂正できません。最新の版を選んでください。', false); return; }
+  await _loadImpact();
+  const im = _impact || {};
+  let msg = '⚠️ 訂正すると、いま入っている中身が書き換わります。\n\n'
+    + '　この改正は ' + (im.valid_from || '—') + ' から使われています\n'
+    + '　便 ' + (im.duties||0) + '件（過去 ' + (im.past_duties||0) + '・今日から ' + (im.next_duties||0) + '）\n'
+    + '　配置 ' + (im.crew||0) + '件（うち過去 ' + (im.past_crew||0) + '）\n';
+  if(im.with_passengers) msg += '　⚠️ 人数が入っている便 ' + im.with_passengers + '件\n';
+  if(im.with_button)     msg += '　⚠️ 運行ボタンの記録がある便 ' + im.with_button + '件\n';
+  if(im.nippo)           msg += '　⚠️ 提出済みの日報 ' + im.nippo + '件\n';
+  msg += '\n過去の分の前提も変わります。\n'
+    + '決まりが変わったのであれば「📅 ○月○日から変える」を使ってください。\n\n'
+    + '入力の間違いを直す場合だけ、理由を書いて先へ進んでください。';
+  const reason = prompt(msg, '');
+  if(reason === null) return;
+  if(!reason.trim()){ _saveMsg('訂正の理由を書いてください（あとから見て分かるように）', false); return; }
+  _fixReason = reason.trim();
+  _editMode = 'fix';
+  renderEditor();
+  _saveMsg('✏️ 訂正できる状態にしました。直したら保存してください。', true);
+}
+
+function cancelEdit(){
+  if(!confirm('編集をやめます。\n\n保存していない変更は失われます。よろしいですか。')) return;
+  _editMode = null; _fixReason = '';
+  if(selCourseId && selVerId){ loadVersionInto(selCourseId, selVerId).then(()=>renderEditor()); }
+  else renderEditor();
+}
+
 // 版セレクタ＋「新版をコピー作成」パネル
 function renderVersionBar(c){
   const vers=_vers(c.id), latest=latestVerId(c.id);
@@ -1241,7 +1363,9 @@ async function createVersion(){
     if(stops.length){ const r=await fetch(`${REST_URL}/course_locations`, { method:'POST', headers:getH(), body:JSON.stringify(stops) }); if(!r.ok){ const t=await r.text(); _saveMsg('バス停・登校ルートの複製に失敗：'+t.slice(0,120), false); return; } }
     if(rpts.length){ const r=await fetch(`${REST_URL}/course_route_points`, { method:'POST', headers:getH(), body:JSON.stringify(rpts) }); if(!r.ok){ const t=await r.text(); _saveMsg('「④ルート詳細」の複製に失敗：'+t.slice(0,120), false); return; } }
     await loadVersions(); selVerId=newId; await loadVersionInto(c.id, newId);
-    _nvOpen=false; selRefD=_refDeparture()||'14:00'; renderEditor();
+    _nvOpen=false; selRefD=_refDeparture()||'14:00';
+    _editMode='new'; _fixReason=''; _impact=null;   /* 作った直後はそのまま編集できる */
+    renderEditor(); _loadImpact().then(_renderEditBar);
     _saveMsg('✅ 新しい版を作成しました。内容を確認して保存してください。', true);
   }catch(e){ _saveMsg('版作成エラー：'+e.message, false); }
 }
@@ -1394,9 +1518,12 @@ function renderEditor(){
       ${renderRoutePoints()}
     </div>
 
-    <div style="position:sticky;bottom:0;background:#fff;padding:10px 0 2px;margin-top:12px;border-top:1px solid #e2ede6;"><button id="saveBtn" class="primary" style="width:100%;padding:12px;" onclick="saveCourse()">💾 このコースを保存</button>
+    <div style="position:sticky;bottom:0;background:#fff;padding:10px 0 2px;margin-top:12px;border-top:1px solid #e2ede6;">
+      <div id="editBar"></div>
       <div id="editSaveMsg" style="text-align:center;margin-top:8px;font-weight:600;min-height:20px;"></div></div>
   </div>`;
+  _renderEditBar();
+  _applyLock();
   _fitRptSticky();
 }
 
@@ -3314,6 +3441,18 @@ async function saveCourse(){
     //    renderEditor() は編集欄をまるごと作り直すので、先に出すとメッセージごと消える。
     //    2026-08-19 に読み直しを速くしたことで、見える間もなく消えるようになっていた
     //    （2026-08-21 八重樫さんが「保存しましたが表示されませんでした」と発見）
+    /* 🔴 訂正で直したときは、理由を記録に残す（2026-08-27）
+       ⚠️ audit_log は「何が変わったか」を残すが「なぜ直したか」は残らない */
+    if(_editMode === 'fix' && _fixReason){
+      try{
+        await fetch(`${REST_URL}/rpc/log_master_fix`, { method:'POST', headers:getH(),
+          body: JSON.stringify({ p_course_id:c.id, p_version_id:selVerId, p_reason:_fixReason }) });
+      }catch(e){ /* 記録できなくても保存は止めない */ }
+    }
+    _editMode = null; _fixReason = '';   /* 保存したら、また見るだけに戻す */
+    /* ⚠️ 画面の作り直しはこの数行前に済んでいる。ここで鍵をかけ直さないと、
+       保存したのに編集できたままになる（2026-08-27 実装中に気づいた） */
+    _renderEditBar(); _applyLock(); _loadImpact().then(_renderEditBar);
     const _syncMsg = await _applySync();   // 🔴 保存したら必ず反映する（断れない）
     _saveMsg('✅ 保存しました' + _syncMsg + (_calRenamed.length ? `（月間予定の日課名も付け替えました：${_calRenamed.join('・')}）` : '') + (_flagOn.length ? `（「④ルート詳細」で「${_flagOn.join('・')}」をバス停にしました）` : '') + (_flagOff.length ? `（「④ルート詳細」で「${_flagOff.join('・')}」のバス停の印を外しました。地点は道の目印として残しています）` : '') + (_stopsChanged.length ? `（⚠️ ${_stopsChanged.join('・')}のバス停が変わりました。④ルート詳細でバス停の設定との食い違いをご確認ください。④の道はそのまま残してあります）` : ''), true);
   }catch(e){ _saveMsg('保存エラー：'+e.message, false); }
