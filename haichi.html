@@ -88,6 +88,45 @@ button.mini{font-size:12px;padding:6px 10px;}
     <div class="tab" id="tabP" onclick="hSetTab('人別')">👤 人別</div>
     <div class="tab" id="tabV" onclick="hSetTab('車両別')">🚍 車両別</div>
     <div class="tab" id="tabY" onclick="hSetTab('予定表取込')">📄 予定表取込</div>
+    <div class="tab" id="tabN" onclick="hSetTab('日報送信')">📧 日報送信</div>
+  </div>
+
+  <!-- 🔴 日報の発行・一括送信（2026-08-27 八重樫さん）。正本：業務管理システム_権限の設計 -->
+  <div class="panel" id="nppPanel" style="display:none;">
+    <div class="row" style="align-items:center;">
+      <label class="fld" style="margin:0;">対象日</label>
+      <input type="date" id="nppDate" style="width:auto;">
+      <button class="primary" onclick="nppPreview()">この日の対象を出す</button>
+    </div>
+    <div class="muted" style="font-size:11.5px;margin-top:6px;line-height:1.75;">
+      その日の<b>添乗員の配置</b>から、日報の本人専用リンクを発行して送ります。
+      走らせない便は数えません。<br>
+      ⚠️ リンクは<b>ご本人だけが開けます</b>。有効期限を過ぎると開けなくなります。
+    </div>
+    <div id="nppList" style="margin-top:10px;"></div>
+    <div id="nppSendBox" style="display:none;margin-top:12px;padding:12px 14px;background:#f4f8fc;border:1px solid #cfe0ef;border-radius:10px;">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;font-weight:700;">
+        <input type="checkbox" id="nppTest" checked> 🧪 テスト送信（下のアドレスにまとめて送る／添乗員には届きません）
+      </label>
+      <div style="margin-top:9px;">
+        <div style="font-size:12px;color:#555;margin-bottom:5px;">テストの届け先（システムのアカウントをお持ちの方だけ）</div>
+        <div id="nppTo" style="display:flex;flex-wrap:wrap;gap:7px 18px;font-size:13px;">
+          <span class="muted" style="font-size:12px;">読み込んでいます…</span>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <span style="font-size:12px;color:#555;">そのほかの宛先：</span>
+          <input type="text" id="nppTestAddr" placeholder="必要なときだけ（，で区切って複数可）" style="flex:1;min-width:240px;">
+        </div>
+      </div>
+      <div class="muted" style="font-size:11.5px;margin-top:6px;">
+        ⚠️ <b>チェックを外すと、添乗員ご本人に届きます。</b>外すときはもう一度お尋ねします。
+      </div>
+      <div class="row" style="margin-top:10px;align-items:center;">
+        <button class="primary" id="nppSendBtn" onclick="nppSendAll()">📧 この日の日報リンクを送る</button>
+        <span class="muted" style="font-size:11.5px;">本人専用リンクを発行し、Resend 経由で送ります</span>
+      </div>
+      <div id="nppResult" style="margin-top:10px;"></div>
+    </div>
   </div>
 
   <div class="panel" id="hToolbar">
@@ -179,6 +218,8 @@ button.mini{font-size:12px;padding:6px 10px;}
 
 const AUTH_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/auth/v1';
 const REST_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/rest/v1';
+/* メール送信の入口。REST_URL から作る（この画面には SUPABASE_URL が無いため） */
+const FUNC_URL  = REST_URL.replace('/rest/v1', '/functions/v1');
 
 /* 🔴 権限の案内（2026-08-27 八重樫さん）。正本：業務管理システム_マスタ連動の原則
 
@@ -1400,18 +1441,212 @@ function hSetTab(t){
   document.getElementById('tabP').className = 'tab'+(t==='人別'?' active':'');
   document.getElementById('tabV').className = 'tab'+(t==='車両別'?' active':'');
   document.getElementById('tabY').className = 'tab'+(t==='予定表取込'?' active':'');
-  // 取込タブでは表を隠し、取込パネルを出す
+  document.getElementById('tabN').className = 'tab'+(t==='日報送信'?' active':'');
+  // 取込タブ・日報送信タブでは表を隠し、それぞれの画面を出す
   const yt = t === '予定表取込';
-  for (const [id, showOnYt] of [['ytPanel', true], ['hGridWrap', false], ['hToolbar', false]]) {
+  const np = t === '日報送信';
+  for (const [id, show] of [['ytPanel', yt], ['nppPanel', np],
+                            ['hGridWrap', !yt && !np], ['hToolbar', !yt && !np]]) {
     const el = document.getElementById(id);
-    if (el) el.style.display = (yt === showOnYt) ? '' : 'none';
+    if (el) el.style.display = show ? '' : 'none';
   }
-  if (t==='予定表取込') return;
+  if (yt || np) return;
   const f=document.getElementById('hFilter');
   if(f) f.placeholder = (t==='人別') ? '氏名でしぼり込み'
                       : (t==='車両別') ? '車番・車庫でしぼり込み'
                       : '学校名・コース名でしぼり込み';
   hRender();
+}
+
+
+/* 🔴 日報の発行・一括送信（2026-08-27 八重樫さん）
+   正本：業務管理システム_権限の設計 ／ 業務管理システム
+
+   > 添乗員が日報を記入する時に下校①②③をどのようにおこなっても
+   > 一つの業務としてとらえて構いません。勤怠管理上いつ業務を開始し、
+   > いつ業務が終わったかを知ることが大切だからです。（八重樫さん 2026-08-27）
+
+   ⚠️ 発行はサーバーの issue_nippo_from_duties が行う。この画面は案内だけ。
+   ⚠️ 既定はテスト送信。外すときは二度お尋ねする
+      （2026-08-27 時点では「本人には送れません」とのご指示）。
+   ⚠️ 古い tenjo.html の「📧 通知送信」は古い表（assignments）を見ている。
+      こちらは新しい形（便＋配置）から読む。両方を並べて動かしている間の混同に注意。 */
+/* テストの届け先。手で打たずにチェックで選ぶ（2026-08-27 八重樫さん）
+   > 試行期間のテスト送信は管理者に届くようにチェックボックスを作るなどできませんか？
+   ⚠️ 出るのは「システムのアカウントを持っている人」だけ。
+      添乗員・運転手は出さない。テストで本人に届いてしまうことを仕組みで防ぐ。 */
+let NPPTO = [];
+const _NPPTO_KEY = 'npp_test_to';
+async function nppLoadRecipients(){
+  const box = document.getElementById('nppTo');
+  if(!box) return;
+  if(!NPPTO.length){
+    try{
+      const r = await fetch(`${REST_URL}/rpc/mail_test_recipients`, { method:'POST', headers:getH(), body:'{}' });
+      NPPTO = r.ok ? (await r.json() || []) : [];
+    }catch(e){ NPPTO = []; }
+  }
+  if(!NPPTO.length){
+    box.innerHTML = '<span class="muted" style="font-size:12px;">届け先を読み込めませんでした。下の「そのほかの宛先」に入れてください。</span>';
+    return;
+  }
+  let saved = null;
+  try{ saved = JSON.parse(localStorage.getItem(_NPPTO_KEY) || 'null'); }catch(e){}
+  const ROLE = { super_admin:'権限付与者', admin:'システム管理者', operator:'操作担当者', staff:'閲覧' };
+  box.innerHTML = NPPTO.map(function(x){
+    /* 前に選んだ人を覚えている。初めてのときはご自分だけに印を付ける */
+    const on = saved ? saved.indexOf(x.email) >= 0 : !!x.is_me;
+    return '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">'
+      + '<input type="checkbox" class="npp-to" value="' + escHtml(x.email) + '"' + (on?' checked':'')
+      + ' style="accent-color:#1d4f7c;"> ' + escHtml(x.display_name)
+      + (x.is_me ? '<span style="color:#1d4f7c;font-size:11px;">（ご自分）</span>' : '')
+      + '<span class="muted" style="font-size:11px;">' + escHtml(ROLE[x.role]||x.role) + '</span></label>';
+  }).join('');
+  box.querySelectorAll('.npp-to').forEach(function(cb){ cb.onchange = _nppRemember; });
+}
+function _nppRemember(){
+  const on = [].slice.call(document.querySelectorAll('.npp-to:checked')).map(function(c){ return c.value; });
+  try{ localStorage.setItem(_NPPTO_KEY, JSON.stringify(on)); }catch(e){}
+}
+/** チェックした宛先＋手入力の宛先 */
+function _nppAddrs(){
+  const a = [].slice.call(document.querySelectorAll('.npp-to:checked')).map(function(c){ return c.value; });
+  const extra = (document.getElementById('nppTestAddr').value || '')
+    .split(/[,、，\s]+/).map(function(s){ return s.trim(); }).filter(Boolean);
+  return a.concat(extra).filter(function(v,i,arr){ return arr.indexOf(v) === i; });
+}
+let NPP = [];
+async function nppPreview(){
+  const date = (document.getElementById('nppDate')||{}).value;
+  if(!date){ status('日付を選んでください', false); return; }
+  const box = document.getElementById('nppList');
+  box.innerHTML = '<div class="muted" style="font-size:12px;">読み込んでいます…</div>';
+  document.getElementById('nppSendBox').style.display = 'none';
+  try{
+    const r = await fetch(`${REST_URL}/rpc/nippo_targets_for_day`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ p_work_date: date }) });
+    const txt = await r.text();
+    if(!r.ok){ let j={}; try{ j=JSON.parse(txt); }catch(e){}
+      box.innerHTML = '<div style="color:#b5453a;font-size:13px;">'+escHtml(((j&&j.message)||txt).slice(0,200))+'</div>';
+      NPP=[]; return; }
+    NPP = JSON.parse(txt) || [];
+  }catch(e){ NPP=[]; box.innerHTML = '<div style="color:#b5453a;font-size:13px;">'+escHtml(e.message)+'</div>'; return; }
+
+  if(!NPP.length){
+    box.innerHTML = '<div class="muted" style="font-size:13px;">この日は添乗員の配置がありません。先に配置を保存してください。</div>';
+    return;
+  }
+  const noMail = NPP.filter(x => !x.email).length;
+  const done   = NPP.filter(x => x.already_sent).length;
+  box.innerHTML = `<div style="font-size:13.5px;margin-bottom:8px;line-height:1.8;">
+      <b>${NPP.length}名</b>にお送りできます。
+      ${noMail ? `<span style="color:#b5453a;">⚠️ うちメール未登録が <b>${noMail}名</b>（本番送信では飛ばします）</span>` : ''}
+      ${done ? `<span class="muted">／ この日すでに発行した方 ${done}名</span>` : ''}
+    </div>
+    <div style="max-height:340px;overflow:auto;border:1px solid #dde5ec;border-radius:9px;">
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+      <thead><tr style="background:#eef4fa;">
+        <th style="text-align:left;padding:6px 9px;">氏名</th>
+        <th style="text-align:left;padding:6px 9px;">メール</th>
+        <th style="text-align:left;padding:6px 9px;">コース</th>
+        <th style="text-align:left;padding:6px 9px;">乗る便</th>
+        <th style="text-align:left;padding:6px 9px;">発行</th>
+      </tr></thead><tbody>
+      ${NPP.map(x => `<tr style="border-top:1px solid #e6ecf2;">
+        <td style="padding:5px 9px;font-weight:600;">${escHtml(x.staff_name)}</td>
+        <td style="padding:5px 9px;${x.email ? '' : 'color:#b5453a;font-weight:700;'}">${x.email ? escHtml(x.email) : '未登録 ⚠️'}</td>
+        <td style="padding:5px 9px;">${escHtml(x.course||'')}</td>
+        <td style="padding:5px 9px;">${escHtml(x.trips||'')}</td>
+        <td style="padding:5px 9px;">${x.already_sent ? '済' : ''}</td>
+      </tr>`).join('')}
+      </tbody></table></div>
+    <div style="margin-top:10px;font-size:12px;color:#4a6b7c;">
+      <b>お送りするメールの見本（${escHtml(NPP[0].staff_name)}さん宛）</b>
+      <div style="border:1px solid #dde5ec;border-radius:9px;padding:10px 12px;margin-top:5px;background:#fff;">
+        ${_nppMail(NPP[0], date, '（送信時に本人専用リンクを発行します）', true)}
+      </div>
+    </div>`;
+  document.getElementById('nppSendBox').style.display = '';
+  nppLoadRecipients();
+}
+function _nppDateJp(s){
+  const d = new Date(s); const w = ['日','月','火','水','木','金','土'];
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${w[d.getDay()]}）`;
+}
+function _nppMail(x, date, url, placeholder){
+  const link = placeholder
+    ? `<span style="color:#888;">${escHtml(url)}</span>`
+    : `<a href="${url}">${escHtml(url)}</a>`;
+  return `<div style="font-family:'Hiragino Kaku Gothic ProN','Meiryo',sans-serif;font-size:14px;line-height:1.75;color:#222;">
+<p>${escHtml(x.staff_name)} 様</p>
+<p>${escHtml(_nppDateJp(date))}のご担当業務についてご連絡いたします。</p>
+<p><b>【担当業務】</b><br>　・${escHtml(x.course||'')}<br>　・${escHtml(x.trips||'')}</p>
+<p>業務終了後、下記リンクより日報の入力をお願いします。<br>（スマートフォンからもご入力いただけます）</p>
+<p>▼ 日報入力フォーム<br>${link}</p>
+<p style="color:#888;">---<br>高尾輸送サービス</p>
+</div>`;
+}
+async function nppSendAll(){
+  if(!NPP.length){ status('先に「この日の対象を出す」を押してください', false); return; }
+  const date = document.getElementById('nppDate').value;
+  const test = document.getElementById('nppTest').checked;
+  const addrs = _nppAddrs();
+  if(test && !addrs.length){ status('テストの届け先に印を付けてください（またはアドレスを入れてください）', false); return; }
+
+  const targets = test ? NPP : NPP.filter(x => x.email);
+  const skipped = test ? 0 : NPP.filter(x => !x.email).length;
+  if(!targets.length){ status('送れる宛先がありません（メール未登録）', false); return; }
+
+  if(test){
+    if(!confirm(`テスト送信します。\n\n　${targets.length}名ぶんを ${addrs.join('、')} に送ります\n\n`
+      + `⚠️ 添乗員には届きません。よろしいですか。`)) return;
+  }else{
+    /* ⚠️ 本番はご本人に届く。二度お尋ねする（2026-08-27 八重樫さん） */
+    if(!confirm(`⚠️ 本番送信です。添乗員ご本人に届きます。\n\n`
+      + `　${targets.length}名へ送ります${skipped?`（メール未登録の${skipped}名は飛ばします）`:''}\n\n`
+      + `よろしいですか。`)) return;
+    if(!confirm(`もう一度おうかがいします。\n\n`
+      + `${_nppDateJp(date)}の日報リンクを、添乗員 ${targets.length}名へ実際に送ります。\n`
+      + `送ったメールは取り消せません。\n\n本当に送りますか。`)) return;
+  }
+
+  const btn = document.getElementById('nppSendBtn');
+  const box = document.getElementById('nppResult');
+  btn.disabled = true;
+  const endpoint = `${FUNC_URL}/send-email`;
+  const dateJp = _nppDateJp(date);
+  let sent = 0; const fails = [];
+  for(let i=0;i<targets.length;i++){
+    const x = targets[i];
+    box.innerHTML = `<div class="muted" style="font-size:12.5px;">送っています… ${i+1}/${targets.length}（${escHtml(x.staff_name)}）</div>`;
+    try{
+      const iss = await fetch(`${REST_URL}/rpc/issue_nippo_from_duties`, { method:'POST', headers:getH(),
+        body: JSON.stringify({ p_staff_id: x.staff_id, p_work_date: date, p_valid_hours: 168 }) });
+      const it = await iss.text();
+      if(!iss.ok){ let j={}; try{ j=JSON.parse(it); }catch(e){} throw new Error(((j&&j.message)||it).slice(0,90)); }
+      const d = JSON.parse(it);
+      const url = Array.isArray(d) ? (d[0]&&d[0].url) : (d&&d.url);
+      if(!url) throw new Error('リンクを受け取れませんでした');
+      const html = _nppMail(x, date, url, false);
+      /* 複数の宛先は配列で渡す（カンマでつなぐと1つのアドレスとして扱われる） */
+      const to = test ? addrs : x.email;
+      const subject = (test ? `[テスト｜本来の宛先：${x.staff_name}] ` : '')
+        + `【高尾輸送】${dateJp}のご担当業務について`;
+      const send = await fetch(endpoint, { method:'POST', headers:getH(),
+        body: JSON.stringify({ to, subject, html }) });
+      const sr = await send.json().catch(()=>({}));
+      if(send.ok && sr.ok) sent++;
+      else fails.push(`${x.staff_name}：${sr.error || (sr.result&&sr.result.message) || ('HTTP '+send.status)}`);
+    }catch(e){ fails.push(`${x.staff_name}：${e.message}`); }
+  }
+  btn.disabled = false;
+  box.innerHTML = `<div style="padding:10px 12px;border-radius:9px;font-size:13px;line-height:1.8;
+      background:${fails.length?'#fdf2f2':'#eef7f1'};border:1px solid ${fails.length?'#eeaaa4':'#b4d4c0'};">
+      ✅ ${sent}件 送りました${skipped?`　／　メール未登録 ${skipped}件は飛ばしました`:''}${fails.length?`　／　⚠️ 送れなかった ${fails.length}件`:''}
+      ${fails.length?`<div style="margin-top:5px;color:#b5453a;">${fails.map(escHtml).join('<br>')}</div>`:''}
+      ${test?'<div class="muted" style="margin-top:5px;">※テスト送信でした。添乗員には届いていません。</div>':''}
+    </div>`;
+  await nppPreview();
 }
 
 /* ---------- 割り当てモーダル ---------- */
