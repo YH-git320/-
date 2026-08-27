@@ -1181,7 +1181,7 @@ function _refDeparture(){
   for(const f of forms){ for(const t of (f.gekou_departures||[])){ if(t) return t; } }
   return '';
 }
-async function selectCourse(id){ selCourseId = id; loadFormUsage(id); selVerId = latestVerId(id); _nvOpen=false; rptSelIdx=null; rptPick={}; _editMode=null; _fixReason=''; _impact=null; _loadImpact().then(_renderEditBar); if(selVerId) await loadVersionInto(id, selVerId); selRefD = _refDeparture() || '14:00'; renderCourseList(); renderEditor(); }
+async function selectCourse(id){ selCourseId = id; loadFormUsage(id); selVerId = currentVerId(id); _nvOpen=false; rptSelIdx=null; rptPick={}; _editMode=null; _fixReason=''; _impact=null; _loadImpact().then(_renderEditBar); if(selVerId) await loadVersionInto(id, selVerId); selRefD = _refDeparture() || '14:00'; renderCourseList(); renderEditor(); }
 async function changeVersion(verId){ selVerId = Number(verId); _editMode=null; _fixReason=''; _impact=null; await loadVersionInto(selCourseId, selVerId); selRefD = _refDeparture() || '14:00'; renderEditor(); _loadImpact().then(_renderEditBar); }
 function _nextApril(){ const d=new Date(); const y=d.getFullYear(); const ny=(d.getMonth()+1>=4)?y+1:y; return ny+'-04-01'; }
 // 編集タブ（主要・登校便／下校便／添乗員送迎）。再描画せず表示切替＝入力途中も保持・軽快
@@ -1285,7 +1285,7 @@ function startChange(){ _nvOpen = true; renderEditor(); }
 /** ✏️ 訂正する → 影響を見せて、理由を書いていただく */
 async function startFix(){
   const c = _c(); if(!c) return;
-  if(!isLatestVer()){ _saveMsg('過去の版は訂正できません。最新の版を選んでください。', false); return; }
+  if(!canEditVer()){ _saveMsg('過去の版は訂正できません。「適用中」か「この日から」の版を選んでください。', false); return; }
   await _loadImpact();
   const im = _impact || {};
   let msg = '⚠️ 訂正すると、いま入っている中身が書き換わります。\n\n'
@@ -1318,9 +1318,22 @@ function cancelEdit(){
 function renderVersionBar(c){
   const vers=_vers(c.id), latest=latestVerId(c.id);
   const isLatest = selVerId!=null && selVerId===latest;
-  const opts = vers.map(v=>`<option value="${v.id}"${v.id===selVerId?' selected':''}>${escHtml(String(v.valid_from))}${v.id===latest?'（最新）':''}${v.note?(' '+escHtml(v.note)):''}</option>`).join('') || '<option>（版なし）</option>';
-  const warn = isLatest ? '' : `<span style="font-size:11px;color:#b0451f;font-weight:700;">過去版＝閲覧のみ（保存不可）</span>`;
-  const src = COURSES.map(x=>{ const lv=latestVerId(x.id); if(!lv) return ''; return `<option value="${x.id}:${lv}"${String(x.id)===String(c.id)?' selected':''}>${escHtml(courseLabel(x))}${String(x.id)===String(c.id)?'（このコース・最新）':''}</option>`; }).filter(Boolean).join('');
+  const opts = vers.map(v=>{
+    const st = verState(v, c.id);
+    return `<option value="${v.id}"${v.id===selVerId?' selected':''}>${escHtml(String(v.valid_from))}`
+      + (st==='適用中' ? '（適用中）' : st==='これから' ? '（この日から）' : '（過去・見るだけ）')
+      + `${v.note?(' '+escHtml(v.note)):''}</option>`;
+  }).join('') || '<option>（版なし）</option>';
+  const _cur = _vers(c.id).find(x=>x.id===selVerId);
+  const _st  = verState(_cur, c.id);
+  const warn = (_st==='過去')
+    ? `<span style="font-size:11px;color:#b0451f;font-weight:700;">過去の版＝見るだけ（保存できません）</span>`
+    : (_st==='これから'
+        ? `<span style="font-size:11px;color:#2e7d52;font-weight:700;">${escHtml(String(_cur.valid_from))} から使う版です</span>`
+        : '')
+    + ((_vers(c.id).length>1 && _st!=='過去')
+        ? ` <button class="link" style="font-size:11px;" onclick="deleteVersion()">この版を消す</button>` : '');
+  const src = COURSES.map(x=>{ const me=(String(x.id)===String(c.id)); const lv= me ? (selVerId||latestVerId(x.id)) : latestVerId(x.id); if(!lv) return ''; return `<option value="${x.id}:${lv}"${me?' selected':''}>${escHtml(courseLabel(x))}${me?'（このコース・いま見ている版）':''}</option>`; }).filter(Boolean).join('');
   const panel = _nvOpen ? `<div class="seg" style="margin:6px 0;">
       <div class="line" style="flex-wrap:wrap;gap:6px;"><label class="fld" style="margin:0;">新版の適用開始日</label><input type="date" id="nvDate" value="${_tomorrow()}" style="width:auto;"><button class="mini" onclick="_setNvDate(_tomorrow())">明日</button><button class="mini" onclick="_setNvDate(_nextMonth1())">来月1日</button><button class="mini" onclick="_setNvDate(_nextApril())">次の4月1日</button></div>
       <div class="line" style="flex-wrap:wrap;gap:6px;margin-top:4px;"><span class="muted" style="font-size:12px;">コピー元</span><select id="nvSource" style="font-size:12px;max-width:300px;">${src}</select></div>
@@ -1333,6 +1346,92 @@ function renderVersionBar(c){
       ${warn}
       <button class="mini" onclick="_nvOpen=!_nvOpen;renderEditor()">📋 前年度／別コースからコピーして新版を作成</button>
     </div>${panel}`;
+}
+
+
+/* 🔴 版は3つに分かれる（2026-08-27 八重樫さん・岩﨑さんのご質問から）
+
+   > 〇月〇日に変更の編集をしたあと、その日が来るまでの間は
+   > サイトの画面で新しい情報しか見れないのか（岩﨑さん）
+
+   いままでは「いちばん新しい版」を既定で開いていた。
+   ⚠️ 9月1日の版を作ると、8月中も9月1日の版が出て、いま走っている内容が見えない。
+   ⚠️ しかも「最新版でなければ保存できない」ため、8月中に今の内容を訂正できなかった。
+
+   過去      もう使い終わった版      見るだけ
+   適用中    今日の時点で有効な版    ⚠️ 訂正できる（まだ走っているため）
+   これから  先日付の版              編集できる
+
+   既定で開くのは「適用中」。通勤経路の到着地で案Bを選ばれたのと同じ考え方
+   （いま走っているものを既定にする）。 */
+function _today(){ return _dstr(new Date()); }
+
+/** 今日の時点で有効な版。無ければいちばん古い版（すべて先日付のとき） */
+function currentVerId(cid){
+  const a = _vers(cid);                    // valid_from の新しい順
+  if(!a.length) return null;
+  const t = _today();
+  const hit = a.find(v => String(v.valid_from) <= t);
+  return hit ? hit.id : a[a.length-1].id;
+}
+
+/** その版がどれか（'過去' / '適用中' / 'これから'） */
+function verState(v, cid){
+  if(!v) return '';
+  if(String(v.valid_from) > _today()) return 'これから';
+  return (v.id === currentVerId(cid)) ? '適用中' : '過去';
+}
+
+/** 編集してよい版か。適用中とこれからは編集できる。過去は見るだけ */
+function canEditVer(){
+  const c = _c(); if(!c || selVerId == null) return false;
+  const v = _vers(c.id).find(x => x.id === selVerId);
+  return verState(v, c.id) !== '過去';
+}
+
+/* ── 使われていない版を消す（2026-08-27）
+   ⚠️ 消すと、その版のバス停・日課・④ルート詳細も一緒に消える。
+      条件はデータベース側でもう一度確かめる（画面の判定だけに頼らない）。 */
+async function deleteVersion(){
+  const c=_c(); if(!c || !selVerId) return;
+  const v=_vers(c.id).find(x=>x.id===selVerId);
+  if(!v) return;
+  let chk=null;
+  try{
+    const r=await fetch(`${REST_URL}/rpc/version_delete_check`, { method:'POST', headers:getH(),
+      body:JSON.stringify({ p_version_id:selVerId }) });
+    if(r.ok) chk=await r.json();
+  }catch(e){}
+  if(!chk){ _saveMsg('消せるかどうかを確かめられませんでした。', false); return; }
+  if(!chk.ok){ _saveMsg('この版は消せません：'+(chk.reason||'理由不明'), false); return; }
+
+  const msg = `⚠️ ${chk.valid_from} からの版を消します。\n\n`
+    + `　一緒に消えるもの\n`
+    + `　　日課 ${chk.forms||0}件\n`
+    + `　　バス停 ${chk.stops||0}件\n`
+    + `　　④ルート詳細 ${chk.route_points||0}件\n\n`
+    + (chk.is_future
+        ? 'この版はまだ始まっていません。便や配置には影響しません。\n\n'
+        : `この期間の便 ${chk.duties||0}件・配置 ${chk.crew||0}件はそのまま残ります。\n`
+          + '⚠️ ただし、その前提となる時程が無くなります。\n\n')
+    + '元に戻せません。よろしいですか。';
+  if(!confirm(msg)) return;
+
+  try{
+    const r=await fetch(`${REST_URL}/rpc/delete_version`, { method:'POST', headers:getH(),
+      body:JSON.stringify({ p_version_id:selVerId }) });
+    const txt=await r.text();
+    if(!r.ok){ let j={}; try{ j=JSON.parse(txt); }catch(e){}
+      _saveMsg('消せませんでした（元のデータは残っています）：'+((j&&j.message)||txt).slice(0,140), false); return; }
+    const d=JSON.parse(txt);
+    await loadVersions();
+    selVerId = currentVerId(c.id);
+    _editMode=null; _fixReason=''; _impact=null;
+    if(selVerId) await loadVersionInto(c.id, selVerId);
+    selRefD=_refDeparture()||'14:00';
+    renderEditor(); _loadImpact().then(_renderEditBar);
+    _saveMsg(`✅ ${d.valid_from} からの版を消しました（日課 ${d.forms||0}・バス停 ${d.stops||0}・④ルート詳細 ${d.route_points||0} も一緒に）。`, true);
+  }catch(e){ _saveMsg('版を消せませんでした：'+e.message, false); }
 }
 
 /* 🔴 消えるものを名指しで見せてから進む（2026-08-27 八重樫さん）
@@ -3264,7 +3363,7 @@ async function saveCourse(){
   if(_saving){ _saveMsg('保存中です。そのままお待ちください。', false); return; }
   const c=_c(); if(!c) return;
   if(!selVerId){ _saveMsg('版がありません。まず版を作成してください。', false); return; }
-  if(!isLatestVer()){ _saveMsg('過去版は保存できません。最新版を選ぶか、「新版を作成」してから編集してください。', false); return; }
+  if(!canEditVer()){ _saveMsg('過去の版は保存できません。「適用中」か「この日から」の版を選んでください。', false); return; }
   const key=String(c.id);
   let _stopsChanged = [];   // バス停一覧が変わった側（保存後に④の確認をうながす）
   let _flagOn = [], _flagOff = [];   // ②に合わせて④のバス停の印を付けた／外したバス停
