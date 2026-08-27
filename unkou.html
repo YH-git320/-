@@ -1226,15 +1226,18 @@ async function _loadImpact(){
   return _impact;
 }
 
-/** 見るだけのときは入力欄を触れなくする。🗺地図だけは見られるように残す */
+/** 見るだけのときは「中身が変わる操作」だけを止める。
+    ⚠️ 見るための操作（日課や便区分を選ぶ・ルート図を開く・地図・コピー）は止めない。
+       2026-08-28 岩﨑さん：④ルート詳細は選ばないと何も表示されないため、
+       まるごと使えなくなっていた。data-view="1" が付いたものは見るための操作。 */
 function _applyLock(){
   const lock = (_editMode === null);
   ['tab-main','tab-gekou','tab-tensou','tab-keiro'].forEach(id=>{
     const el = document.getElementById(id); if(!el) return;
-    el.querySelectorAll('input,select,textarea').forEach(x=>{ x.disabled = lock; });
-    el.querySelectorAll('button').forEach(b=>{
-      const txt = (b.textContent||'').trim();
-      b.disabled = lock && !/^🗺/.test(txt);
+    el.querySelectorAll('input,select,textarea,button').forEach(x=>{
+      if(x.dataset && x.dataset.view === '1'){ x.disabled = false; return; }
+      if(x.tagName === 'BUTTON' && /^🗺/.test((x.textContent||'').trim())){ x.disabled = false; return; }
+      x.disabled = lock;
     });
     el.style.opacity = lock ? '0.9' : '';
   });
@@ -2971,14 +2974,14 @@ function renderRoutePoints(){
   const dist=rptDistances();
   const _box = RPTS[String(selCourseId)] || {};
   const _segBtn = (val,label,on,n) =>
-    `<button onclick="setRSeg('${val}')" style="border:1px solid ${on?'#4d7a5e':'#cfe0d5'};background:${on?'#4d7a5e':'#fff'};color:${on?'#fff':'#2d4a38'};padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:${on?'700':'500'};font-family:inherit;">${label}${n?'':'（未入力）'}</button>`;
+    `<button data-view="1" onclick="setRSeg('${val}')" style="border:1px solid ${on?'#4d7a5e':'#cfe0d5'};background:${on?'#4d7a5e':'#fff'};color:${on?'#fff':'#2d4a38'};padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:${on?'700':'500'};font-family:inherit;">${label}${n?'':'（未入力）'}</button>`;
   // 本線（登校・下校）は1段目、回送は2段目。折り返し任せにせず、間に区切りを入れて位置を固定する
   /* 段1＝何の経路か（登校便 ／ ②で作った日課）
      段2＝その中のどこか（便・回送）
      ⚠️ 下校は日課によって通るバス停が違う（茅ケ崎：14:05は松が丘2丁目、15:20は東海岸北）
         ので、日課ごとに持つ。登校便は毎日同じなので日課に関係しない。 */
   const _formBtn = (name,label,on,n) =>
-    `<button onclick="setRForm('${escAttr(name)}')" style="border:1px solid ${on?'#2d4a38':'#cfe0d5'};background:${on?'#2d4a38':'#fff'};color:${on?'#fff':'#2d4a38'};padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:${on?'700':'500'};font-family:inherit;">${label}${n?'':'（未入力）'}</button>`;
+    `<button data-view="1" onclick="setRForm('${escAttr(name)}')" style="border:1px solid ${on?'#2d4a38':'#cfe0d5'};background:${on?'#2d4a38':'#fff'};color:${on?'#fff':'#2d4a38'};padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:${on?'700':'500'};font-family:inherit;">${label}${n?'':'（未入力）'}</button>`;
   const _rForms = _routeForms();
   const _cntFor = (form) => {   // その日課に入っている地点の総数
     let n=0; const pre = (form||'') + RK;
@@ -3050,9 +3053,9 @@ function renderRoutePoints(){
     </div>
     <div class="line" style="gap:8px;margin-bottom:6px;flex-wrap:wrap;align-items:center;">
       <span class="muted" style="font-size:13px;flex:0 0 auto;">送迎で道が変わる場合</span>
-      <select onchange="setRWho(this.value)" style="font-size:14px;padding:5px 8px;">${whoOpts}</select>
+      <select data-view="1" onchange="setRWho(this.value)" style="font-size:14px;padding:5px 8px;">${whoOpts}</select>
       <span class="muted" style="font-size:13px;flex:0 0 auto;">ルート</span>
-      <select onchange="setRRoute(this.value)" style="font-size:14px;padding:5px 8px;">${rOpts}</select>
+      <select data-view="1" onchange="setRRoute(this.value)" style="font-size:14px;padding:5px 8px;">${rOpts}</select>
       <button class="mini" onclick="rptAddRoute()">＋ サブルートを追加</button>
       ${selRRoute ? `<button class="mini" onclick="rptDelRoute()" title="${escAttr('いま開いているサブルート「'+selRRoute+'」を消します')}">🗑 このサブルートを消す</button>` : ''}
       <button class="mini" onclick="rptSeedKaisou()">🅿 分かっている地点から下書き</button>
@@ -3088,10 +3091,10 @@ function renderRoutePoints(){
     const q = rptClipGet();
     const cn = q ? q.pts.length : 0;
     return `<div class="line" style="gap:6px;margin:0;flex-wrap:wrap;align-items:center;">
-      <button class="mini" onclick="rptClipCopy()"${(n||mid)?'':' disabled'} title="${
+      <button data-view="1" class="mini" onclick="rptClipCopy()"${(n||mid)?'':' disabled'} title="${
         escAttr(n ? ('チェックした'+n+'地点をコピーします') : ('チェックがないので、中の'+mid+'地点（2番目〜最後から2番目）をまとめてコピーします'))
       }">📋 コピー（${n?n:'全部'}）</button>
-      ${n?`<button class="mini" onclick="rptPickNone()">選択を解除</button>`:''}
+      ${n?`<button data-view="1" class="mini" onclick="rptPickNone()">選択を解除</button>`:''}
       <button class="mini" id="rptPasteBtn" onclick="rptClipPaste()"${cn?'':' disabled'} title="${
         cn ? escAttr('行を選んでいればその上に差し込み、選んでいなければ中を入れ替えます（出発地・到着地は変わりません）')
            : '先に「📋 コピー」を押してください'
@@ -3106,7 +3109,7 @@ function renderRoutePoints(){
   const legsStop  = rptLegs(true);
   const legBtns = (arr, byStop) => arr.map((g,i)=>{
     const via=g.pts.length-2, over=via>RPT_MAX_VIA;
-    return `<button class="mini" onclick="rptOpenLeg(${i},${byStop})" title="${escAttr(g.from)} から ${escAttr(g.to)} までをGoogleマップで開きます（目印${via}か所）"${over?' style="border-color:#c0392b;color:#c0392b;"':''}>${escHtml(g.from)} → ${escHtml(g.to)}${over?' ⚠':''}</button>`
+    return `<button data-view="1" class="mini" onclick="rptOpenLeg(${i},${byStop})" title="${escAttr(g.from)} から ${escAttr(g.to)} までをGoogleマップで開きます（目印${via}か所）"${over?' style="border-color:#c0392b;color:#c0392b;"':''}>${escHtml(g.from)} → ${escHtml(g.to)}${over?' ⚠':''}</button>`
          + (g.cut?`<span class="muted" style="font-size:11px;align-self:center;">✂ ここで案内を切る</span>`:'');
   }).join('');
   // バス停ごとが通しと同じ並びなら、2段に分けても意味がないので1段だけにする
@@ -3167,7 +3170,7 @@ function renderRoutePoints(){
         :`<input type="checkbox" class="rp-pick" ${rptPick[i]?'checked':''} onclick="event.stopPropagation()" onchange="rptPickToggle(${i},this)" title="この地点をコピーの対象にする" style="width:17px;height:17px;">`}</td>
       <td style="padding:5px 6px;"><input type="text" class="rp-name" value="${escAttr(p.name||'')}"${ro} placeholder="例：○○交差点" title="${escAttr(roT)}" style="width:100%;min-width:100px;font-size:15px;padding:7px 9px;${roS}"></td>
       <td style="padding:5px 6px;"><input type="text" class="rp-lat" value="${escAttr(p.lat)}"${ro} placeholder="35.xxxxxx" onchange="rptCoordIn(this)" title="${escAttr(roT||'「35.5442, 139.7043」のまま貼っても分けて入ります')}" style="width:112px;font-size:15px;padding:7px 9px;${roS}"></td>
-      <td style="padding:5px 6px;white-space:nowrap;"><input type="text" class="rp-lng" value="${escAttr(p.lng)}"${ro} placeholder="139.xxxxxx" onchange="rptCoordIn(this)" title="${escAttr(roT)}" style="width:108px;font-size:15px;padding:7px 9px;${roS}"><button onclick="event.stopPropagation();rptMapPt(${i})" title="この地点をGoogleマップで開く（どこか確かめる）" style="${ib}color:var(--g);padding:3px 2px 3px 4px;">🗺</button></td>
+      <td style="padding:5px 6px;white-space:nowrap;"><input type="text" class="rp-lng" value="${escAttr(p.lng)}"${ro} placeholder="139.xxxxxx" onchange="rptCoordIn(this)" title="${escAttr(roT)}" style="width:108px;font-size:15px;padding:7px 9px;${roS}"><button data-view="1" onclick="event.stopPropagation();rptMapPt(${i})" title="この地点をGoogleマップで開く（どこか確かめる）" style="${ib}color:var(--g);padding:3px 2px 3px 4px;">🗺</button></td>
       <td style="text-align:center;padding:5px 6px;"><input type="checkbox" class="rp-stop" ${p.is_stop?'checked':''} onchange="rptRecalc()" title="実際に乗り降りするバス停ならチェック" style="width:18px;height:18px;"></td>
       <td style="text-align:center;padding:5px 6px;"><input type="checkbox" class="rp-cut" ${p.split_here?'checked':''} onchange="rptRecalc()" title="ここで道案内を切る（Uターンなど、次の地点まではナビに任せられない場所）" style="width:18px;height:18px;"></td>
       <td class="muted" style="white-space:nowrap;padding:5px 6px;font-size:14px;text-align:right;">${d&&d.seg!=null?d.seg.toFixed(2):''}</td>
