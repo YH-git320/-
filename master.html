@@ -3284,9 +3284,24 @@ function friendlyAcctName(role, permissions) {
   return role;
 }
 // この人が「何をできるか」を日本語で要約
+/* 🔴 変えられるもの（マスタごと）を一覧に並べる（2026-08-27 八重樫さん）
+   ⚠️ 2026-08-27 に押し間違いが起きた。「配置（添乗員）」を外して「配置（運転手）」を
+      付けた状態で保存され、画面には何も出なかったので気づけなかった。
+      見つかったのはデータベースを直接見たからで、それでは運用にならない。
+   ⚠️ ここは HTML を返す。中の文字は必ず esc() を通すこと。 */
+function _wSummary(p) {
+  if (!PERMCAT.length) return '';
+  var on = [], off = [];
+  PERMCAT.forEach(function(c){ (p[c.key] === true ? on : off).push(esc(c.label)); });
+  if (!on.length) return '<span style="color:#8296a4;">✏️ 変えられるもの：<b>なし（見るだけ）</b></span>';
+  var s = '<span style="color:#1d4f7c;">✏️ 変えられる（' + on.length + '）：' + on.join('・') + '</span>';
+  if (off.length) s += '<br><span style="color:#8296a4;">　見るだけ：' + off.join('・') + '</span>';
+  return s;
+}
 function acctPermSummary(role, permissions) {
   if (role === 'super_admin') return '全機能＋アカウント・権限の管理';
-  if (role === 'admin')       return 'システム全体の操作（アカウント権限の付与は不可）';
+  if (role === 'admin')       return 'システム全体の操作（アカウント権限の付与は不可）'
+    + '<br><span style="color:#8a5a1a;">✏️ マスタは<b>すべて</b>変更できます（チェックに関わらず）</span>';
   if (role === 'staff')       return '限られた閲覧のみ';
   var p = permissions || {};
   var f = p.fields || {};
@@ -3294,7 +3309,7 @@ function acctPermSummary(role, permissions) {
   var parts = [addr, (p.staff_edit ? '編集可' : '閲覧のみ')];
   if (p.export) parts.push('外部出力可');
   if (f.license_number === 'hidden') parts.push('免許番号は非表示');
-  return parts.join('・');
+  return esc(parts.join('・')) + '<br>' + _wSummary(p);
 }
 const ACCT_ROLE_COLOR = {
   super_admin: 'background:#fde8e6;color:#c0392b;',
@@ -3339,6 +3354,17 @@ async function loadPermCatalog() {
     PERMCAT = r.ok ? (await r.json() || []) : [];
   } catch(e) { PERMCAT = []; }
   return PERMCAT;
+}
+/** 保存したあとに出す「何を付けたか」の文言（押し間違いにその場で気づくため） */
+function _wSaveMsg(role, permissions) {
+  if (role === 'super_admin') return '　権限付与者なので、すべて変更できます。';
+  if (role === 'admin')       return '　システム管理者なので、マスタはすべて変更できます（チェックに関わらず）。';
+  if (role === 'staff' || !permissions || !PERMCAT.length) return '';
+  var on = [], off = [];
+  PERMCAT.forEach(function(c){ (permissions[c.key] === true ? on : off).push(c.label); });
+  if (!on.length) return '　変えられるもの：なし（見るだけ）';
+  return '　✏️ 変えられる（' + on.length + '）：' + on.join('・')
+       + (off.length ? '　／　見るだけ：' + off.join('・') : '');
 }
 function _renderPermList(elId, cls) {
   var el = document.getElementById(elId);
@@ -3455,7 +3481,7 @@ async function loadAccounts() {
         '<td style="font-size:12px;color:#555;">' + esc(a.email) + '</td>' +
         '<td><span class="badge" style="' + roleStyle + '">' + esc(friendly) + '</span>' +
           '<div style="font-size:10px;color:#9aa2a8;margin-top:3px;">' + esc(sysRole) + '</div>' +
-          '<div style="font-size:11px;color:#5c7066;margin-top:2px;line-height:1.4;">' + esc(summary) + '</div></td>' +
+          '<div style="font-size:11px;color:#5c7066;margin-top:3px;line-height:1.6;">' + summary + '</div></td>' +
         '<td style="font-size:12px;">' + mfaBadge + '</td>' +
         '<td style="font-size:12px;color:#666;">' + date + '</td>' +
         '<td style="white-space:nowrap;">' + btns + '</td>' +
@@ -3478,6 +3504,7 @@ async function createAccount() {
   if (role === 'operator' || role === 'admin') {
     permissions = _buildPermissionsFromForm('adm-perm-cb', 'admf', 'admse', 'admex', 'adm-title', 'admce', 'admns', 'adm-w-cb');
   }
+  var _wMsg = _wSaveMsg(role, permissions);
   try {
     var body = { p_email: email, p_password: pass, p_display_name: name, p_role: role, p_mfa_enforced: mfaEnforced };
     if (permissions !== null) body.p_permissions = permissions;
@@ -3504,7 +3531,7 @@ async function createAccount() {
       const det = document.getElementById('details-admins-form');
       if (det) det.removeAttribute('open');
       await loadAccounts();
-      showStatus('status-admins','success','✅「' + name + '」のアカウントを作成しました。仮パスワードをご本人にお伝えください。');
+      showStatus('status-admins','success','✅「' + name + '」のアカウントを作成しました。仮パスワードをご本人にお伝えください。' + _wMsg);
     } else {
       var d = await res.json();
       showStatus('status-admins','error','作成に失敗しました: ' + (d.message||d.msg||d.error||res.status));
@@ -3608,6 +3635,8 @@ async function savePermissions() {
   if (role === 'operator' || role === 'admin') {
     permissions = _buildPermissionsFromForm('perm-cb', 'permf', 'permse', 'permex', 'perm-title', 'permce', 'permns', 'w-perm-cb');
   }
+  /* 🔴 保存したあとに何を付けたかを出す。押し間違いにその場で気づけるように（2026-08-27） */
+  var _wMsg = _wSaveMsg(role, permissions);
   var errEl = document.getElementById('perm-modal-err');
   errEl.style.display = 'none';
   try {
@@ -3619,7 +3648,7 @@ async function savePermissions() {
     if (res.ok) {
       closePermissionsModal();
       await loadAccounts();
-      showStatus('status-admins','success','✅ 権限を更新しました');
+      showStatus('status-admins','success','✅ 権限を保存しました' + _wMsg);
     } else {
       var d = await res.json();
       errEl.textContent = '更新に失敗しました: ' + (d.message||d.msg||res.status);
