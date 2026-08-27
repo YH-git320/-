@@ -271,7 +271,7 @@ const _PERM_TBL = {
   vehicle_assignments:'車両の割り当て', commute_routes:'通勤経路', courses:'コース',
   job_types:'業務マスタ', employee_job_types:'業務マスタ', offices:'営業所',
   duties:'便のその日だけの変更', duty_skips:'便のその日だけの変更',
-  duty_crew:'配置', assignments:'配置（添乗員）', duty_stop_orders:'停への指示',
+  duty_crew:'配置', assignments:'配置（添乗員）', duty_stop_orders:'バス停への指示',
   course_schedule_forms:'運行時程マスタ', course_locations:'運行時程マスタ',
   course_route_points:'運行時程マスタ', course_transfer_points:'運行時程マスタ',
   course_phase_settings:'運行時程マスタ', course_timetable_versions:'運行時程マスタ',
@@ -1670,7 +1670,7 @@ function hOpenAsg(cid,date){
     h+=`<div class="duty"><div class="dh"><span class="seg">${escHtml(d.segment)}</span>`
       +`<span class="tm">${d.start_time?escHtml(_hm(d.start_time))+' 発':''}</span>`
       +`<span class="muted">必要 ${need}名</span>`
-      +`<button class="mini" style="margin-left:auto;" onclick="hOpenOrderBox(${d.id})" title="この便の停に、通過・立ち寄りの指示を出します">📣 停への指示</button>`
+      +`<button class="mini" style="margin-left:auto;" onclick="hOpenOrderBox(${d.id})" title="この便のバス停に、通過・立ち寄りの指示を出します">📣 バス停への指示</button>`
       +`<button class="mini" style="border-color:#e0b4ac;color:#a5382c;" onclick="hSkipDuty(${d.id})" title="この日のこの便を走らせないことにします">この便は走らせない</button></div>`;
     // この便に出ている指示
     {
@@ -2189,7 +2189,7 @@ async function hUnkeepDuty(id){
   }catch(e){ status('できませんでした：'+e.message, false); }
 }
 
-/* 🔴 停に関する会社の指示（2026-08-27）。正本：業務管理システム_マスタ連動の原則
+/* 🔴 バス停に関する会社の指示（2026-08-27）。正本：業務管理システム_マスタ連動の原則
    通過（止まらない）／立ち寄り（寄り道）を、事務所が決めて運転手に届ける。
 
    > 当日にわかる場合は会社が指示できないため、予め決められたとおりに運行させることが原則です。
@@ -2197,7 +2197,7 @@ async function hUnkeepDuty(id){
    > あった場合、会社からの指示が間に合うことはあります。（八重樫さん 2026-08-26）
 
    ⚠️ 決めるのは会社。運転手は判断しない。
-   ⚠️ 止まらない停も運転手の画面から消さない。「本日は通過します」と出して残す。
+   ⚠️ 止まらないバス停も運転手の画面から消さない。「本日は通過します」と出して残す。
    ⚠️ 理由は必須。あとから「何のための指示か」が分からないものを残さない。
    ⚠️ 過去の便・人数が入っている便・運行ボタンの記録がある便は、データベース側で断られる。 */
 let ORDERS = [];
@@ -2235,7 +2235,7 @@ function hRenderOrders(){
     </div>
   </div>`;
 }
-/** その便の停を読み、通過の選択肢を作る */
+/** その便のバス停を読み、通過の選択肢を作る */
 async function hLoadDutyStops(id){
   if(DSTOPS[id]) return DSTOPS[id];
   try{
@@ -2268,7 +2268,7 @@ async function hOpenOrderBox(id){
     <div class="crewline" style="margin-top:5px;"><span class="lb">⚠️ 止まらない</span>
       <select id="op_${id}" style="max-width:190px;">${opts}</select>
       <input id="or_${id}" placeholder="理由（例：生徒が全員欠席）" style="flex:1;min-width:150px;">
-      <button class="mini" onclick="hOrderPass(${id})">この停は通過にする</button></div>
+      <button class="mini" onclick="hOrderPass(${id})">このバス停は通過にする</button></div>
     <div class="crewline"><span class="lb">★ 立ち寄り</span>
       <input id="dn_${id}" placeholder="寄る場所の名前" style="width:150px;">
       <select id="dp_${id}" style="max-width:150px;"><option value="">📍 登録済みの場所…</option>${_placeOpts()}</select>
@@ -2314,8 +2314,8 @@ async function hOrderPass(id){
   const why = ((document.getElementById('or_'+id)||{}).value || '').trim();
   if(!nm){ status('バス停を選んでください', false); return; }
   if(!why){ status('理由を入れてください（あとから見て分かるように）', false); return; }
-  if(!confirm(`この停を「本日は通過」にします。\n\n　${nm}\n　${why}\n\n`
-    + `運転手の画面にすぐ出ます。停は消さず「本日は通過します」と表示されます。\n\nよろしいですか。`)) return;
+  if(!confirm(`このバス停を「本日は通過」にします。\n\n　${nm}\n　${why}\n\n`
+    + `運転手の画面にすぐ出ます。バス停は消さず「本日は通過します」と表示されます。\n\nよろしいですか。`)) return;
   await _hOrder('order_pass_stop', { p_duty:id, p_name:nm, p_reason:why }, id);
 }
 async function hOrderDetour(id){

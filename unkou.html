@@ -132,7 +132,7 @@ const _PERM_TBL = {
   vehicle_assignments:'車両の割り当て', commute_routes:'通勤経路', courses:'コース',
   job_types:'業務マスタ', employee_job_types:'業務マスタ', offices:'営業所',
   duties:'便のその日だけの変更', duty_skips:'便のその日だけの変更',
-  duty_crew:'配置', assignments:'配置（添乗員）', duty_stop_orders:'停への指示',
+  duty_crew:'配置', assignments:'配置（添乗員）', duty_stop_orders:'バス停への指示',
   course_schedule_forms:'運行時程マスタ', course_locations:'運行時程マスタ',
   course_route_points:'運行時程マスタ', course_transfer_points:'運行時程マスタ',
   course_phase_settings:'運行時程マスタ', course_timetable_versions:'運行時程マスタ',
@@ -930,7 +930,7 @@ function _mapStop(r){ return { name:r.name||'', address:r.address||'', toukou_ti
    ⚠️ 2026-08-24 まで「登校の逆順」を毎回計算していたが、あおば支援学校のように
    下校が途中から登校と同じ向きに戻る（ロの字）コースは逆順では表せず、
    最終目的地まで変わってしまうため、下校の順番をデータで持つことにした（gekou_seq）。
-   gekou_seq が空の停（古いデータ・追加直後）は末尾に回す。 */
+   gekou_seq が空のバス停（古いデータ・追加直後）は末尾に回す。 */
 function _gekouIdx(){
   const stops = _stops();
   const idx = stops.map((s,i)=>i);
@@ -962,7 +962,7 @@ function _stopsOrderSig(stops){
 }
 let STOPS_ORIG_SIG = {};   // course_id(String) -> {toukou, gekou}（版を読み込んだ時点の並び）
 /** バス停一覧から、指定した便(seg)の経路点を作る（rptFillFromStops と同じ元ロジック）。
-   座標の入っていない停は飛ばす。曲がり角（split_here 等の手作業の点）は含まない＝作り直すと消える。 */
+   座標の入っていないバス停は飛ばす。曲がり角（split_here 等の手作業の点）は含まない＝作り直すと消える。 */
 function _rptFromStops(stops, seg){
   const src = (seg==='登校') ? stops.filter(s=>!s.gekou_only) : _gekouIdxOf(stops).map(i=>stops[i]);
   const pts=[];
@@ -1302,7 +1302,7 @@ function renderEditor(){
       <input type="text" value="${escAttr(s.address)}" placeholder="住所" oninput="updStopAddr(${i},this.value)" style="flex:1;min-width:120px;">
       <input type="text" value="${escAttr(s.coord||'')}" placeholder="座標(任意)" oninput="updCoord(${i},this.value)" title="臨時運転時の正確な停車位置" style="flex:0 0 120px;">
       <button class="mini" onclick="mapStop(${i})" title="グーグルマップで開く">🗺</button>
-      <input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(s.toukou_time))}" onchange="updToukouTime(${i},tnorm(this))" title="登校便のこの停の時刻" style="width:64px;text-align:center;">
+      <input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(s.toukou_time))}" onchange="updToukouTime(${i},tnorm(this))" title="登校便のこのバス停の時刻" style="width:64px;text-align:center;">
       <button class="link" onclick="moveStop(${i},-1)" title="上へ">▲</button>
       <button class="link" onclick="moveStop(${i},1)" title="下へ">▼</button>
       <button class="link" onclick="delStop(${i})">削除</button>
@@ -1319,10 +1319,10 @@ function renderEditor(){
     const disp = (s.gekou_offset!=null && rM!=null) ? _toHm(rM+s.gekou_offset) : '';
     const nameCell = s.gekou_only
       ? `<input type="text" value="${escAttr(s.name)}" placeholder="下校専用バス停名" oninput="updStopName(${i},this.value)" style="flex:1;min-width:120px;"><input type="text" value="${escAttr(s.address)}" placeholder="住所" oninput="updStopAddr(${i},this.value)" style="flex:1;min-width:120px;"><input type="text" value="${escAttr(s.coord||'')}" placeholder="座標(任意)" oninput="updCoord(${i},this.value)" style="flex:0 0 120px;">`
-      : `<span style="flex:1;min-width:120px;font-size:13px;">${escHtml(s.name||'(停)')}</span>`;
-    const delBtn = s.gekou_only ? `<button class="link" onclick="delStop(${i})">削除</button>` : (s.gekou_offset!=null?`<button class="link" onclick="clearGekou(${i})" title="この停は下校で使わない">下校で外す</button>`:'');
+      : `<span style="flex:1;min-width:120px;font-size:13px;">${escHtml(s.name||'(バス停)')}</span>`;
+    const delBtn = s.gekou_only ? `<button class="link" onclick="delStop(${i})">削除</button>` : (s.gekou_offset!=null?`<button class="link" onclick="clearGekou(${i})" title="このバス停は下校で使わない">下校で外す</button>`:'');
     const tail = (k===gIdx.length-1) ? `<span style="font-size:11px;color:#b0451f;font-weight:600;margin-left:2px;">最終</span>` : '';
-    return `<div class="line" style="margin-bottom:6px;"><span style="flex:0 0 20px;text-align:right;font-size:11px;color:#5a7a65;">${k+1}</span>${nameCell}<input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(disp)}" onchange="updGekouTime(${i},tnorm(this))" title="最初の日課(基準便)でのこの停の時刻" style="width:64px;text-align:center;"><button class="mini" onclick="mapStop(${i})" title="グーグルマップで開く">🗺</button><button class="link" onclick="moveGekou(${i},-1)" title="下校の順番を上へ">▲</button><button class="link" onclick="moveGekou(${i},1)" title="下校の順番を下へ">▼</button>${delBtn}${tail}</div>`;
+    return `<div class="line" style="margin-bottom:6px;"><span style="flex:0 0 20px;text-align:right;font-size:11px;color:#5a7a65;">${k+1}</span>${nameCell}<input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(disp)}" onchange="updGekouTime(${i},tnorm(this))" title="最初の日課(基準便)でのこのバス停の時刻" style="width:64px;text-align:center;"><button class="mini" onclick="mapStop(${i})" title="グーグルマップで開く">🗺</button><button class="link" onclick="moveGekou(${i},-1)" title="下校の順番を上へ">▲</button><button class="link" onclick="moveGekou(${i},1)" title="下校の順番を下へ">▼</button>${delBtn}${tail}</div>`;
   }).join('') || '<p class="muted" style="margin:0 0 6px;">登校のバス停を入れると、ここに登校の逆順で出ます。逆順でない場合は ▲▼ で並べ替えてください。</p>';
   const gekouTools = gIdx.length ? `<div class="line" style="gap:6px;margin:0 0 8px;flex-wrap:wrap;">
       <button class="mini" onclick="sortGekouByTime()" title="入れた時刻の早い順に並べ替える">🕒 時刻の早い順に並べ替え</button>
@@ -1349,7 +1349,7 @@ function renderEditor(){
       <span class="muted" style="min-width:44px;margin-left:8px;">出庫</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(_hm(c.toukou_shukko))}" onchange="updToukou('toukou_shukko',tnorm(this))" style="width:64px;text-align:center;">
     </div>
 
-    <label class="fld">🚏 バス停一覧（＝登校便の順路）— 上から順に、各停の登校時刻</label>
+    <label class="fld">🚏 バス停一覧（＝登校便の順路）— 上から順に、各バス停の登校時刻</label>
     ${toukouHtml}
     <button class="mini" onclick="addStop()">＋バス停を追加</button>
     <div class="line" style="margin-top:8px;flex-wrap:wrap;"><span class="muted">登校後の車両（既定）</span>
@@ -1360,7 +1360,7 @@ function renderEditor(){
 
     <div id="tab-gekou" style="display:${selTab==='gekou'?'':'none'};">
     <label class="fld" style="margin-top:2px;">【下校便】日課ごとの時程 ${(function(){const v=curVer();return v?('適用 '+escHtml(String(v.valid_from))+'〜'):'';})()} — 日課ごとの下校便の学校出発時刻</label>
-    <div class="muted" style="font-size:11px;margin:-4px 0 6px;">最初の日課が基準になります。次の日課の出発時刻を入れると、下の「自動生成」に各停の時刻が自動で入ります（あとで手修正も可）。</div>
+    <div class="muted" style="font-size:11px;margin:-4px 0 6px;">最初の日課が基準になります。次の日課の出発時刻を入れると、下の「自動生成」に各バス停の時刻が自動で入ります（あとで手修正も可）。</div>
     <div class="line" style="margin:0 0 4px;flex-wrap:wrap;font-size:12px;align-items:center;gap:4px;">
       <span class="muted" style="flex:0 0 auto;">出庫＝下校便出発の</span><input type="number" min="0" id="shLeadH" value="${c.gekou_shukko_lead!=null?Math.floor(c.gekou_shukko_lead/60):''}" onchange="updShukkoLead()" style="flex:0 0 auto;width:64px;text-align:center;"><span class="muted" style="flex:0 0 auto;">時間</span><input type="number" min="0" max="59" id="shLeadM" value="${c.gekou_shukko_lead!=null?(c.gekou_shukko_lead%60):''}" onchange="updShukkoLead()" style="flex:0 0 auto;width:64px;text-align:center;"><span class="muted" style="flex:0 0 auto;">分前</span>
     </div>
@@ -1373,7 +1373,7 @@ function renderEditor(){
 
     <label class="fld" style="margin-top:18px;">🔁 【下校便】バス停と時刻（上から順に回る順路）</label>
     ${ refD
-        ? `<div class="line" style="margin-bottom:8px;"><span class="muted">基準＝最初の日課${firstFormName?`「${escHtml(firstFormName)}」`:''}の下校便 <b>${escHtml(refD)}</b>。この便での各停の時刻を入れてください → 他の日課は自動。</span></div>`
+        ? `<div class="line" style="margin-bottom:8px;"><span class="muted">基準＝最初の日課${firstFormName?`「${escHtml(firstFormName)}」`:''}の下校便 <b>${escHtml(refD)}</b>。この便での各バス停の時刻を入れてください → 他の日課は自動。</span></div>`
         : `<div class="line" style="margin-bottom:8px;"><span class="muted">先に上の【下校便】日課ごとの時程で日課を1つ（下校便の出発時刻つき）追加してください。最初の日課が基準になります。</span></div>` }
     ${gekouTools}
     ${gekouHtml}
@@ -1424,24 +1424,24 @@ function renderGekouPreview(){
   const c=_c();
   const stops = _stops();
 
-  // ── 登校便（出社・出庫＋登校ルート各停の時刻を順路どおりに表示）
+  // ── 登校便（出社・出庫＋登校ルート各バス停の時刻を順路どおりに表示）
   const shussha=_hm(c&&c.toukou_shussha), shukko=_hm(c&&c.toukou_shukko);
   const toCells = stops.map((s,i)=>({s,i})).filter(x=>!x.s.gekou_only).map(x=>{
     const t=_hm(x.s.toukou_time);
-    return `<span style="display:inline-flex;align-items:center;gap:3px;margin:2px 6px;"><span style="font-size:11px;color:#5a7a65;">${escHtml(x.s.name||'(停)')}</span><span style="font-weight:600;">${t||'—'}</span></span>`;
+    return `<span style="display:inline-flex;align-items:center;gap:3px;margin:2px 6px;"><span style="font-size:11px;color:#5a7a65;">${escHtml(x.s.name||'(バス停)')}</span><span style="font-weight:600;">${t||'—'}</span></span>`;
   }).join('');
   const toukouBlock = `<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e2ede6;">
     <div style="font-weight:700;color:#2d4a38;margin-bottom:2px;">▼ 登校便　<span style="font-size:11px;color:#5a7a65;">出社 ${shussha||'—'} ／ 出庫 ${shukko||'—'}</span></div>
-    ${ toCells ? `<div>${toCells}<span style="font-size:11px;color:#5a7a65;margin-left:4px;">→ 学校</span></div>` : '<span class="muted">「①主要情報・登校便」タブで登校ルートを入れると、各停の時刻がここに出ます。</span>' }
+    ${ toCells ? `<div>${toCells}<span style="font-size:11px;color:#5a7a65;margin-left:4px;">→ 学校</span></div>` : '<span class="muted">「①主要情報・登校便」タブで登校ルートを入れると、各バス停の時刻がここに出ます。</span>' }
   </div>`;
 
-  // ── 下校便（日課の入力順。各停は下校の並び＝offsetの小さい順）
+  // ── 下校便（日課の入力順。各バス停は下校の並び＝offsetの小さい順）
   const timed = stops.map((s,i)=>({i, name:s.name, off:s.gekou_offset, ov:(s.gekou_overrides||{})})).filter(x=>x.off!=null).sort((a,b)=>a.off-b.off);
   const forms = FORMS[String(selCourseId)]||[];
   const anyDep = forms.some(f=>(f.gekou_departures||[]).some(t=>t));
   let gekouBlock;
   if(!anyDep){ gekouBlock = '<span class="muted">【下校便】日課ごとの時程で出発時刻を入れると、ここに時刻表が出ます。</span>'; }
-  else if(!timed.length){ gekouBlock = '<span class="muted">【下校便】バス停と時刻で各停の時刻を入れると、日課ごとの時刻表がここに出ます。各時刻は個別に手修正できます。</span>'; }
+  else if(!timed.length){ gekouBlock = '<span class="muted">【下校便】バス停と時刻で各バス停の時刻を入れると、日課ごとの時刻表がここに出ます。各時刻は個別に手修正できます。</span>'; }
   else {
     gekouBlock = forms.map((f,fi)=>{
       const deps=(f.gekou_departures||[]).filter(t=>t);
@@ -1453,13 +1453,13 @@ function renderGekouPreview(){
         const skip = (fov[D]&&Array.isArray(fov[D].skip)) ? fov[D].skip : [];
         const cells = timed.map(x=>{
           if(skip.includes(x.name)){
-            return `<span style="display:inline-flex;align-items:center;gap:3px;margin:2px 5px;"><span style="font-size:11px;color:#b0451f;text-decoration:line-through;">${escHtml(x.name||'(停)')}</span><span style="font-size:11px;color:#b0451f;">通らない</span><button class="link" onclick="toggleSkip(${fi},'${escAttr(D)}','${escAttr(x.name)}',false)" title="この便でこの停を通す">戻す</button></span>`;
+            return `<span style="display:inline-flex;align-items:center;gap:3px;margin:2px 5px;"><span style="font-size:11px;color:#b0451f;text-decoration:line-through;">${escHtml(x.name||'(バス停)')}</span><span style="font-size:11px;color:#b0451f;">通らない</span><button class="link" onclick="toggleSkip(${fi},'${escAttr(D)}','${escAttr(x.name)}',false)" title="この便でこのバス停を通す">戻す</button></span>`;
           }
           const auto=_toHm(dm+x.off);
           const has = x.ov && x.ov[D]!=null && x.ov[D]!=='';
           const val = has ? _hm(x.ov[D]) : auto;
           const st = has ? 'background:#fff3e0;border-color:#e0a23a;' : '';
-          return `<span style="display:inline-flex;align-items:center;gap:3px;margin:2px 5px;"><span style="font-size:11px;color:#5a7a65;">${escHtml(x.name||'(停)')}</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(val)}" onchange="updOverride(${x.i},'${escAttr(D)}',tnorm(this),'${auto}')" title="${has?('手修正あり（自動='+auto+'）'):'自動。修正すると例外として保存されます'}" style="width:64px;text-align:center;${st}"><button class="link" onclick="toggleSkip(${fi},'${escAttr(D)}','${escAttr(x.name)}',true)" title="この便はこの停を通らない">×</button></span>`;
+          return `<span style="display:inline-flex;align-items:center;gap:3px;margin:2px 5px;"><span style="font-size:11px;color:#5a7a65;">${escHtml(x.name||'(バス停)')}</span><input type="text" inputmode="numeric" class="tinp" maxlength="5" placeholder="--:--" value="${escAttr(val)}" onchange="updOverride(${x.i},'${escAttr(D)}',tnorm(this),'${auto}')" title="${has?('手修正あり（自動='+auto+'）'):'自動。修正すると例外として保存されます'}" style="width:64px;text-align:center;${st}"><button class="link" onclick="toggleSkip(${fi},'${escAttr(D)}','${escAttr(x.name)}',true)" title="この便はこのバス停を通らない">×</button></span>`;
         }).join('');
         return `<div style="margin:2px 0 4px;"><span style="font-weight:600;">学校発 ${escHtml(D)}</span> → ${cells}</div>`;
       }).join('');
@@ -1474,7 +1474,7 @@ function updOverride(i,D,val,auto){
   if(v && v!==a){ s.gekou_overrides[D]=v; } else { delete s.gekou_overrides[D]; }
   _updPreview();
 }
-// この日課・この下校便で、指定の停を「通らない」に切替（dep_overrides[出発時刻].skip=[停名...]）
+// この日課・この下校便で、指定のバス停を「通らない」に切替（dep_overrides[出発時刻].skip=[バス停名...]）
 function toggleSkip(fi,D,name,on){
   const f=FORMS[String(selCourseId)][fi]; if(!f) return;
   f.dep_overrides = f.dep_overrides||{};
@@ -1586,7 +1586,7 @@ function mapStop(i){
   window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q), '_blank');
 }
 function updToukouTime(i,val){ _stops()[i].toukou_time=val; }
-/* 登校に停を足すと、下校では先頭に入る（＝既定の「登校の逆順」を保つため）。
+/* 登校にバス停を足すと、下校では先頭に入る（＝既定の「登校の逆順」を保つため）。
    登校 1→2→3 の順に足せば、下校は 3→2→1 になる */
 function addStop(){
   const a=_stops();
@@ -1616,7 +1616,7 @@ function moveGekou(i,dir){
   ord.forEach((idx,k)=>{ stops[idx].gekou_seq = k+1; });
   renderEditor();
 }
-/** 入れた時刻の早い順に並べ替える。時刻が空の停（学校・下校で外した停）は今の位置に残す */
+/** 入れた時刻の早い順に並べ替える。時刻が空のバス停（学校・下校で外したバス停）は今の位置に残す */
 function sortGekouByTime(){
   const stops=_stops(), ord=_gekouIdx();
   const slots=[]; ord.forEach((i,k)=>{ if(stops[i].gekou_offset!=null) slots.push(k); });
@@ -1629,7 +1629,7 @@ function sortGekouByTime(){
   renderEditor();
   _saveMsg('下校の並びを、入れた時刻の早い順にしました。よければ「このコースを保存」を押してください。', true);
 }
-/** 登校の逆順に戻す（下校専用の停はその後ろ） */
+/** 登校の逆順に戻す（下校専用のバス停はその後ろ） */
 function resetGekouOrder(){
   const stops=_stops();
   const norm=[], only=[];
@@ -1812,7 +1812,7 @@ function _diffBox(){
     <div style="font-weight:700;color:#8a6d1f;font-size:13.5px;">⚠️ バス停の設定と食い違っています</div>
     ${d.extra.length ? `<div style="margin-top:5px;font-size:12.5px;color:#5b6b63;">この便は通りません（「④ルート詳細」でバス停になっています）${d.extra.map(n=>chip(n,'extra')).join('')}</div>` : ''}
     ${d.missing.length ? `<div style="margin-top:5px;font-size:12.5px;color:#5b6b63;">この便は通ります（「④ルート詳細」でバス停になっていません）${d.missing.map(n=>chip(n,'miss')).join('')}</div>` : ''}
-    ${(!d.extra.length && !d.missing.length && d.orderNg) ? `<div style="margin-top:5px;font-size:12.5px;color:#5b6b63;">停は揃っていますが、<b>並び順がバス停の設定と違います</b>。</div>` : ''}
+    ${(!d.extra.length && !d.missing.length && d.orderNg) ? `<div style="margin-top:5px;font-size:12.5px;color:#5b6b63;">バス停は揃っていますが、<b>並び順がバス停の設定と違います</b>。</div>` : ''}
     <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
       ${(d.extra.length + d.missing.length > 1) ? `<button class="mini" onclick="rptFixAll()">まとめて直す</button>` : ''}
       <button class="mini" onclick="rptFillFromStops()" title="バス停一覧だけで作り直します。曲がり角の目印は消えます">バス停一覧から全部作り直す</button>
@@ -1898,9 +1898,9 @@ function setRForm(name){
   renderEditor();
 }
 
-/** ②で下校に入っている停の添字（下校の並び順）。
- *  ⚠️ ②で「下校で外す」を押した停は下校の時刻が空になる（gekou_offset が null）。
- *     これを見ないと、外したはずの停を④が「足りない」と言ってしまう（2026-08-26）。
+/** ②で下校に入っているバス停の添字（下校の並び順）。
+ *  ⚠️ ②で「下校で外す」を押したバス停は下校の時刻が空になる（gekou_offset が null）。
+ *     これを見ないと、外したはずのバス停を④が「足りない」と言ってしまう（2026-08-26）。
  *  ⚠️ 先頭（＝学校）は時刻を持たないが、下校の出発地なので必ず含める。 */
 function _gekouStopIdx(){
   const stops = _stops();
@@ -1929,7 +1929,7 @@ function _diffVs2(){
   const have = _rpts().filter(p=>p.is_stop).map(p=>(p.name||'').trim()).filter(Boolean);
   const extra   = have.filter(n=>want.indexOf(n) < 0);          // ④にあるが②では通らない
   const missing = want.filter(n=>have.indexOf(n) < 0);          // ②では通るが④に無い
-  // 並び順の食い違い（両方にある停だけで比べる）
+  // 並び順の食い違い（両方にあるバス停だけで比べる）
   const common = have.filter(n=>want.indexOf(n)>=0);
   const wantCommon = want.filter(n=>have.indexOf(n)>=0);
   const orderNg = common.join('|') !== wantCommon.join('|');
@@ -1937,7 +1937,7 @@ function _diffVs2(){
   return { extra, missing, orderNg, want };
 }
 
-/** ②で通らない停を「バス停ではない」にする。
+/** ②で通らないバス停を「バス停ではない」にする。
  *  ⚠️ 地点そのものは消さない。道をたどる目印として残すほうが多いため
  *     （2026-08-26 八重樫さん）。本当に道から外れる場合だけ rptDropStop を使う。 */
 function rptUnstop(name){
@@ -1960,7 +1960,7 @@ function rptDropStop(name){
   renderEditor();
   _saveMsg(`「${name}」を地点ごと消しました。`, true);
 }
-/** ②では通るのに④でバス停になっていない停を、バス停にする。
+/** ②では通るのに④でバス停になっていないバス停を、バス停にする。
  *  同じ名前の地点が目印として既にあれば、印を付けるだけ（重ねて入れない） */
 function rptAddStop(name){
   const list = _rpts();
@@ -1993,7 +1993,7 @@ function rptAddStop(name){
 function rptFixAll(){
   const d = _diffVs2();
   if(!d) return;
-  if(!confirm(`バス停の設定に合わせて直します。\n　バス停の印を外す：${d.extra.length}停（地点は道の目印として残します）\n　バス停にする：${d.missing.length}停\n\n※ 差し込んだ前後の道が合っているかご確認ください。`)) return;
+  if(!confirm(`バス停の設定に合わせて直します。\n　バス停の印を外す：${d.extra.length}バス停（地点は道の目印として残します）\n　バス停にする：${d.missing.length}バス停\n\n※ 差し込んだ前後の道が合っているかご確認ください。`)) return;
   const list = _rpts();
   d.extra.forEach(n=>{ const i=list.findIndex(p=>p.is_stop && (p.name||'').trim()===n); if(i>=0) list[i].is_stop = false; });
   const want = _expectedStops();
@@ -2218,7 +2218,7 @@ function rptFillFromStops(){
   RPTS[String(selCourseId)][_rkey()] = pts;
   rptSelIdx = null; rptPick = {};
   renderEditor();
-  _saveMsg(`バス停 ${pts.length}件から並びを作りました。${skipped.length?('（座標なしで飛ばした停：'+skipped.join('、')+'）'):''}曲がり角の目印を足して調整してください。`, true);
+  _saveMsg(`バス停 ${pts.length}件から並びを作りました。${skipped.length?('（座標なしで飛ばしたバス停：'+skipped.join('、')+'）'):''}曲がり角の目印を足して調整してください。`, true);
 }
 
 /** 回送の下書き。すでに分かっている地点を並べる：
@@ -2608,7 +2608,7 @@ const RPT_MAX_VIA = 44;   // 実測で通った数。これを超えるかは未
  *
  *  ・区切（切）  … その地点で終わり、**次の地点から**新しい区間（地点を共有しない）。
  *                  Uターンのように、地点と地点の間をナビに任せられないときに使う
- *  ・バス停（停）… その地点を前後の区間で**共有**する（停まって、そこから続ける）  */
+ *  ・バス停 … その地点を前後の区間で**共有**する（停まって、そこから続ける）  */
 function rptLegs(byStop){
   const pts=_rpts().filter(p=>String(p.lat).trim()!==''&&String(p.lng).trim()!=='');
   if(pts.length<2) return [];
@@ -3085,7 +3085,7 @@ async function saveCourse(){
   if(!isLatestVer()){ _saveMsg('過去版は保存できません。最新版を選ぶか、「新版を作成」してから編集してください。', false); return; }
   const key=String(c.id);
   let _stopsChanged = [];   // バス停一覧が変わった側（保存後に④の確認をうながす）
-  let _flagOn = [], _flagOff = [];   // ②に合わせて④のバス停の印を付けた／外した停
+  let _flagOn = [], _flagOff = [];   // ②に合わせて④のバス停の印を付けた／外したバス停
   let _calRenamed = [];              // 予定表の日課名を付け替えたもの
   // 押している間ずっと分かるようにする（無反応に見えて何度も押されるのを防ぐ）
   _saving = true;
@@ -3174,7 +3174,7 @@ async function saveCourse(){
          残っているルートに価値がないので消えてよい」というもので、
        名前を1文字直しただけで消えてよい、という意味ではなかった。
        これからは④の画面でバス停の設定との食い違いを知らせ、
-       「その停だけ足し引きする」か「作り直す」かを人が選ぶ。 */
+       「そのバス停だけ足し引きする」か「作り直す」かを人が選ぶ。 */
     {
       const nowSig  = _stopsOrderSig(keep);
       const origSig = STOPS_ORIG_SIG[key] || { toukou:'', gekou:'' };
@@ -3185,13 +3185,13 @@ async function saveCourse(){
        　「この④ルート詳細は②の各日課にあわせて反映しなければなりません。
        　　編集ののちチェックが外れるバス停もあればチェックが加わるバス停もあると思います」
 
-       日課・便ごとに、②が言う「この便で通る停」と突き合わせる：
+       日課・便ごとに、②が言う「この便で通るバス停」と突き合わせる：
          ②の下校に入っている　かつ　その便で「通らない」に入っていない → バス停の印を付ける
          そうでない                                                  → バス停の印を外す
 
        ⚠️ 地点は消さない。道をたどる目印として残す。
        ⚠️ バス停一覧に無い名前（曲がり角の目印など）は触らない。
-       ⚠️ ④に地点そのものが無い停は、ここでは足さない（道の形が変わるため）。
+       ⚠️ ④に地点そのものが無いバス停は、ここでは足さない（道の形が変わるため）。
           ④の食い違いの枠から「バス停にする」を押していただく。 */
     {
       const inGekou = {};

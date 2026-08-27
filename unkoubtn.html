@@ -350,7 +350,7 @@ function render(){
       : `<div class="remain${rbad?' bad':''}">車内に残り ${rleft}人</div>`;
 
     if(i===nowIdx && s.type==='stop' && s.passOrder){
-      // 🔴 会社の指示で通過する停。着いた／人数／出発は出さず、通過だけにする
+      // 🔴 会社の指示で通過するバス停。着いた／人数／出発は出さず、通過だけにする
       h += `<div class="actrow">${actBtn(i,'通過','通過した',pas)}</div>`;
       h += legLinks(s);
     } else if(i===nowIdx && s.type==='stop'){
@@ -394,18 +394,18 @@ function render(){
   scrollToNow(nowIdx);
 }
 
-/* 🔴 停に関する会社の指示（2026-08-27）。正本：業務管理システム_マスタ連動の原則
+/* 🔴 バス停に関する会社の指示（2026-08-27）。正本：業務管理システム_マスタ連動の原則
    通過（止まらない）／立ち寄り（寄り道）を、事務所が決めて運転手に届ける。
 
    ⚠️ 決めるのは会社。運転手は判断しない。
-   ⚠️ 止まらない停も画面から消さない。「本日は通過します」と出して残す。
+   ⚠️ 止まらないバス停も画面から消さない。「本日は通過します」と出して残す。
       消すと「見落として飛ばした」のか「指示で通過した」のか分からなくなる。
    ⚠️ 指示が変わっても画面を勝手に書き換えない。帯を出し、押していただいたときに反映する。
       走行中に表示が変わるのは危険（運転手の画面で採ってきた考え方と揃える）。 */
 function ordersOf(segName){
   return (INFO && INFO.orders && INFO.orders[segName]) || [];
 }
-/** その停に「通過」の指示が出ているか */
+/** そのバス停に「通過」の指示が出ているか */
 function passOrder(segName, name){
   return ordersOf(segName).find(o => o.kind === '通過' && o.name === name) || null;
 }
@@ -413,7 +413,7 @@ function passOrder(segName, name){
 function detoursBefore(segName, seq){
   return ordersOf(segName).filter(o => o.kind === '立ち寄り' && Number(o.at_seq) === Number(seq));
 }
-/** 末尾（最後の停より後ろ）に入る立ち寄り */
+/** 末尾（最後のバス停より後ろ）に入る立ち寄り */
 function detoursTail(segName, lastSeq){
   return ordersOf(segName).filter(o => o.kind === '立ち寄り'
     && (o.at_seq == null || Number(o.at_seq) > Number(lastSeq)));
@@ -466,10 +466,10 @@ function startOrderWatch(){
  *     回送に**ボタンは付けない**（運転中の操作を増やさない）。次のバス停へ進めば自動で済みになる。
  *
  *  🔴 2026-08-27 会社からの指示（通過・立ち寄り）を差し込む。
- *     ⚠️ 止まらない停も消さない。「本日は通過します」と出して残す。
+ *     ⚠️ 止まらないバス停も消さない。「本日は通過します」と出して残す。
  *        消すと「見落として飛ばした」のか「指示で通過した」のか分からなくなる。
  *     ⚠️ 立ち寄りは案内だけ（ボタンなし）。運転中の操作を増やさない。
- *        道案内は 前の停 → 立ち寄り → 次の停 の順につながる。 */
+ *        道案内は 前のバス停 → 立ち寄り → 次のバス停 の順につながる。 */
 function _prevStopPt(pts, idx){
   for(let i=idx-1;i>=0;i--){ if(pts[i].is_stop) return pts[i]; }
   return null;
@@ -503,12 +503,12 @@ function buildSteps(seg){
 
   // ── ② バス停（会社の指示を差し込む） ──
   let carry = [];
-  let lastDetour = null;        // 直前に入れた立ち寄り。次の停の道案内の起点になる
+  let lastDetour = null;        // 直前に入れた立ち寄り。次のバス停の道案内の起点になる
   let lastStopIdx = -1;
   pts.forEach((p,idx)=>{
     const n = (p.note||'').trim();
     if(!p.is_stop){ if(n) carry.push(n); return; }
-    // この停の手前に入る立ち寄り
+    // このバス停の手前に入る立ち寄り
     detoursBefore(seg.segment, p.seq).forEach(o=>{
       const q = orderPoint(o);
       const from = lastDetour || _prevStopPt(pts, idx);
@@ -528,7 +528,7 @@ function buildSteps(seg){
     lastDetour = null;
     lastStopIdx = idx;
   });
-  // 最後の停より後ろに入る立ち寄り
+  // 最後のバス停より後ろに入る立ち寄り
   if(lastStopIdx >= 0){
     detoursTail(seg.segment, pts[lastStopIdx].seq).forEach(o=>{
       const q = orderPoint(o);
