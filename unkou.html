@@ -1322,7 +1322,7 @@ function renderVersionBar(c){
   const warn = isLatest ? '' : `<span style="font-size:11px;color:#b0451f;font-weight:700;">過去版＝閲覧のみ（保存不可）</span>`;
   const src = COURSES.map(x=>{ const lv=latestVerId(x.id); if(!lv) return ''; return `<option value="${x.id}:${lv}"${String(x.id)===String(c.id)?' selected':''}>${escHtml(courseLabel(x))}${String(x.id)===String(c.id)?'（このコース・最新）':''}</option>`; }).filter(Boolean).join('');
   const panel = _nvOpen ? `<div class="seg" style="margin:6px 0;">
-      <div class="line" style="flex-wrap:wrap;gap:6px;"><label class="fld" style="margin:0;">新版の適用開始日</label><input type="date" id="nvDate" value="${_nextApril()}" style="width:auto;"></div>
+      <div class="line" style="flex-wrap:wrap;gap:6px;"><label class="fld" style="margin:0;">新版の適用開始日</label><input type="date" id="nvDate" value="${_tomorrow()}" style="width:auto;"><button class="mini" onclick="_setNvDate(_tomorrow())">明日</button><button class="mini" onclick="_setNvDate(_nextMonth1())">来月1日</button><button class="mini" onclick="_setNvDate(_nextApril())">次の4月1日</button></div>
       <div class="line" style="flex-wrap:wrap;gap:6px;margin-top:4px;"><span class="muted" style="font-size:12px;">コピー元</span><select id="nvSource" style="font-size:12px;max-width:300px;">${src}</select></div>
       <div class="line" style="flex-wrap:wrap;gap:6px;margin-top:4px;"><input type="text" id="nvNote" placeholder="メモ（任意：例 令和8年度／9月転居対応）" style="flex:1;min-width:160px;"></div>
       <div class="line" style="gap:6px;margin-top:6px;"><button class="primary" onclick="createVersion()">この内容で新版を作成</button><button class="mini" onclick="_nvOpen=false;renderEditor()">やめる</button></div>
@@ -1334,6 +1334,44 @@ function renderVersionBar(c){
       <button class="mini" onclick="_nvOpen=!_nvOpen;renderEditor()">📋 前年度／別コースからコピーして新版を作成</button>
     </div>${panel}`;
 }
+
+/* 🔴 消えるものを名指しで見せてから進む（2026-08-27 八重樫さん）
+
+   いままでの _confirmWipe は「入れ直す中身が空」のときだけ聞いていた。
+   ⚠️ 5件が4件になっても素通りする。2026-08-26 に湘南 西コースの「河内」、
+      2026-08-27 に金沢 みずいろコースの「金沢支援学校（下校専用）」が
+      どちらも黙って消えた（後者は意図した削除だった）。
+
+   ⚠️ バス停は同じ名前で2行ある（登校用・下校専用）。名前だけで突き合わせない。
+      2026-08-21 と 2026-08-26 に2回踏んだ誤り。 */
+async function _confirmDrop(path, select, newKeys, label, mkKey, mkLabel){
+  let cur;
+  try{
+    const r = await fetch(`${REST_URL}/${path}&select=${select}`, { headers:getH() });
+    if(!r.ok) return true;                       // 数えられないときは止めない
+    cur = await r.json();
+  }catch(e){ return true; }
+  if(!Array.isArray(cur) || !cur.length) return true;
+
+  const now = new Set(newKeys);
+  const gone = cur.filter(x => !now.has(mkKey(x)));
+  if(!gone.length) return true;                  // 減っていないなら聞かない
+
+  const all = (gone.length === cur.length);
+  return confirm(
+    (all ? `⚠️ ${label}が全部（${cur.length}件）消えます。\n\n`
+         : `⚠️ ${label}が ${cur.length}件 → ${cur.length - gone.length}件 になります。\n\n`)
+    + `消えるのは：\n　・${gone.map(mkLabel).join('\n　・')}\n\n`
+    + (all ? '画面がまだ読み込めていないだけの可能性があります。\n\n' : '')
+    + 'よろしいですか。');
+}
+
+/* 適用開始日の候補。年度替わりだけでなく学期の変更にも使うため（2026-08-27） */
+function _dstr(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+function _tomorrow(){ const d=new Date(); d.setDate(d.getDate()+1); return _dstr(d); }
+function _nextMonth1(){ const d=new Date(); return _dstr(new Date(d.getFullYear(), d.getMonth()+1, 1)); }
+function _setNvDate(v){ const el=document.getElementById('nvDate'); if(el) el.value=v; }
+
 async function createVersion(){
   const c=_c(); if(!c) return;
   const vf=(document.getElementById('nvDate')||{}).value||'';
@@ -1344,29 +1382,46 @@ async function createVersion(){
   if(!srcVid){ _saveMsg('コピー元を選んでください', false); return; }
   const note=((document.getElementById('nvNote')||{}).value||'').trim();
   await ensureFreshToken();
+
+  /* 🔴 遡って作れるようにする。ただし過去の便は作り直さない（2026-08-27 八重樫さん）
+     > 入力当日より遡ることも一応できるようにしてください。入力が間に合わなかった
+     > という可能性もあるためです。ただ、その時は〇〇件のデータに反映しています。
+     ⚠️ 「そのままです」と先に言っておかないと、あとで「反映されていない」と見える */
+  if(vf < _dstr(new Date())){
+    let im = null;
+    try{
+      const r=await fetch(`${REST_URL}/rpc/backdate_impact`, { method:'POST', headers:getH(),
+        body:JSON.stringify({ p_course_id:c.id, p_from:vf }) });
+      if(r.ok) im = await r.json();
+    }catch(e){}
+    const msg = `⚠️ ${vf} は今日より前です。\n\n`
+      + (im ? `　${vf} 〜 昨日の ${im.kept_duties||0}便（配置 ${im.kept_crew||0}件）は、そのままです。\n`
+            + `　　すでに起きたこととして残します。\n`
+            + `　今日から先の ${im.next_duties||0}便に反映します。\n\n`
+          : '　過去の便はそのまま残ります。今日から先の便に反映します。\n\n')
+      + 'このまま作りますか。';
+    if(!confirm(msg)) return;
+  }
+
+  /* 2026-08-27：版づくりと複製を1つの処理にまとめた（00_データを壊さない書き方）。
+     途中で止まっても、中身の欠けた版が残らない */
   try{
-    const rv=await fetch(`${REST_URL}/course_timetable_versions`, { method:'POST', headers:{...getH(),'Prefer':'return=representation'}, body:JSON.stringify({ course_id:c.id, valid_from:vf, note:note||null }) });
-    if(!rv.ok){ const t=await rv.text(); _saveMsg('版作成に失敗：'+t.slice(0,120), false); return; }
-    const newId=(await rv.json())[0].id;
-    const [sf,ss,sr]=await Promise.all([
-      fetch(`${REST_URL}/course_schedule_forms?version_id=eq.${srcVid}&select=form_name,gekou_departures,after_toukou,after_toukou_place,after_toukou_addr,after_toukou_coord,dep_overrides`, { headers:getH() }),
-      fetch(`${REST_URL}/course_locations?version_id=eq.${srcVid}&select=name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_seq,gekou_overrides`, { headers:getH() }),
-      fetch(`${REST_URL}/course_route_points?version_id=eq.${srcVid}&select=form_name,segment,scenario_id,route_name,seq,name,lat,lng,is_stop,split_here,note`, { headers:getH() })
-    ]);
-    const forms=(sf.ok?await sf.json():[]).map(r=>({ course_id:c.id, version_id:newId, form_name:r.form_name, gekou_departures:r.gekou_departures, after_toukou:r.after_toukou, after_toukou_place:r.after_toukou_place, after_toukou_addr:r.after_toukou_addr, after_toukou_coord:r.after_toukou_coord, dep_overrides:r.dep_overrides||{} }));
-    const stops=(ss.ok?await ss.json():[]).map(r=>({ course_id:c.id, version_id:newId, name:r.name, address:r.address, seq:r.seq, toukou_time:r.toukou_time, gekou_offset:r.gekou_offset, gekou_only:r.gekou_only, coord:r.coord, gekou_seq:r.gekou_seq, gekou_overrides:r.gekou_overrides||{}, in_gekou:(r.gekou_offset!=null) }));
-    if(forms.length){ const r=await fetch(`${REST_URL}/course_schedule_forms`, { method:'POST', headers:getH(), body:JSON.stringify(forms) }); if(!r.ok){ const t=await r.text(); _saveMsg('「②下校便」（日課）の複製に失敗：'+t.slice(0,120), false); return; } }
-    // 回送は「便・送迎・ルート」で分かれているので、その3つも一緒に複製する
-    const rpts=(sr.ok?await sr.json():[]).map(r=>({ course_id:c.id, version_id:newId, segment:r.segment,
-      form_name:r.form_name, scenario_id:r.scenario_id, route_name:r.route_name, seq:r.seq,
-      name:r.name, lat:r.lat, lng:r.lng, is_stop:r.is_stop, split_here:r.split_here, note:r.note }));
-    if(stops.length){ const r=await fetch(`${REST_URL}/course_locations`, { method:'POST', headers:getH(), body:JSON.stringify(stops) }); if(!r.ok){ const t=await r.text(); _saveMsg('バス停・登校ルートの複製に失敗：'+t.slice(0,120), false); return; } }
-    if(rpts.length){ const r=await fetch(`${REST_URL}/course_route_points`, { method:'POST', headers:getH(), body:JSON.stringify(rpts) }); if(!r.ok){ const t=await r.text(); _saveMsg('「④ルート詳細」の複製に失敗：'+t.slice(0,120), false); return; } }
+    const r = await fetch(`${REST_URL}/rpc/create_version_copy`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ p_course_id:c.id, p_valid_from:vf, p_src_version_id:srcVid, p_note:note||null }) });
+    const txt = await r.text();
+    if(!r.ok){ let j={}; try{ j=JSON.parse(txt); }catch(e){}
+      _saveMsg('版を作れませんでした（元のデータはそのままです）：'+((j&&j.message)||txt).slice(0,140), false); return; }
+    const d = JSON.parse(txt);
+    const newId = Array.isArray(d) ? (d[0]&&d[0].version_id) : (d&&d.version_id);
+    if(!newId){ _saveMsg('版を作れませんでした（番号が返りません）。', false); return; }
+
     await loadVersions(); selVerId=newId; await loadVersionInto(c.id, newId);
     _nvOpen=false; selRefD=_refDeparture()||'14:00';
     _editMode='new'; _fixReason=''; _impact=null;   /* 作った直後はそのまま編集できる */
     renderEditor(); _loadImpact().then(_renderEditBar);
-    _saveMsg('✅ 新しい版を作成しました。内容を確認して保存してください。', true);
+    _saveMsg(`✅ ${vf} からの版を作りました`
+      + `（日課 ${d.forms||0}・バス停 ${d.stops||0}・④ルート詳細 ${d.route_points||0} を写しました）。`
+      + `内容を確認して保存してください。`, true);
   }catch(e){ _saveMsg('版作成エラー：'+e.message, false); }
 }
 
@@ -3249,7 +3304,12 @@ async function saveCourse(){
     if(!r1.ok){ const t=await r1.text(); _saveMsg('「①主要情報・登校便」の保存に失敗：'+t.slice(0,100), false); return; }
     // 2) 下校フォーム（この年度・このコースを置き換え）
     const formsCount = (FORMS[key]||[]).filter(f=>(f.form_name||'').trim()).length;
-    if(!(await _confirmWipe(`course_schedule_forms?version_id=eq.${selVerId}`, formsCount, '日課'))){ _saveMsg('保存を中止しました。', false); return; }
+    {
+      const _fk = (FORMS[key]||[]).filter(f=>(f.form_name||'').trim()).map(f=>f.form_name.trim());
+      if(!(await _confirmDrop(`course_schedule_forms?version_id=eq.${selVerId}`, 'form_name', _fk, '日課',
+            x=>(x.form_name||''), x=>(x.form_name||'（名前なし）')))){
+        _saveMsg('保存を中止しました。', false); return; }
+    }
     const forms = (FORMS[key]||[]).filter(f=>(f.form_name||'').trim()).map(f=>({ course_id:c.id, version_id:selVerId, form_name:f.form_name.trim(), gekou_departures:(f.gekou_departures||[]).filter(t=>t), after_toukou:(f.after_toukou||'')||null, after_toukou_place:(f.after_toukou==='他所移動'?(f.after_toukou_place||null):null), after_toukou_addr:(f.after_toukou==='他所移動'?(f.after_toukou_addr||null):null), after_toukou_coord:(f.after_toukou==='他所移動'?(f.after_toukou_coord||null):null), dep_overrides:(f.dep_overrides&&Object.keys(f.dep_overrides).length)?f.dep_overrides:{} }));
     // 2026-08-25：削除＋入れ直しを1つのDB関数にまとめた（00_データを壊さない書き方）
     { const r2=await fetch(`${REST_URL}/rpc/save_course_schedule_forms`, { method:'POST', headers:getH(),
@@ -3269,7 +3329,15 @@ async function saveCourse(){
     }
     // 3) バス停・ルート（このコースを置き換え）
     const stopsCount = (STOPS[key]||[]).filter(s=>(s.name||'').trim()||(s.address||'').trim()).length;
-    if(!(await _confirmWipe(`course_locations?version_id=eq.${selVerId}`, stopsCount, 'バス停'))){ _saveMsg('保存を中止しました。', false); return; }
+    {
+      /* ⚠️ 同じ名前で2行ある（登校用・下校専用）。名前だけで突き合わせない */
+      const _sk = (STOPS[key]||[]).filter(s=>(s.name||'').trim()||(s.address||'').trim())
+        .map(s=>((s.name||'').trim()+'|'+(s.gekou_only?'下校':'登校')));
+      if(!(await _confirmDrop(`course_locations?version_id=eq.${selVerId}`, 'name,gekou_only,toukou_time', _sk, 'バス停',
+            x=>((x.name||'')+'|'+(x.gekou_only?'下校':'登校')),
+            x=>((x.name||'（名前なし）')+(x.gekou_only?'（下校専用）':'')+(x.toukou_time?(' '+x.toukou_time):''))))){
+        _saveMsg('保存を中止しました。', false); return; }
+    }
     let seq=0;
     const keep = (STOPS[key]||[]).filter(s=>(s.name||'').trim()||(s.address||'').trim());
     /* 下校の順番は、空行を抜いたあとの並びで 1,2,3… に振り直す。
