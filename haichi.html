@@ -105,6 +105,7 @@ button.mini{font-size:12px;padding:6px 10px;}
     </div>
     <div id="hMismatch"></div>
     <div id="hSkips"></div>
+    <div id="hOrders"></div>
     <div id="hManual"></div>
     <div id="hDeleted"></div>
     <div class="muted" style="font-size:11px;margin-top:6px;">
@@ -1164,6 +1165,7 @@ function _headHtml(ym,y,m,dim,HOL,firstLabel){
 function hRender(){
   hRenderMismatch();
   hRenderSkips();
+  hRenderOrders();
   hRenderManual();
   hRenderDeleted();
   if(TAB==='人別'){ hRenderPerson(); return; }
@@ -1367,7 +1369,16 @@ function hOpenAsg(cid,date){
     h+=`<div class="duty"><div class="dh"><span class="seg">${escHtml(d.segment)}</span>`
       +`<span class="tm">${d.start_time?escHtml(_hm(d.start_time))+' 発':''}</span>`
       +`<span class="muted">必要 ${need}名</span>`
-      +`<button class="mini" style="margin-left:auto;border-color:#e0b4ac;color:#a5382c;" onclick="hSkipDuty(${d.id})" title="この日のこの便を走らせないことにします">この便は走らせない</button></div>`;
+      +`<button class="mini" style="margin-left:auto;" onclick="hOpenOrderBox(${d.id})" title="この便の停に、通過・立ち寄りの指示を出します">📣 停への指示</button>`
+      +`<button class="mini" style="border-color:#e0b4ac;color:#a5382c;" onclick="hSkipDuty(${d.id})" title="この日のこの便を走らせないことにします">この便は走らせない</button></div>`;
+    // この便に出ている指示
+    {
+      const os = _ordersOfDuty(d.id);
+      if(os.length) h += `<div style="background:#eaf2fb;border:1px solid #b8d0e8;border-radius:8px;padding:7px 10px;margin:5px 0;font-size:12.5px;line-height:1.8;color:#1d4f7c;">`
+        + os.map(o=>`<div><b>${o.kind==='通過'?'⚠️ 通過':'★ 立ち寄り'}：${escHtml(o.place_name)}</b>　${escHtml(o.reason||'')}`
+          + ` <button class="mini" onclick="hCancelOrder(${o.id})">やめる</button></div>`).join('') + `</div>`;
+    }
+    h += `<div id="ord_${d.id}" data-open="0"></div>`;
     // 🔴 その日だけの変更（時刻・必要人数・車両）。印が付くとマスタの反映から守られる
     h+=`<div class="crewline"><span class="lb">🕒 時刻</span>`
       +`<input id="tm_${d.id}" value="${escAttr(d.start_time||'')}" placeholder="14:05" style="width:76px;">`
@@ -1598,7 +1609,7 @@ async function hSave(){
       if(!rc.ok){ status('保存に失敗しました（元のデータは残っています）：'+(await rc.text()).slice(0,120), false); return; }
     }
     DIRTY={}; DIRTYV={}; DIRTYS={}; _dirtyView();
-    await hLoadMonth(); await hLoadHist(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender();
+    await hLoadMonth(); await hLoadHist(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); await hLoadOrders(); hRender();
     status('保存しました', true);
   }catch(e){ status('保存に失敗しました：'+e.message, false); }
   finally{
@@ -1638,7 +1649,7 @@ async function hSetField(id, f){
     if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
       status('変えられませんでした（元のデータは残っています）：' + ((j&&j.message)||t).slice(0,150), false); return; }
     const j = JSON.parse(t);
-    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender();
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); await hLoadOrders(); hRender();
     if(CUR) hOpenAsg(CUR.cid, CUR.date);
     status(`${j.work_date} ${j.segment} の${OD_LABEL[f]||f}を「この日だけ」変えました（${j.old||'—'} → ${j.new||'—'}）`, true);
   }catch(e){ status('変えられませんでした：'+e.message, false); }
@@ -1654,7 +1665,7 @@ async function hClearField(id, f){
     if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
       status('戻せませんでした（元のデータは残っています）：' + ((j&&j.message)||t).slice(0,150), false); return; }
     const j = JSON.parse(t);
-    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender();
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); await hLoadOrders(); hRender();
     if(CUR) hOpenAsg(CUR.cid, CUR.date);
     status(`${j.work_date} ${j.segment} の${OD_LABEL[f]||f}をマスタに戻しました（${j.old||'—'} → ${j.new||'—'}）`, true);
   }catch(e){ status('戻せませんでした：'+e.message, false); }
@@ -1678,7 +1689,7 @@ async function hSkipDuty(id){
       status('できませんでした（元のデータは残っています）：' + ((j&&j.message)||t).slice(0,150), false); return; }
     const j = JSON.parse(t);
     hCloseAsg();
-    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender();
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); await hLoadOrders(); hRender();
     status(`${j.work_date} ${j.segment} を走らせないことにしました`
       + (j.crew_count ? `（${j.crew} が外れました）` : ''), true);
   }catch(e){ status('できませんでした：'+e.message, false); }
@@ -1693,7 +1704,7 @@ async function hUnskipDuty(cid, date, seg){
     if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
       status('戻せませんでした：' + ((j&&j.message)||t).slice(0,150), false); return; }
     const j = JSON.parse(t);
-    await hLoadMonth(); await hLoadSkips(); await hLoadDeleted(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender();
+    await hLoadMonth(); await hLoadSkips(); await hLoadDeleted(); await hLoadOrders(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); await hLoadOrders(); hRender();
     status(j.restored ? `${j.work_date} ${j.segment} ${j.start_time||''} を戻しました`
                       : `取り消しました（${j.why}）`, true);
   }catch(e){ status('戻せませんでした：'+e.message, false); }
@@ -1851,7 +1862,7 @@ async function hRestoreDuty(aid, keep){
     if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
       status('戻せませんでした（元のデータは残っています）：' + ((j&&j.message)||t).slice(0,150), false); return; }
     const j = JSON.parse(t);
-    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender();
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); await hLoadOrders(); hRender();
     status(`${j.work_date} ${j.segment} ${j.start_time||''} を戻しました`
       + (j.crew_count ? `（${j.crew} を付け直しました）` : '')
       + (j.missing_staff ? `　⚠️ 名簿にいない方 ${j.missing_staff}名 は付け直せませんでした` : '')
@@ -1872,9 +1883,182 @@ async function hUnkeepDuty(id){
     if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
       status('できませんでした：' + ((j&&j.message)||t).slice(0,150), false); return; }
     const j = JSON.parse(t);
-    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender();
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); await hLoadOrders(); hRender();
     status(`${j.work_date} ${j.segment} の例外をやめました。${j.note||''}`, true);
   }catch(e){ status('できませんでした：'+e.message, false); }
+}
+
+/* 🔴 停に関する会社の指示（2026-08-27）。正本：業務管理システム_マスタ連動の原則
+   通過（止まらない）／立ち寄り（寄り道）を、事務所が決めて運転手に届ける。
+
+   > 当日にわかる場合は会社が指示できないため、予め決められたとおりに運行させることが原則です。
+   > ただ、例外としては朝生徒の休みがわかり、下校便の最終バス停が誰も降りない、ということが
+   > あった場合、会社からの指示が間に合うことはあります。（八重樫さん 2026-08-26）
+
+   ⚠️ 決めるのは会社。運転手は判断しない。
+   ⚠️ 止まらない停も運転手の画面から消さない。「本日は通過します」と出して残す。
+   ⚠️ 理由は必須。あとから「何のための指示か」が分からないものを残さない。
+   ⚠️ 過去の便・人数が入っている便・運行ボタンの記録がある便は、データベース側で断られる。 */
+let ORDERS = [];
+let DSTOPS = {};   // duty_id -> [{seq,name,already_ordered}]
+async function hLoadOrders(){
+  const ym=_ym(); if(!ym){ ORDERS=[]; return; }
+  const start=ym+'-01', end=ym+'-'+_p2(_dim(ym));
+  try{
+    const r = await fetch(`${REST_URL}/rpc/stop_orders`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ p_from:start, p_to:end }) });
+    ORDERS = r.ok ? (await r.json() || []) : [];
+  }catch(e){ ORDERS = []; }
+}
+function _ordersOfDuty(id){ return ORDERS.filter(o=>o.duty_id===id); }
+function hRenderOrders(){
+  const el = document.getElementById('hOrders');
+  if(!el) return;
+  const live = ORDERS.filter(o=>!o.is_past);
+  if(!live.length){ el.innerHTML=''; return; }
+  el.innerHTML = `<div style="background:#eaf2fb;border:1px solid #b8d0e8;border-radius:10px;padding:11px 14px;margin:8px 0;">
+    <div style="font-weight:700;color:#1d4f7c;font-size:13.5px;">📣 運転手へ出している指示（${live.length}件）</div>
+    <div style="font-size:12px;color:#4a6b7c;line-height:1.75;margin-top:3px;">
+      通過（止まらない）と立ち寄り（寄り道）です。<b>運転手の画面に出ています。</b>
+      指示を変えると、開いたままの画面にも「新しい指示があります」と出ます。
+    </div>
+    <div style="max-height:300px;overflow:auto;margin-top:4px;">
+      ${live.map(o=>`<div style="padding:6px 0;border-top:1px solid #d5e3f0;font-size:12.5px;line-height:1.8;">
+        <div><b>${escHtml(String(o.work_date))}</b>　${escHtml(o.course_label||'')}　${escHtml(o.segment)} ${escHtml(o.start_time||'')}</div>
+        <div style="color:#1d4f7c;"><b>${o.kind==='通過'?'⚠️ 通過':'★ 立ち寄り'}：${escHtml(o.place_name)}</b>　${escHtml(o.reason||'')}</div>
+        ${o.address ? `<div class="muted" style="font-size:11.5px;">${escHtml(o.address)}</div>` : ''}
+        <div class="muted" style="font-size:11.5px;">${escHtml(String(o.created_at||'').slice(0,16).replace('T',' '))}
+          ${o.created_by ? '／'+escHtml(String(o.created_by).slice(0,40)) : ''}</div>
+        <div style="margin-top:3px;"><button class="mini" onclick="hCancelOrder(${o.id})">この指示をやめる</button></div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+/** その便の停を読み、通過の選択肢を作る */
+async function hLoadDutyStops(id){
+  if(DSTOPS[id]) return DSTOPS[id];
+  try{
+    const r = await fetch(`${REST_URL}/rpc/duty_stops`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ p_duty: id }) });
+    DSTOPS[id] = r.ok ? (await r.json() || []) : [];
+  }catch(e){ DSTOPS[id] = []; }
+  return DSTOPS[id];
+}
+async function hOpenOrderBox(id){
+  const box = document.getElementById('ord_'+id);
+  if(!box) return;
+  if(box.dataset.open === '1'){ box.dataset.open='0'; box.innerHTML=''; return; }
+  box.dataset.open = '1';
+  box.innerHTML = '<div class="muted" style="font-size:12px;">読み込んでいます…</div>';
+  const stops = await hLoadDutyStops(id);
+  if(!stops.length){
+    box.innerHTML = '<div class="muted" style="font-size:12px;">この便の経路がまだ登録されていません。'
+      + '「④ルート詳細」でバス停を入れると、ここから指示を出せます。</div>';
+    return;
+  }
+  const opts = stops.map(s=>`<option value="${escAttr(s.name)}"${s.already_ordered?' disabled':''}>`
+    + `${escHtml(s.name)}${s.already_ordered?'（指示済み）':''}</option>`).join('');
+  const seqOpts = stops.map(s=>`<option value="${s.seq}">${escHtml(s.name)} の手前</option>`).join('')
+    + `<option value="9999">いちばん最後</option>`;
+  box.innerHTML = `<div style="background:#f4f8fc;border:1px solid #cfe0ef;border-radius:9px;padding:9px 11px;margin:6px 0;">
+    <div style="font-size:12px;color:#1d4f7c;line-height:1.7;">
+      <b>この便への指示を出します。</b>運転手の画面にすぐ出ます（開いたままでも知らせます）。
+    </div>
+    <div class="crewline" style="margin-top:5px;"><span class="lb">⚠️ 止まらない</span>
+      <select id="op_${id}" style="max-width:190px;">${opts}</select>
+      <input id="or_${id}" placeholder="理由（例：生徒が全員欠席）" style="flex:1;min-width:150px;">
+      <button class="mini" onclick="hOrderPass(${id})">この停は通過にする</button></div>
+    <div class="crewline"><span class="lb">★ 立ち寄り</span>
+      <input id="dn_${id}" placeholder="寄る場所の名前" style="width:150px;">
+      <select id="dp_${id}" style="max-width:150px;"><option value="">📍 登録済みの場所…</option>${_placeOpts()}</select>
+      <select id="ds_${id}" style="max-width:150px;">${seqOpts}</select></div>
+    <div class="crewline"><span class="lb"></span>
+      <input id="da_${id}" placeholder="住所（任意）" style="flex:1;min-width:140px;">
+      <input id="dc_${id}" placeholder="座標 35.5442, 139.7043（任意）" style="width:200px;"></div>
+    <div class="crewline"><span class="lb"></span>
+      <input id="dr_${id}" placeholder="理由（例：先生をお乗せするため）" style="flex:1;min-width:150px;">
+      <button class="mini" onclick="hOrderDetour(${id})">ここへ寄る指示を出す</button></div>
+  </div>`;
+  const sel = document.getElementById('dp_'+id);
+  if(sel) sel.onchange = ()=>{
+    const p = PLACES.find(x=>x.name===sel.value);
+    if(!p) return;
+    document.getElementById('dn_'+id).value = p.name || '';
+    document.getElementById('da_'+id).value = p.address || '';
+    document.getElementById('dc_'+id).value = p.coord || '';
+  };
+}
+/** 場所帳：すでにシステムに入っている場所（他所移動先・添乗員の乗降場所） */
+let PLACES = [];
+async function hLoadPlaces(){
+  try{
+    const r1 = await fetch(`${REST_URL}/courses?select=after_toukou_place,after_toukou_addr,after_toukou_coord`
+      + `&after_toukou_place=not.is.null`, { headers:getH() });
+    const a = r1.ok ? (await r1.json()||[]) : [];
+    const r2 = await fetch(`${REST_URL}/course_transfer_points?select=name,address,coord`, { headers:getH() });
+    const b = r2.ok ? (await r2.json()||[]) : [];
+    const m = {};
+    a.forEach(x=>{ const n=(x.after_toukou_place||'').trim(); if(n && !m[n])
+      m[n]={ name:n, address:x.after_toukou_addr||'', coord:x.after_toukou_coord||'' }; });
+    b.forEach(x=>{ const n=(x.name||'').trim(); if(n && !m[n])
+      m[n]={ name:n, address:x.address||'', coord:x.coord||'' }; });
+    PLACES = Object.values(m).sort((p,q)=>p.name.localeCompare(q.name,'ja'));
+  }catch(e){ PLACES = []; }
+}
+function _placeOpts(){
+  return PLACES.map(p=>`<option value="${escAttr(p.name)}">${escHtml(p.name)}</option>`).join('');
+}
+async function hOrderPass(id){
+  const nm = (document.getElementById('op_'+id)||{}).value || '';
+  const why = ((document.getElementById('or_'+id)||{}).value || '').trim();
+  if(!nm){ status('バス停を選んでください', false); return; }
+  if(!why){ status('理由を入れてください（あとから見て分かるように）', false); return; }
+  if(!confirm(`この停を「本日は通過」にします。\n\n　${nm}\n　${why}\n\n`
+    + `運転手の画面にすぐ出ます。停は消さず「本日は通過します」と表示されます。\n\nよろしいですか。`)) return;
+  await _hOrder('order_pass_stop', { p_duty:id, p_name:nm, p_reason:why }, id);
+}
+async function hOrderDetour(id){
+  const nm = ((document.getElementById('dn_'+id)||{}).value || '').trim();
+  const ad = ((document.getElementById('da_'+id)||{}).value || '').trim();
+  const co = ((document.getElementById('dc_'+id)||{}).value || '').trim();
+  const sq = Number((document.getElementById('ds_'+id)||{}).value || 0);
+  const why = ((document.getElementById('dr_'+id)||{}).value || '').trim();
+  if(!nm){ status('寄る場所の名前を入れてください', false); return; }
+  if(!why){ status('理由を入れてください（あとから見て分かるように）', false); return; }
+  if(!co && !confirm(`座標が入っていません。\n\n運転手の画面に道案内は出ません（場所の名前と理由だけ出ます）。\n\nこのまま指示を出しますか。`)) return;
+  await _hOrder('order_detour', { p_duty:id, p_name:nm, p_address:ad||null,
+    p_coord:co||null, p_at_seq:sq, p_reason:why }, id);
+}
+async function _hOrder(fn, body, id){
+  try{
+    const r = await fetch(`${REST_URL}/rpc/${fn}`, { method:'POST', headers:getH(), body:JSON.stringify(body) });
+    const t = await r.text();
+    if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
+      status('指示を出せませんでした（元のデータは残っています）：' + ((j&&j.message)||t).slice(0,150), false); return; }
+    const j = JSON.parse(t);
+    delete DSTOPS[id];
+    await hLoadOrders(); hRender();
+    if(CUR) hOpenAsg(CUR.cid, CUR.date);
+    status(`${j.work_date} ${j.segment}　${j.kind}：${j.place_name} を指示しました`, true);
+  }catch(e){ status('指示を出せませんでした：'+e.message, false); }
+}
+async function hCancelOrder(oid){
+  const o = ORDERS.find(x=>x.id===oid);
+  if(!confirm(`この指示をやめます。\n\n`
+    + (o ? `　${o.work_date}　${o.course_label||''}　${o.segment}\n　${o.kind}：${o.place_name}\n　${o.reason||''}\n\n` : '')
+    + `運転手の画面からも消えます。よろしいですか。`)) return;
+  try{
+    const r = await fetch(`${REST_URL}/rpc/cancel_stop_order`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ p_id: oid }) });
+    const t = await r.text();
+    if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
+      status('やめられませんでした：' + ((j&&j.message)||t).slice(0,150), false); return; }
+    const j = JSON.parse(t);
+    DSTOPS = {};
+    await hLoadOrders(); hRender();
+    if(CUR) hOpenAsg(CUR.cid, CUR.date);
+    status(`${j.work_date} ${j.segment}　${j.kind}：${j.place_name} の指示をやめました`, true);
+  }catch(e){ status('やめられませんでした：'+e.message, false); }
 }
 
 /* 運行経路データと便の食い違い（2026-08-26）。
@@ -2047,7 +2231,7 @@ async function hRetimeDuty(id){
     if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
       status('直せませんでした（元のデータは残っています）：' + ((j && j.message) || t).slice(0,150), false); return; }
     const j = JSON.parse(t);
-    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender();
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); await hLoadOrders(); hRender();
     status(`${_hMDate(j.work_date)} ${j.segment} の時刻を ${j.old_time} → ${j.new_time} に直しました`
       + (j.crew ? `（${j.crew} はそのまま）` : ''), true);
   }catch(e){ status('直せませんでした（元のデータは残っています）：' + e.message, false); }
@@ -2077,7 +2261,7 @@ async function hDeleteDuty(id){
     if(!r.ok){ let j={}; try{ j=JSON.parse(t); }catch(e){}
       status('取り消せませんでした（元のデータは残っています）：' + ((j && j.message) || t).slice(0,150), false); return; }
     const j = JSON.parse(t);
-    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender();
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); await hLoadOrders(); hRender();
     status(`${_hMDate(j.work_date)} ${j.segment} ${j.start_time||''} の配置を取り消しました`
       + (j.crew_count ? `（${j.crew} が外れました）` : ''), true);
   }catch(e){ status('取り消せませんでした（元のデータは残っています）：' + e.message, false); }
@@ -2097,7 +2281,7 @@ async function hGenerate(){
     const t = await r.text();
     if(!r.ok){ status('作成に失敗しました（元のデータは残っています）：'+t.slice(0,150), false); return; }
     let j={}; try{ j=JSON.parse(t); }catch(e){}
-    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender();
+    await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); await hLoadOrders(); hRender();
     status(`便を作成しました（新規 ${j.created??'?'}件／この月の合計 ${j.total_now??'?'}件）`, true);
   }catch(e){ status('作成に失敗しました（元のデータは残っています）：'+e.message, false); }
 }
@@ -2108,13 +2292,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!ok) return;
   const now=new Date();
   document.getElementById('hMonth').value = `${now.getFullYear()}-${_p2(now.getMonth()+1)}`;
-  document.getElementById('hMonth').addEventListener('change', async ()=>{ await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); hRender(); });
+  document.getElementById('hMonth').addEventListener('change', async ()=>{ await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); await hLoadOrders(); hRender(); });
   document.getElementById('hFilter').addEventListener('input', hRender);
   document.getElementById('hPref').addEventListener('change', hRender);
   try{
     await hLoadBase();
+    await hLoadPlaces();
     await hLoadMonth();
-    await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted();
+    await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); await hLoadOrders();
     hRender();
   }catch(e){ status('読み込みに失敗しました：'+e.message, false); }
 

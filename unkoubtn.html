@@ -111,6 +111,12 @@
   .nextseg{margin:14px 0 4px;}
   .nextseg button{font-family:inherit;width:100%;font-size:19px;font-weight:700;border-radius:12px;
     padding:16px 14px;border:2px solid var(--brand);background:var(--brand);color:#fff;cursor:pointer;}
+  .ordbox{background:#eaf2fb;border:1px solid #b8d0e8;border-radius:9px;padding:9px 12px;
+    margin:8px 0;font-size:15px;line-height:1.7;color:#1d4f7c;}
+  .ordbox.pass{background:#fdf0e4;border-color:#e0c6a2;color:#8a5a1a;}
+  #orderBar{margin:0 0 12px;padding:0 14px;}
+  #orderBar button{font-family:inherit;width:100%;font-size:18px;font-weight:700;border-radius:12px;
+    padding:15px 14px;border:2px solid #c0392b;background:#c0392b;color:#fff;cursor:pointer;}
   .segbtns{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
   .segbtns button{font-family:inherit;font-size:16px;font-weight:700;border-radius:10px;padding:10px 16px;
     border:2px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;}
@@ -124,6 +130,7 @@
   <div class="pbar-sub"><span id="barSub">読み込んでいます…</span><span id="geoMark" class="geomark"></span></div>
 </div>
 
+<div id="orderBar" style="display:none;"></div>
 <main id="app"></main>
 <div class="msg" id="msg"></div>
 
@@ -319,6 +326,13 @@ function render(){
         <div class="name">${esc(s.label)}</div>
         <div class="time">${tm}</div>
       </div>`;
+    if(s.type==='info' && s.order && s.order.kind==='立ち寄り'){
+      h += `<div class="ordbox"><b>★ 事務所からの指示：立ち寄り</b><br>${esc(s.order.reason||'')}`
+         + (s.order.address ? `<br><span class="muted">${esc(s.order.address)}</span>` : '') + `</div>`;
+    }
+    if(s.type==='stop' && s.passOrder){
+      h += `<div class="ordbox pass"><b>⚠️ 本日は通過します（事務所の指示）</b><br>${esc(s.passOrder.reason||'')}</div>`;
+    }
     if(s.note) h += `<div class="warn">⚠ ${esc(s.note).replace(/／/g,'<br>⚠ ')}</div>`;
 
     // 登校便の最後（学校）は全員が降りるだけなので、人数の入力欄は出さない。
@@ -335,7 +349,11 @@ function render(){
     const rrow  = (rleft==null) ? ''
       : `<div class="remain${rbad?' bad':''}">車内に残り ${rleft}人</div>`;
 
-    if(i===nowIdx && s.type==='stop'){
+    if(i===nowIdx && s.type==='stop' && s.passOrder){
+      // 🔴 会社の指示で通過する停。着いた／人数／出発は出さず、通過だけにする
+      h += `<div class="actrow">${actBtn(i,'通過','通過した',pas)}</div>`;
+      h += legLinks(s);
+    } else if(i===nowIdx && s.type==='stop'){
       // 「着いた」／人数／「出発」を横に並べる。押したボタンは時刻に変わり、
       // もう一度タップで取り消しに入る（運行中に確認文を読む余裕がないため）
       h += `<div class="actrow">
@@ -376,23 +394,90 @@ function render(){
   scrollToNow(nowIdx);
 }
 
+/* 🔴 停に関する会社の指示（2026-08-27）。正本：業務管理システム_マスタ連動の原則
+   通過（止まらない）／立ち寄り（寄り道）を、事務所が決めて運転手に届ける。
+
+   ⚠️ 決めるのは会社。運転手は判断しない。
+   ⚠️ 止まらない停も画面から消さない。「本日は通過します」と出して残す。
+      消すと「見落として飛ばした」のか「指示で通過した」のか分からなくなる。
+   ⚠️ 指示が変わっても画面を勝手に書き換えない。帯を出し、押していただいたときに反映する。
+      走行中に表示が変わるのは危険（運転手の画面で採ってきた考え方と揃える）。 */
+function ordersOf(segName){
+  return (INFO && INFO.orders && INFO.orders[segName]) || [];
+}
+/** その停に「通過」の指示が出ているか */
+function passOrder(segName, name){
+  return ordersOf(segName).find(o => o.kind === '通過' && o.name === name) || null;
+}
+/** この seq の手前に入る「立ち寄り」 */
+function detoursBefore(segName, seq){
+  return ordersOf(segName).filter(o => o.kind === '立ち寄り' && Number(o.at_seq) === Number(seq));
+}
+/** 末尾（最後の停より後ろ）に入る立ち寄り */
+function detoursTail(segName, lastSeq){
+  return ordersOf(segName).filter(o => o.kind === '立ち寄り'
+    && (o.at_seq == null || Number(o.at_seq) > Number(lastSeq)));
+}
+function orderPoint(o){
+  const c = parseCoord(o.coord || '');
+  return c ? { name:o.name, lat:c.lat, lng:c.lng } : null;
+}
+
+/* ── 指示が変わったら帯を出す ────────────────────────────
+   ⚠️ 画面は書き換えない。押していただいたときだけ読み直す。 */
+let ORDER_STAMP = '';
+let ORDER_NEW   = false;
+let _stampTimer = null;
+async function checkOrders(){
+  if(!TOKEN || PREVIEW) return;
+  try{
+    const r = await call('unkoubtn_orders_stamp', { p_token: TOKEN });
+    if(!r.ok || !r.data) return;
+    const s = String(r.data.stamp || '');
+    if(ORDER_STAMP && s !== ORDER_STAMP && !ORDER_NEW){ ORDER_NEW = true; showOrderBar(); }
+    if(!ORDER_STAMP) ORDER_STAMP = s;
+  }catch(e){ /* 通信できないときは黙って次の回に任せる */ }
+}
+function showOrderBar(){
+  const el = document.getElementById('orderBar');
+  if(!el) return;
+  if(!ORDER_NEW){ el.style.display='none'; el.innerHTML=''; return; }
+  el.innerHTML = '<button onclick="reloadOrders()">⚠️ 事務所から新しい指示があります　読み込む</button>';
+  el.style.display = 'block';
+}
+async function reloadOrders(){
+  ORDER_NEW = false; showOrderBar();
+  await load();
+  toast('事務所からの指示を読み込みました');
+}
+function startOrderWatch(){
+  if(_stampTimer) clearInterval(_stampTimer);
+  // 画面が見えている間だけ確かめる。走行中の通信を増やしすぎない
+  _stampTimer = setInterval(()=>{ if(!document.hidden) checkOrders(); }, 60000);
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) checkOrders(); });
+}
+
 /** 手順を組み立てる：出庫 → 🔁回送 → 各バス停（着いた→出発） → 🔁回送 → 帰庫
  *  バス停は「着いた」と「出発」の2段。着いてから出発までの間に乗降と人数入力を行う。
  *  この間は画面を動かさず、**出発を押したときだけ次へ進む**（2026-08-20 八重樫さんの要望）。
  *  曲がり角の目印はボタンにしないが、注意書きがあれば次のバス停にまとめて出す（見落とし防止）
  *
  *  ⚠️ 2026-08-26 八重樫さんの指示で、④で決めた回送を**運行の時系列どおり**に並べた。
- *     それまで回送は出庫・帰庫のカードに畳まれていて、独立して見えなかった。
  *     回送に**ボタンは付けない**（運転中の操作を増やさない）。次のバス停へ進めば自動で済みになる。
  *
- *     この便に入る回送   前の便から（便間回送）＞ 出庫回送 ＞ 車庫＋送迎の乗降地点
- *     この便を出る回送   次の便へ（便間回送）… あるときは帰庫を出さない
- *                        無ければ帰庫（帰庫回送 ＞ 送迎の乗降地点＋車庫） */
+ *  🔴 2026-08-27 会社からの指示（通過・立ち寄り）を差し込む。
+ *     ⚠️ 止まらない停も消さない。「本日は通過します」と出して残す。
+ *        消すと「見落として飛ばした」のか「指示で通過した」のか分からなくなる。
+ *     ⚠️ 立ち寄りは案内だけ（ボタンなし）。運転中の操作を増やさない。
+ *        道案内は 前の停 → 立ち寄り → 次の停 の順につながる。 */
+function _prevStopPt(pts, idx){
+  for(let i=idx-1;i>=0;i--){ if(pts[i].is_stop) return pts[i]; }
+  return null;
+}
 function buildSteps(seg){
   const pts = seg.points;
   const gar = garagePoint();                    // そのコースの車庫（座標が入っていれば）
   const steps = [];
-  // 送迎が選ばれている便は、出社・出庫が通常より早い。その予定を出庫に添える
   const tm = (INFO && INFO.scenario_times && INFO.scenario_times[seg.segment]) || null;
   const plan = tm ? ['出社 ' + (tm.shussha ? String(tm.shussha).slice(0,5) : '—'),
                      '出庫 ' + (tm.shukko  ? String(tm.shukko ).slice(0,5) : '—')].join('　') : null;
@@ -400,7 +485,7 @@ function buildSteps(seg){
                note: plan ? ('この便は添乗員の送迎があります　予定 ' + plan) : null });
 
   // ── ① この便に入ってくる回送。出庫のすぐ次に置く ──
-  const kaiPrev = kaisouPoints(seg.segment, '前便から');   // 前の便から続いている（2回目以降）
+  const kaiPrev = kaisouPoints(seg.segment, '前便から');
   const kaiIn   = kaisouPoints(seg.segment, '出庫');
   const headPts = kaiPrev.length ? kaiPrev
                 : (kaiIn.length ? kaiIn
@@ -416,47 +501,67 @@ function buildSteps(seg){
     headCard = true;
   }
 
-  // ── ② バス停 ──
-  let carry = [];                               // 手前の目印に付いていた注意書き
+  // ── ② バス停（会社の指示を差し込む） ──
+  let carry = [];
+  let lastDetour = null;        // 直前に入れた立ち寄り。次の停の道案内の起点になる
+  let lastStopIdx = -1;
   pts.forEach((p,idx)=>{
     const n = (p.note||'').trim();
     if(!p.is_stop){ if(n) carry.push(n); return; }
+    // この停の手前に入る立ち寄り
+    detoursBefore(seg.segment, p.seq).forEach(o=>{
+      const q = orderPoint(o);
+      const from = lastDetour || _prevStopPt(pts, idx);
+      steps.push({ type:'info', kind:null, seq:null, order:o,
+        label: '★ 本日の立ち寄り　' + (o.name || ''),
+        legs: (q && from) ? chainLegs(dedupePts([from, q])) : null });
+      if(q) lastDetour = q;
+    });
     const notes = carry.concat(n?[n]:[]);
     carry = [];
     steps.push({ type:'stop', seq:p.seq, label:p.name||('地点'+p.seq),
                  note: notes.length ? notes.join('／') : null,
-                 // 最初のバス停までの道は、上の回送カードが持っている（二重に出さない）
-                 legs: (idx === iFirst && headCard) ? null : legsTo(pts, idx, gar, seg.segment),
+                 passOrder: passOrder(seg.segment, p.name),
+                 legs: lastDetour ? chainLegs(dedupePts([lastDetour, p]))
+                       : ((idx === iFirst && headCard) ? null : legsTo(pts, idx, gar, seg.segment)),
                  subs: null });
+    lastDetour = null;
+    lastStopIdx = idx;
   });
-  // 最初と最後のバス停に印をつける。
-  // 登校便＝最後が学校（全員降りる）／下校便＝最初が学校（全員乗る）
+  // 最後の停より後ろに入る立ち寄り
+  if(lastStopIdx >= 0){
+    detoursTail(seg.segment, pts[lastStopIdx].seq).forEach(o=>{
+      const q = orderPoint(o);
+      steps.push({ type:'info', kind:null, seq:null, order:o,
+        label: '★ 本日の立ち寄り　' + (o.name || ''),
+        legs: q ? chainLegs(dedupePts([pts[lastStopIdx], q])) : null });
+      if(q) lastDetour = q;
+    });
+  }
   const stops = steps.filter(s=>s.type==='stop');
   if(stops.length){ stops[0].first = true; stops[stops.length-1].last = true; }
 
   // ── ③ この便を出る回送 ──
-  // 次の便が続くとき（便間回送）は車庫へ戻らないので、帰庫を出さない
+  const tailFrom = lastDetour || (pts.length ? pts[pts.length-1] : null);
   const kaiNext = kaisouPoints(seg.segment, '次便へ');
-  if(kaiNext.length && pts.length){
+  if(kaiNext.length && tailFrom){
     const to = kaiNext[kaiNext.length-1];
     steps.push({ type:'info', kind:null, seq:null,
-      label: '🔁 回送　次の便へ　' + (pts[pts.length-1].name || '') + ' → ' + (to.name || '学校'),
+      label: '🔁 回送　次の便へ　' + (tailFrom.name || '') + ' → ' + (to.name || '学校'),
       note: carry.length ? carry.join('／') : null,
-      legs: chainLegs(dedupePts([pts[pts.length-1]].concat(kaiNext))),
-      subs: kaisouSubs(seg.segment, '次便へ', null, [pts[pts.length-1]]) });
+      legs: chainLegs(dedupePts([tailFrom].concat(kaiNext))),
+      subs: kaisouSubs(seg.segment, '次便へ', null, [tailFrom]) });
     return steps;
   }
-  // 便が終わったあとの回送。行き先は車庫とは限らない（登校の後は「他所移動」もある）。
-  // ④で道が決まっていれば、その道の**最後の地点が行き先**になる
   const kaiEnd = kaisouPoints(seg.segment, '帰庫');
   const endPt  = kaiEnd.length ? kaiEnd[kaiEnd.length-1] : gar;
   const tailPts = kaiEnd.length ? kaiEnd : transferPoints(seg.segment,'後').concat(gar ? [gar] : []);
-  if(pts.length && tailPts.length){
+  if(tailFrom && tailPts.length){
     steps.push({ type:'info', kind:null, seq:null,
-      label: '🔁 回送　' + (pts[pts.length-1].name || '') + ' → ' + (endPt ? (endPt.name || '車庫') : '車庫'),
+      label: '🔁 回送　' + (tailFrom.name || '') + ' → ' + (endPt ? (endPt.name || '車庫') : '車庫'),
       note: carry.length ? carry.join('／') : null,
-      legs: chainLegs(dedupePts([pts[pts.length-1]].concat(tailPts))),
-      subs: (pts.length && gar) ? kaisouSubs(seg.segment, '帰庫', null, [pts[pts.length-1]]) : null });
+      legs: chainLegs(dedupePts([tailFrom].concat(tailPts))),
+      subs: (pts.length && gar) ? kaisouSubs(seg.segment, '帰庫', null, [tailFrom]) : null });
     carry = [];
   }
   steps.push({ type:'one', kind:'帰庫', seq:null, label:'帰庫', btn:'帰庫した',
@@ -843,7 +948,10 @@ async function start(){
   INFO = r.data;
   (INFO.events||[]).forEach(e=>{ EVENTS[e.segment+'|'+e.kind+'|'+(e.seq==null?'':e.seq)] =
     { pressed_at:e.pressed_at, id:e.id }; if(e.passengers!=null) COUNTS[e.segment+'|'+e.seq]=e.passengers; });
+  ORDER_STAMP = String(INFO.orders_stamp || '');
   render();
+  showOrderBar();
+  startOrderWatch();   // 指示が変わったら帯を出す（画面は勝手に書き換えない）
   startGeo();   // 位置の許可をここで聞く。断られてもボタンはそのまま使える
 }
 
