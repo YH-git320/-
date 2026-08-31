@@ -908,16 +908,48 @@ function normRoutes(routes){
 }
 
 async function loadStaff(){
-  const res = await fetch(`${REST_URL}/staff?select=id,name,employee_code&order=name`, { headers: getH() });
+  /* 🔴 五十音順に並べる（2026-09-01 八重樫さん）
+     「真柴さんを探したが順不同でどこにあるか分からなかった」
+
+     ⚠️ 名前（漢字）の順は五十音順にならない。文字の番号の順に並ぶため、人には順不同に見える。
+     ⚠️ ふりがな（name_kana）は半角カナ。在籍232名すべてに入っていることを確認したうえで使う。
+     　 半角カナは五十音の並びどおりに番号が振られており、濁点は次の文字として付く
+     　 （ｱｶﾞﾂﾏ が ｱｵﾉ の後・ｱｽﾞﾏ の前に来る）。実データで確かめた。
+     ⚠️ ふりがなが無い人は最後に回し、消さない。 */
+  /* ⚠️ 在籍者だけを出す（2026-09-01 八重樫さん）。
+     退職された方に通勤経路が残っていると一覧から消えて手が届かなくなるが、
+     2026-09-01 時点で該当0件であることを確認したうえで絞っている。 */
+  const res = await fetch(`${REST_URL}/staff?select=id,name,employee_code,name_kana&active=eq.true&order=name_kana.asc.nullslast,name.asc`, { headers: getH() });
   if (!res.ok) throw new Error('staff ' + res.status);
   STAFF = await res.json();
   const sel = document.getElementById('staffSelect');
+  let gyo = null, box = null;
   STAFF.forEach(s => {
+    const g = kanaGyo(s.name_kana);
+    if (g !== gyo){
+      gyo = g;
+      box = document.createElement('optgroup');
+      box.label = g;
+      sel.appendChild(box);
+    }
     const o = document.createElement('option');
     o.value = s.id;
     o.textContent = s.name + (s.employee_code ? ` (${s.employee_code})` : '');
-    sel.appendChild(o);
+    box.appendChild(o);
   });
+}
+
+/** ふりがなの1文字目から「あ行」などを返す。⚠️ 半角カナ。 */
+function kanaGyo(kana){
+  const c = (kana || '').trim().charAt(0);
+  if (!c) return 'ふりがな未登録';
+  const GYO = [
+    ['あ行','ｱｲｳｴｵｧｨｩｪｫ'], ['か行','ｶｷｸｹｺ'], ['さ行','ｻｼｽｾｿ'], ['た行','ﾀﾁﾂﾃﾄｯ'],
+    ['な行','ﾅﾆﾇﾈﾉ'],       ['は行','ﾊﾋﾌﾍﾎ'], ['ま行','ﾏﾐﾑﾒﾓ'], ['や行','ﾔﾕﾖｬｭｮ'],
+    ['ら行','ﾗﾘﾙﾚﾛ'],       ['わ行','ﾜｦﾝ']
+  ];
+  for (const [name, chars] of GYO) if (chars.indexOf(c) >= 0) return name;
+  return 'その他';
 }
 async function loadCourses(){
   const res = await fetch(`${REST_URL}/courses?select=id,school_name,course_name&active=eq.true&order=school_name`, { headers: getH() });

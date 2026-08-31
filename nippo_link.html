@@ -812,11 +812,42 @@ async function rpc(name, body){
 }
 
 async function loadStaff(){
-  const res = await fetch(`${REST_URL}/staff?select=id,name,employee_code,email&order=name`, { headers: getH() });
+  /* 🔴 五十音順・在籍者だけ（2026-09-01 八重樫さん）
+     ⚠️ 漢字の順は五十音順にならない。ふりがな（半角カナ）で並べる。 */
+  const res = await fetch(`${REST_URL}/staff?select=id,name,employee_code,email,name_kana&active=eq.true&order=name_kana.asc.nullslast,name.asc`, { headers: getH() });
   if (!res.ok) throw new Error('staff ' + res.status);
   STAFF = await res.json();
   const sel = document.getElementById('staffSelect');
-  STAFF.forEach(s => { const o=document.createElement('option'); o.value=s.id; o.textContent=s.name+(s.employee_code?` (${s.employee_code})`:''); sel.appendChild(o); });
+  let gyo = null, box = null;
+  STAFF.forEach(s => {
+    const g = kanaGyo(s.name_kana);
+    if (g !== gyo){ gyo = g; box = document.createElement('optgroup'); box.label = g; sel.appendChild(box); }
+    const o = document.createElement('option');
+    o.value = s.id; o.textContent = s.name + (s.employee_code ? ` (${s.employee_code})` : '');
+    box.appendChild(o);
+  });
+}
+
+/** ふりがなの1文字目から「あ行」などを返す。⚠️ ふりがなは半角カナ。
+    漢字の順は五十音順にならない（文字の番号順に並ぶ）ため、必ずふりがなで並べる。 */
+function kanaGyo(kana){
+  const c = (kana || '').trim().charAt(0);
+  if (!c) return 'ふりがな未登録';
+  const GYO = [
+    ['あ行','ｱｲｳｴｵｧｨｩｪｫ'], ['か行','ｶｷｸｹｺ'], ['さ行','ｻｼｽｾｿ'], ['た行','ﾀﾁﾂﾃﾄｯ'],
+    ['な行','ﾅﾆﾇﾈﾉ'],       ['は行','ﾊﾋﾌﾍﾎ'], ['ま行','ﾏﾐﾑﾒﾓ'], ['や行','ﾔﾕﾖｬｭｮ'],
+    ['ら行','ﾗﾘﾙﾚﾛ'],       ['わ行','ﾜｦﾝ']
+  ];
+  for (const [name, chars] of GYO) if (chars.indexOf(c) >= 0) return name;
+  return 'その他';
+}
+/** ふりがな順で比べる。⚠️ ふりがなが無い人は最後に回す（消さない）。 */
+function kanaCmp(a, b){
+  const ka = (a && a.name_kana || '').trim(), kb = (b && b.name_kana || '').trim();
+  if (ka && kb) return ka < kb ? -1 : ka > kb ? 1 : 0;
+  if (ka) return -1;
+  if (kb) return 1;
+  return String(a && a.name || '').localeCompare(String(b && b.name || ''), 'ja');
 }
 async function loadCourses(){
   const res = await fetch(`${REST_URL}/courses?select=id,school_name,course_name&active=eq.true&order=school_name`, { headers: getH() });
