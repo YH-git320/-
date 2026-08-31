@@ -893,6 +893,8 @@ function normRoutes(routes){
       const s = routes[l] && routes[l][d];
       if (s){
         r[l][d]['場所'] = s['場所'] || '';
+        /* ⚠️ ここに書き足さないと、読み直しのたびに黙って消える（2026-09-01） */
+        if (s['場所id'] != null && s['場所id'] !== '') r[l][d]['場所id'] = Number(s['場所id']);
         r[l][d]['手段'] = s['手段'] || '';
         r[l][d]['交通費'] = Number(s['交通費']) || 0;
         r[l][d]['移動時間'] = s['移動時間'] || '';
@@ -926,12 +928,13 @@ function courseLabel(cid){ const c = COURSES.find(x => String(x.id) === String(c
 
 async function loadCourseLocations(){
   COURSE_LOCS = {};
-  const res = await fetch(`${REST_URL}/course_locations?active=eq.true&select=id,course_id,name,address&order=name`, { headers: getH() });
+  const res = await fetch(`${REST_URL}/course_locations?active=eq.true&select=id,course_id,name,address,gekou_only,toukou_time&order=name`, { headers: getH() });
   if (!res.ok) return;
   const rows = await res.json();
   rows.forEach(r => {
     const k = String(r.course_id);
-    (COURSE_LOCS[k] = COURSE_LOCS[k] || []).push({ id: r.id, name: r.name, address: r.address || '' });
+    (COURSE_LOCS[k] = COURSE_LOCS[k] || []).push({ id: r.id, name: r.name, address: r.address || '',
+      gekou_only: !!r.gekou_only, toukou_time: r.toukou_time || '' });
   });
 }
 async function loadStaffAddr(){
@@ -961,6 +964,137 @@ function fillHome(ci){
   e.home.seg[e.home.key] = model.homeAddr;
   render();
 }
+
+/* 🔴 到着地に「添乗員送迎の場所」を出す（2026-09-01 八重樫さん）
+   正本：業務管理システム_添乗員の出勤指示時刻と版管理
+
+   いままではバス停しか選べなかった。⚠️ 添乗員が実際に乗るのは
+   　車庫／途中のピックアップ地点／学校 の3通りで、人ごとに違う（過去のデータで確認済み）。
+
+   ⚠️ 選んだ場所は**番号**で持つ（`場所id`）。名前だけだと改名で黙って外れる
+   　　（2026-08-21 vehicles.office_name で実際に踏んだ）。
+   ⚠️ 場所の番号は保存で変わらない（places は版を持たず、入れ直しもされない）。
+   ⚠️ バス停の番号はいまも保存のたびに変わるので、バス停は名前のまま持つ。
+   　　（差分更新を入れたら、そちらも番号に切り替える）
+
+   ⚠️ 学校は63/64コースでバス停として登録されているので、別枠にはしない。 */
+let PLACES = {};        // place_id -> {id,name,address,coord}
+let COURSE_PLACES = {}; // course_id(String) -> [{id,name,address,coord,uses}]
+
+async function loadPlaces(){
+  PLACES = {}; COURSE_PLACES = {};
+  try{
+    const [rp, rt] = await Promise.all([
+      fetch(`${REST_URL}/places?select=id,name,address,coord&active=eq.true&order=name`, { headers: getH() }),
+      fetch(`${REST_URL}/course_transfer_points?select=course_id,place_id,phase,kind`, { headers: getH() })
+    ]);
+    if(!rp.ok || !rt.ok) return;                 // 読めないときは前の内容を保つ
+    const places = await rp.json() || [];
+    const uses   = await rt.json() || [];
+    const buf = {}, cbuf = {};
+    places.forEach(p => { buf[String(p.id)] = p; });
+    uses.forEach(u => {
+      if(u.place_id == null) return;
+      const p = buf[String(u.place_id)]; if(!p) return;
+      const k = String(u.course_id);
+      cbuf[k] = cbuf[k] || {};
+      const e = cbuf[k][String(p.id)] = cbuf[k][String(p.id)] || { ...p, uses: [] };
+      const label = (u.phase||'') + ' ' + (u.kind||'乗車');
+      if(e.uses.indexOf(label) < 0) e.uses.push(label);
+    });
+    PLACES = buf;
+    COURSE_PLACES = {};
+    Object.keys(cbuf).forEach(k => {
+      COURSE_PLACES[k] = Object.values(cbuf[k]).sort((a,b)=>a.name.localeCompare(b.name,'ja'));
+    });
+  }catch(e){ /* 読めないときは前の内容を保つ */ }
+}
+
+/** 到着地の選択肢。①添乗員送迎の場所 ②バス停（学校を含む） */
+function arriveOpts(courseId, cur){
+  const ps = COURSE_PLACES[String(courseId)] || [];
+  const ls = COURSE_LOCS[String(courseId)] || [];
+  let h = '<option value="">選んでください…</option>';
+  if(ps.length){
+    h += '<optgroup label="📍 添乗員送迎の場所">';
+    h += ps.map(p => `<option value="p:${p.id}"${cur==='p:'+p.id?' selected':''}>`
+      + `${escHtml(p.name)}${p.uses&&p.uses.length?`（${escHtml(p.uses.join('・'))}）`:''}</option>`).join('');
+    h += '</optgroup>';
+  }
+  if(ls.length){
+    /* ⚠️ 磯子駅のように、送迎の場所とバス停の両方にある名前がある。
+       どちらを選べばよいか分からなくなるので、その旨を出す（📍を選ぶと乗車時刻が使える）。 */
+    const pn = new Set(ps.map(p => p.name));
+    h += '<optgroup label="🚏 このコースのバス停">';
+    h += ls.map(l => `<option value="l:${l.id}"${cur==='l:'+l.id?' selected':''}>`
+      + `${escHtml(l.name)}${l.gekou_only?'（下校専用）':''}`
+      + `${l.toukou_time?` ${escHtml(l.toukou_time)}`:''}`
+      + `${pn.has(l.name)?'　※ 上の📍にもあります':''}</option>`).join('');
+    h += '</optgroup>';
+  }
+  return h;
+}
+
+/** いま選ばれているものを、選択肢の値に直す */
+function arriveCur(c, leg, dir){
+  const s = (c.routes && c.routes[leg] && c.routes[leg][dir]) || {};
+  if(s['場所id'] != null && PLACES[String(s['場所id'])]) return 'p:' + s['場所id'];
+  const nm = (s['場所']||'').trim();
+  if(!nm) return '';
+  const ps = COURSE_PLACES[String(c.course_id)] || [];
+  const hitP = ps.find(p => p.name === nm);
+  if(hitP) return 'p:' + hitP.id;
+  const ls = COURSE_LOCS[String(c.course_id)] || [];
+  const hitL = ls.find(l => l.name === nm);
+  if(hitL) return 'l:' + hitL.id;
+  return '';                                    // どこにも無い＝付け替えが要る
+}
+
+/** つながっていないときの案内。⚠️ 黙って落とさず、必ず名指しで出す。
+    3通りに分けて書く（どれも直し方が違うため）。 */
+function arriveLostMsg(c, name){
+  const cs = COURSES.find(x => String(x.id) === String(c.course_id));
+  const school = cs ? (cs.school_name || '') : '';
+  const ls = COURSE_LOCS[String(c.course_id)] || [];
+  const schoolStop = ls.find(l => l.name === school) || ls.find(l => school && l.name.indexOf(school) >= 0);
+  let hint;
+  if (name === '学校' || name === '学校集合'){
+    hint = schoolStop
+      ? `このコースの学校は「<b>${escHtml(schoolStop.name)}</b>」です。バス停の中から選び直してください。`
+      : 'このコースの学校がバス停に登録されていません。運行時程マスタで登録してください。';
+  } else if (Object.values(PLACES).some(p => p.name === name)){
+    hint = `「${escHtml(name)}」は場所としては登録されていますが、<b>このコースの添乗員送迎になっていません</b>。`
+         + '運行時程マスタの「添乗員送迎」に足すか、上から選び直してください。';
+  } else {
+    hint = '運行時程マスタに登録するか、上から選び直してください。';
+  }
+  return `<div style="margin-top:6px;font-size:12px;color:#94402f;line-height:1.75;">`
+       + `⚠️ いま入っている「<b>${escHtml(name)}</b>」は、このコースの送迎の場所にもバス停にもありません。<br>`
+       + `<span style="color:#6f8078;">${hint}</span></div>`;
+}
+
+/** 到着地を選んだとき。⚠️ 場所は番号で持つ */
+function pickArrive(ci, val){
+  const c = model.courses[ci]; const {leg, dir} = c._slot;
+  const s = c.routes[leg][dir];
+  const e = ends(c, leg, dir);
+  if(!val){ s['場所'] = ''; delete s['場所id']; render(); return; }
+  const [kind, id] = String(val).split(':');
+  if(kind === 'p'){
+    const p = PLACES[String(id)]; if(!p) return;
+    s['場所']   = p.name;
+    s['場所id'] = Number(id);                   // ← 改名しても外れない
+    e.course.seg[e.course.key] = p.address || p.name;
+  }else{
+    const list = COURSE_LOCS[String(c.course_id)] || [];
+    const l = list.find(x => String(x.id) === String(id)); if(!l) return;
+    s['場所'] = l.name;
+    delete s['場所id'];                          // バス停は番号が変わるので持たない
+    e.course.seg[e.course.key] = l.address || l.name;
+  }
+  render();
+}
+
 function pickLoc(ci, locId){
   if (!locId) return;
   const c = model.courses[ci]; const {leg, dir} = c._slot;
@@ -1072,10 +1206,13 @@ function courseCardHtml(c, ci){
   const segs = s['区間'].map((seg, si) => segHtml(ci, slot.leg, slot.dir, seg, si)).join('');
   const total = s['区間'].reduce((a, x) => a + (Number(x['運賃'])||0), 0);
   const locs = COURSE_LOCS[String(c.course_id)] || [];
-  const locOpts = ['<option value="">コースの乗車場所を選ぶ…</option>']
-    .concat(locs.map(l => `<option value="${l.id}">${escHtml(l.name)}${l.address?`（${escHtml(l.address)}）`:''}</option>`)).join('');
+  /* 🔴 ①添乗員送迎の場所 ②バス停（学校を含む）の2段（2026-09-01 八重樫さん） */
+  const _arrCur  = arriveCur(c, slot.leg, slot.dir);
+  const locOpts  = arriveOpts(c.course_id, _arrCur);
+  const _arrName = (s['場所'] || '').trim();
+  const _arrLost = (_arrName && !_arrCur) ? arriveLostMsg(c, _arrName) : '';
   const homeLbl   = (slot.dir === '出勤') ? '出発地（自宅）'                : '到着地（自宅）';
-  const courseLbl = (slot.dir === '出勤') ? '到着地（コースの乗車場所）'   : '出発地（コースの乗車場所）';
+  const courseLbl = (slot.dir === '出勤') ? '到着地（バスに乗る場所）' : '出発地（バスを降りる場所）';
   const locMgr = c._editLocs ? `
     <div style="border:1px dashed #cbd8d0;border-radius:8px;padding:10px;margin:0 0 12px;background:#fff;">
       <div style="font-size:13px;color:#4a5d52;margin-bottom:8px;">乗車場所の編集（このコース）— <b>名称</b>は人が分かる目印、<b>住所</b>は乗換案内の検索に使います</div>
@@ -1110,9 +1247,10 @@ function courseCardHtml(c, ci){
         <div style="flex:1;min-width:230px;">
           <div class="fld" style="margin:0 0 4px;">📍 ${courseLbl}</div>
           <div style="display:flex;gap:6px;">
-            <select onchange="pickLoc(${ci},this.value)" style="flex:1;">${locOpts}</select>
+            <select onchange="pickArrive(${ci},this.value)" style="flex:1;">${locOpts}</select>
             <button class="mini" onclick="toggleLocMgr(${ci})">✏️ 編集・追加</button>
           </div>
+          ${_arrLost}
         </div>
       </div>
     </div>
@@ -1253,6 +1391,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadStaff();
     await loadCourses();
     await loadCourseLocations();
+    await loadPlaces();
     await loadStaffAddr();
     status('準備ができました。添乗員をえらんでください。', true);
   } catch(e){ status('データ読み込みエラー：' + e.message, false); }
