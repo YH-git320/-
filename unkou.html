@@ -2313,6 +2313,19 @@ function rptFixAll(){
   renderEditor();
   _saveMsg('バス停の設定に合わせて直しました。前後の目印をご確認ください。', true);
 }
+/* 🔴 どの日課で「この日課だけの回送」を開いているか（2026-09-01 八重樫さん）
+   ⚠️ 画面の上の話だけ。データには何も入らない。
+   　 すでに入っている日課は、この印に関係なく必ず出す。 */
+let _kaiOpen = {};
+function kaiOpen(){ rptSyncFromInputs(); _kaiOpen[selRForm] = true; renderEditor(); }
+function kaiClose(){
+  rptSyncFromInputs();
+  delete _kaiOpen[selRForm];
+  if(_isKaisou(selRSeg)) selRSeg = '下校①';   // 隠す前に、本線へ戻しておく
+  selRScen = ''; selRRoute = '';
+  renderEditor();
+}
+
 /** 🔁 回送ルート（基準）タグを開く。日課によらない道をここで1回だけ入れる */
 function setRBase(){
   rptSyncFromInputs();
@@ -3063,11 +3076,26 @@ function renderRoutePoints(){
       return _segBtn(s, lbl, selRSeg===s, cnt(s));
     }).join('');
     // 回送＝下校便の前／便と便のあいだ／下校便の後
-    const kais = ['出庫回送下校']
+    /* 🔴 日課ごとの回送は、ふだん隠す（2026-09-01 八重樫さん）
+       「日課ごとの回送のタグを常に表示していると、ここにも入力しないといけないのでは
+       　という誤解を招きます」
+       ⚠️ 回送はふつう「🔁 回送ルート」タグの基準だけで足りる。
+       　 この日課だけ道が違うときに、ボタンを押して開く。
+       ⚠️ すでに入っている日課では、隠さずに出す（隠すと気づけなくなる）。 */
+    const kaiSegs = ['出庫回送下校']
       .concat(deps.length>1 ? ['便間回送①'] : [])
       .concat(deps.length>2 ? ['便間回送②'] : [])
-      .concat(['帰庫回送下校'])
-      .map(s=>_segBtn(s, R_SEG_LABEL[s], selRSeg===s, cnt(s))).join('');
+      .concat(['帰庫回送下校']);
+    const kaiHas = kaiSegs.some(s=>cnt(s) > 0);
+    let kais;
+    if(kaiHas || _kaiOpen[selRForm]){
+      kais = '<span class="muted" style="align-self:center;font-size:12px;flex:0 0 auto;">この日課だけの回送：</span>'
+        + kaiSegs.map(s=>_segBtn(s, R_SEG_LABEL[s], selRSeg===s, cnt(s))).join('')
+        + (kaiHas ? '' : `<button data-view="1" onclick="kaiClose()" style="border:1px solid #cfe0d5;background:#fff;color:#6f8078;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:12px;font-family:inherit;">やめる</button>`);
+    }else{
+      kais = `<button data-view="1" onclick="kaiOpen()" title="ふだんは「🔁 回送ルート」タグの道が使われます。この日課だけ道が違うときに設定してください" style="border:1px dashed #cfe0d5;background:#fff;color:#4d7a5e;padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-family:inherit;">＋ この日課だけの回送を設定する</button>`
+        + '<span class="muted" style="align-self:center;font-size:11.5px;flex:0 0 auto;">ふだんは「🔁 回送ルート」の道が使われます。設定は要りません</span>';
+    }
     segBtns = mains + '<div style="flex-basis:100%;height:0;"></div>' + kais;
   }
   // 回送（車庫⇄バス停）は、添乗員の送迎パターンによって通る道が変わる。
