@@ -3115,11 +3115,10 @@ function renderRoutePoints(){
     const pre = (_isGekouSide(selRSeg) ? (selRForm||'') : '') + RK + selRSeg + RK + (selRScen||'') + RK;
     const names = {};  names[''] = true;  names[selRRoute||''] = true;
     Object.keys(_box).forEach(kk=>{ if(kk.indexOf(pre)===0) names[kk.slice(pre.length)] = true; });
-    const rOpts = Object.keys(names).sort().map(nm=>{
-      const n = (_box[pre+nm]||[]).length;
-      return `<option value="${escAttr(nm)}"${nm===(selRRoute||'')?' selected':''}>${
-        nm ? ('サブ：'+escHtml(nm)) : 'メイン'}${n?`（${n}）`:''}</option>`;
-    }).join('');
+    /* ⚠️ 地点の数は出さない（2026-09-01 八重樫さん「(数字)の表記はいりません」） */
+    const rOpts = Object.keys(names).sort().map(nm=>
+      `<option value="${escAttr(nm)}"${nm===(selRRoute||'')?' selected':''}>${
+        nm ? ('サブ：'+escHtml(nm)) : 'メイン'}</option>`).join('');
     const ends = _kaiEnds();
     return `<div style="background:#f6faf7;border:1px solid #cfe0d5;border-radius:8px;padding:8px 12px;margin-bottom:8px;">
       <div style="font-size:15px;font-weight:700;color:#2d4a38;">
