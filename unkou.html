@@ -1138,11 +1138,11 @@ async function loadScenarios(){
   (await res.json()).forEach(r=>{ const k=String(r.course_id); const o={dbId:r.id, segment:r.segment, label:r.label||'', pts:[], ps:{}}; (buf[k]=buf[k]||[]).push(o); byId[r.id]=o; });
   // 残り2つは互いに独立しているので同時に取る
   const [rp, rq] = await Promise.all([
-    fetch(`${REST_URL}/course_transfer_points?scenario_id=not.is.null&select=scenario_id,phase,kind,seq,name,address,coord,bus_time,time_lead&order=seq.nullslast,id`, { headers: getH() }),
+    fetch(`${REST_URL}/course_transfer_points?scenario_id=not.is.null&select=id,scenario_id,phase,kind,seq,name,address,coord,bus_time,time_lead&order=seq.nullslast,id`, { headers: getH() }),
     fetch(`${REST_URL}/course_phase_settings?select=scenario_id,phase,shussha,shukko,shukko_lead`, { headers: getH() })
   ]);
   if(!rp.ok || !rq.ok){ _saveMsg('「③添乗員送迎」の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
-  (await rp.json()).forEach(r=>{ const o=byId[r.scenario_id]; if(o) o.pts.push({ phase:r.phase, kind:r.kind||'乗車', name:r.name||'', address:r.address||'', coord:r.coord||'', bus_time:r.bus_time||'', time_lead:(r.time_lead==null?null:r.time_lead) }); });
+  (await rp.json()).forEach(r=>{ const o=byId[r.scenario_id]; if(o) o.pts.push({ id:r.id, phase:r.phase, kind:r.kind||'乗車', name:r.name||'', address:r.address||'', coord:r.coord||'', bus_time:r.bus_time||'', time_lead:(r.time_lead==null?null:r.time_lead) }); });
   (await rq.json()).forEach(r=>{ const o=byId[r.scenario_id]; if(o) o.ps[r.phase]={ shussha:r.shussha||'', shukko:r.shukko||'', shukko_lead:(r.shukko_lead==null?null:r.shukko_lead) }; });
   SCEN = buf;
 }
@@ -3592,7 +3592,11 @@ async function saveCourse(){
         const seqByPhase={};
         s.pts.filter(p=>(p.name||'').trim()||(p.address||'').trim()||(p.coord||'').trim()).forEach(p=>{
           seqByPhase[p.phase]=(seqByPhase[p.phase]||0)+1;
-          allPts.push({ course_id:c.id, scenario_id:sid, phase:p.phase, kind:p.kind||'乗車', seq:seqByPhase[p.phase],
+          /* 🔴 番号を返して、消して入れ直さずに済むようにする（2026-09-01）
+             ⚠️ 番号が毎回変わると、変更の記録が「消して入れ直しただけ」で埋まり、
+             　 通勤経路から場所を番号でつなぐこともできない。
+             新しく足した行は id が無いので、そのまま追加される。 */
+          allPts.push({ id:(p.id==null?null:p.id), course_id:c.id, scenario_id:sid, phase:p.phase, kind:p.kind||'乗車', seq:seqByPhase[p.phase],
                         name:(p.name||'').trim(), address:(p.address||'').trim(), coord:(p.coord||'').trim()||null,
                         bus_time:(s.segment==='下校'?null:(p.bus_time||null)), time_lead:(s.segment==='下校'?(p.time_lead==null?null:p.time_lead):null) });
         });
