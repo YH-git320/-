@@ -1072,13 +1072,62 @@ function _jpHolidays(year){
 }
 
 /* ---------- 読み込み ---------- */
+/* 🔴 読めなかったときに「空の一覧」を出さない（2026-09-01 八重樫さん）
+   「不具合が生じた際に一覧ごとなくなるというのは困る」
+
+   ⚠️ _fetchAll は失敗しても例外を投げず、空の配列を返して黙って進む。
+   　 配置では、これが「候補が1人も出ない」→「そのまま保存して割り当てが消える」につながる。
+   ここでは **失敗したら例外を投げる** 形を用意し、従業員の一覧にだけ使う。 */
+async function _fetchAllStrict(pathWithQuery){
+  const out=[]; let from=0; const step=1000;
+  for(;;){
+    const sep = pathWithQuery.indexOf('?')>=0?'&':'?';
+    const r = await fetch(`${REST_URL}/${pathWithQuery}${sep}limit=${step}&offset=${from}`, {headers:getH()});
+    if(!r.ok) throw new Error('読み取りに失敗しました（' + r.status + '）');
+    const rows = await r.json();
+    out.push(...rows);
+    if(rows.length<step) break;
+    from += step;
+  }
+  return out;
+}
+
+/** ① staff_now（退職日まで見た判断）→ ② staff（在籍の印だけ）→ ③ どちらも駄目なら例外 */
+async function _fetchStaffOr(sel, condNew, condOld){
+  try {
+    const rows = await _fetchAllStrict('staff_now?' + sel + '&' + condNew);
+    PEOPLE_FALLBACK = false;
+    return rows;
+  } catch(e1) {
+    const rows = await _fetchAllStrict('staff?' + sel.replace(',is_active_now','') + '&' + condOld);
+    PEOPLE_FALLBACK = true;   // 古い判断で出している
+    return rows;
+  }
+}
+
+let PEOPLE_FALLBACK = false;   // 古い判断で出しているか
+let PEOPLE_BROKEN = false;     // ⚠️ 従業員の一覧そのものが読めていない
+
 async function hLoadBase(){
   CRS = await _fetchAll('courses?select=id,prefecture,school_name,course_name,active,driver_count,attendant_count,vehicle_id&order=prefecture,school_name,course_name');
   // 添乗員送迎シナリオ（運行時程マスタ③タブで作る）。便ごとにどれを使うかを選ぶ
   SCEN = await _fetchAll('course_scenarios?select=id,course_id,segment,label,seq&order=course_id,segment,seq');
   // 従業員（業務種別で添乗員／運転手を振り分け）
   /* 🔴 五十音順（2026-09-01 八重樫さん）。⚠️ 漢字の順は五十音順にならない */
-  const staff = await _fetchAll('staff_now?select=id,name,active,is_active_now,name_kana,retirement_date&is_active_now=eq.true&order=name_kana.asc.nullslast,name.asc');
+  let staff;
+  try {
+    staff = await _fetchStaffOr('select=id,name,active,is_active_now,name_kana,retirement_date',
+                                'is_active_now=eq.true&order=name_kana.asc.nullslast,name.asc',
+                                'active=eq.true&order=name_kana.asc.nullslast,name.asc');
+  } catch(e) {
+    /* ⚠️ 空で進めない。空のまま保存すると割り当てが消える */
+    PEOPLE_BROKEN = true;
+    throw new Error('従業員の一覧を読み取れませんでした。画面を開き直してください。（' + e.message + '）');
+  }
+  /* ⚠️ 0名は実務上ありえない。読めていない可能性を疑う */
+  if(!staff.length){ PEOPLE_BROKEN = true;
+    throw new Error('従業員が1人も出てきませんでした。読み取りに失敗しているかもしれません。画面を開き直してください。'); }
+  PEOPLE_BROKEN = false;
   const jt    = await _fetchAll('job_types?select=id,name');
   const ejt   = await _fetchAll('employee_job_types?select=employee_id,job_type_id');
   const attId = new Set(jt.filter(j=>String(j.name).indexOf('添乗員')>=0).map(j=>j.id));
@@ -1091,8 +1140,14 @@ async function hLoadBase(){
   /* 🔴 その月に退職された方も出せるようにする（2026-09-01 八重樫さん）。
      ⚠️ 退職日が入っていない方は入れない（どの月に出せばよいか決められないため）。
      　 その方が配置に入っている場合は EXSTAFF が拾う。 */
-  const gone = (await _fetchAll('staff_now?select=id,name,active,is_active_now,name_kana,retirement_date&is_active_now=eq.false'))
-                 .filter(s=>String(s.retirement_date||'').trim() !== '');
+  /* ⚠️ ここが読めなくても配置そのものは組めるので、止めずに続ける。
+     　 ただし黙って0件にせず、印を残す（画面に断りが出る） */
+  let gone = [];
+  try {
+    gone = (await _fetchStaffOr('select=id,name,active,is_active_now,name_kana,retirement_date',
+                                'is_active_now=eq.false', 'active=eq.false'))
+             .filter(s=>String(s.retirement_date||'').trim() !== '');
+  } catch(e) { PEOPLE_FALLBACK = true; }
   RETIRED_P['添乗員'] = gone.filter(s=>att.has(s.id));
   RETIRED_P['運転手'] = gone.filter(s=>drv.has(s.id));
   // 車両
@@ -2027,6 +2082,13 @@ function hClearAsg(){
 function _dirtyView(){
   const n=Object.keys(DIRTY).length + Object.keys(DIRTYV).length + Object.keys(DIRTYS).length;
   const el=document.getElementById('hDirty');
+  /* ⚠️ 退職日まで見た判断で読めなかったときは、黙らずに断りを出す */
+  if(el && PEOPLE_FALLBACK){
+    el.textContent = (n? `未保存 ${n}件　`:'') + '⚠️ 在籍の印だけで出しています（退職日が過ぎた方が混ざる可能性）';
+    el.style.color = '#94402f';
+    return;
+  }
+  if(el) el.style.color = '';
   if(el) el.textContent = n? `未保存 ${n}件`:'';
 }
 
@@ -2038,6 +2100,13 @@ let _hSaving = false;
 
 async function hSave(){
   if(_hSaving){ status('保存中です。そのままお待ちください。', false); return; }
+  /* ⚠️ 従業員の一覧そのものが読めていない。候補が出ないまま保存すると割り当てが消える */
+  if(PEOPLE_BROKEN){
+    alert('従業員の一覧を読み取れていません。' + String.fromCharCode(10) + String.fromCharCode(10)
+        + '⚠️ このまま保存すると、割り当てが消える恐れがあります。' + String.fromCharCode(10)
+        + '画面を開き直してください。');
+    return;
+  }
   /* ⚠️ この月の配置に、名前を読み取れなかった方が入っている。
      その方の欄は選択肢に無いので空に見えており、保存すると割り当てが消える。
      消えてからでは戻せないので、保存させない（2026-09-01）。 */

@@ -907,38 +907,65 @@ function normRoutes(routes){
   return r;
 }
 
-async function loadStaff(){
-  /* 🔴 五十音順に並べる（2026-09-01 八重樫さん）
-     「真柴さんを探したが順不同でどこにあるか分からなかった」
+/* 🔴 読めなかったときに「空の一覧」を出さない（2026-09-01 八重樫さん）
+   「不具合が生じた際に一覧ごとなくなるというのは困る」
 
-     ⚠️ 名前（漢字）の順は五十音順にならない。文字の番号の順に並ぶため、人には順不同に見える。
-     ⚠️ ふりがな（name_kana）は半角カナ。在籍232名すべてに入っていることを確認したうえで使う。
-     　 半角カナは五十音の並びどおりに番号が振られており、濁点は次の文字として付く
-     　 （ｱｶﾞﾂﾏ が ｱｵﾉ の後・ｱｽﾞﾏ の前に来る）。実データで確かめた。
+   ⚠️ 空の一覧は「誰も居ません」と見分けが付かない。気づけないまま作業が進む。
+   ① まず staff_now（退職日まで見た判断）
+   ② 駄目なら staff（在籍の印だけ）に落として、画面に断りを出す ← 一覧ごとは消さない
+   ③ どちらも駄目なら例外。呼び元が「読み取れませんでした」と出す（空では出さない） */
+let STAFF_FALLBACK = false;
+
+async function fetchStaffRows(){
+  const sel = 'select=id,name,employee_code,name_kana';
+  const ord = 'order=name_kana.asc.nullslast,name.asc';
+  let r = await fetch(`${REST_URL}/staff_now?${sel}&is_active_now=eq.true&${ord}`, { headers: getH() });
+  if (r.ok){ STAFF_FALLBACK = false; return await r.json(); }
+  const first = r.status;
+  r = await fetch(`${REST_URL}/staff?${sel}&active=eq.true&${ord}`, { headers: getH() });
+  if (r.ok){ STAFF_FALLBACK = true; return await r.json(); }
+  throw new Error('従業員の一覧を読み取れませんでした（' + first + ' / ' + r.status + '）');
+}
+
+async function loadStaff(){
+  /* 🔴 五十音順・在籍者だけ（2026-09-01 八重樫さん）
+     ⚠️ 漢字の順は五十音順にならない。ふりがな（半角カナ）で並べる。
      ⚠️ ふりがなが無い人は最後に回し、消さない。 */
-  /* ⚠️ 在籍者だけを出す（2026-09-01 八重樫さん）。
-     🔴 判断は staff_now の is_active_now（データベース側で1か所）。
-     　 退職日が過ぎていれば、在籍の印が残っていても出さない。
-     退職された方に通勤経路が残っていると一覧から消えて手が届かなくなるが、
-     2026-09-01 時点で該当0件であることを確認したうえで絞っている。 */
-  const res = await fetch(`${REST_URL}/staff_now?select=id,name,employee_code,name_kana&is_active_now=eq.true&order=name_kana.asc.nullslast,name.asc`, { headers: getH() });
-  if (!res.ok) throw new Error('staff ' + res.status);
-  STAFF = await res.json();
   const sel = document.getElementById('staffSelect');
+  let rows;
+  try {
+    rows = await fetchStaffRows();
+  } catch (e) {
+    /* ⚠️ ここで空の一覧を出さない。選ぶ欄そのものに理由を出す */
+    sel.innerHTML = '<option value="">⚠️ 一覧を読み取れませんでした</option>';
+    sel.disabled = true;
+    status('⚠️ 従業員の一覧を読み取れませんでした。画面を開き直してください。'
+         + 'それでも直らないときは八重樫さんにお知らせください。（' + e.message + '）', false);
+    throw e;
+  }
+  sel.disabled = false;
+  STAFF = rows;
+  if (!STAFF.length){
+    /* ⚠️ 本当に0名ということは実務上ありえない。読めていない可能性を疑う */
+    sel.innerHTML = '<option value="">⚠️ 従業員が1人も出てきません</option>';
+    status('⚠️ 従業員が1人も出てきません。読み取りに失敗しているかもしれません。'
+         + '画面を開き直してください。', false);
+    return;
+  }
+  sel.innerHTML = '<option value="">— 選択してください —</option>';
   let gyo = null, box = null;
   STAFF.forEach(s => {
     const g = kanaGyo(s.name_kana);
-    if (g !== gyo){
-      gyo = g;
-      box = document.createElement('optgroup');
-      box.label = g;
-      sel.appendChild(box);
-    }
+    if (g !== gyo){ gyo = g; box = document.createElement('optgroup'); box.label = g; sel.appendChild(box); }
     const o = document.createElement('option');
     o.value = s.id;
     o.textContent = s.name + (s.employee_code ? ` (${s.employee_code})` : '');
     box.appendChild(o);
   });
+  if (STAFF_FALLBACK){
+    status('⚠️ 退職日まで見た判断で読めなかったため、在籍の印だけで出しています。'
+         + '退職日が過ぎている方が混ざっている可能性があります。八重樫さんにお知らせください。', false);
+  }
 }
 
 /** ふりがなの1文字目から「あ行」などを返す。⚠️ 半角カナ。 */
