@@ -143,6 +143,7 @@ button.mini{font-size:12px;padding:6px 10px;}
       <span class="muted" style="font-size:11px;">月間予定の日課をもとに便を作ります。既にある便はそのまま（担当者は消えません）。</span>
     </div>
     <div id="hMismatch"></div>
+    <div id="hScenIssue"></div>
     <div id="hSkips"></div>
     <div id="hOrders"></div>
     <div id="hManual"></div>
@@ -1417,6 +1418,8 @@ async function hLoadMonth(){
   });
   await hLoadExStaff();   // ⚠️ 退職された方が入っていると、選択肢に無く配置が消える
   _dirtyView();
+  /* ⚠️ ここは待たない。2秒かかるので、一覧を先に出してから印を付ける（2026-09-02） */
+  hLoadScenIssues();
 }
 
 /* ---------- 集計 ---------- */
@@ -1925,9 +1928,12 @@ function hOpenAsg(cid,date){
       +`<button class="mini" onclick="hSetField(${d.id},'vehicle_id')">この日だけ変える</button>`
       +`${_odBadge(d,'vehicle_id')}</div>`;
     // 添乗員送迎シナリオ（便ごと。運行ボタンの案内と出庫時刻がこれで決まる）
+    /* 🔴 送迎は、その日の添乗員の到着地から自動で決まる（2026-09-02 八重樫さん・案イ／案C）。
+       手で選ぶと「この日だけ」の印が付き、以後その便は自動が触らない。 */
     const sc=_scenOptsFor(cid, d.segment);
     if(sc) h+=`<div class="crewline"><span class="lb">🧑 添乗員送迎</span>`
-      +`<select id="scn_${d.id}" title="運行ボタンは、選んだ送迎の乗降地点を車庫と第1バス停の間に入れて案内します">${sc}</select></div>`;
+      +`<select id="scn_${d.id}" title="運行ボタンは、選んだ送迎の乗降地点を車庫と第1バス停の間に入れて案内します">${sc}</select>`
+      +`${_odBadge(d,'scenario_id')}${_scenIssueMark(d.id)}</div>`;
     for(let i=0;i<need;i++){
       h+=`<div class="crewline"><span class="lb">${TAB}${need>1?(i+1):''}</span>`
         +`<select id="asg_${d.id}_${i}" data-duty="${d.id}" data-idx="${i}" onchange="hAutoFill(${d.id},${i})">`
@@ -2140,12 +2146,13 @@ async function hSave(){
       });
       if(!r.ok){ status('車両の保存に失敗しました：'+(await r.text()).slice(0,120), false); return; }
     }
-    // 添乗員送迎シナリオ（duties 側の更新）
+    /* 🔴 添乗員送迎は「この日だけ」の印を付けて保存する（2026-09-02 案C）。
+       ⚠️ そのまま書き込むと、あとで配置が変わったときに自動が上書きしてしまう。
+       　 set_duty_field が、値の確かめ（別コース・別区分の送迎を弾く）と印付けをまとめて行う。 */
     for(const id of skeys){
-      const r = await fetch(`${REST_URL}/duties?id=eq.${id}`, {
-        method:'PATCH', headers:getH(),
-        body: JSON.stringify({ scenario_id: DIRTYS[id], updated_at: new Date().toISOString() })
-      });
+      const r = await fetch(`${REST_URL}/rpc/set_duty_field`, { method:'POST', headers:getH(),
+        body: JSON.stringify({ p_id:id, p_field:'scenario_id',
+                               p_value:(DIRTYS[id]==null ? '' : String(DIRTYS[id])) }) });
       if(!r.ok){ status('添乗員送迎の保存に失敗しました：'+(await r.text()).slice(0,120), false); return; }
     }
     /* 2026-08-25：便・役割ごとの削除＋入れ直しを1つのDB関数にまとめた（00_データを壊さない書き方）。
@@ -2183,17 +2190,85 @@ async function hSave(){
    印が付いた項目は、マスタを保存しても上書きされない。印を外すとその場でマスタの値に戻る。
    ⚠️ 過去の便・人数が入っている便・運行ボタンの記録がある便は、データベース側で断られる。
    ⚠️ 項目は決め打ちにしない。`manual_fields` に名前を並べるだけなので、増えても仕組みは変わらない。 */
+/* 🔴 送迎が決まらなかった便を知らせる（2026-09-02 八重樫さん・案イ）
+   正本：業務管理システム_添乗員の出勤指示時刻と版管理
+
+   > 場合によってはその作業時間が取れない場合もあるので、
+   > 作成しないままでも業務が滞らない様にしたいです。
+
+   ⚠️ 業務は止めない。知らせるだけ。保存も配置もこれで妨げない。
+   ⚠️ 出し方は控えめに。一覧の上に「◯件」とまとめ、便ごとには小さく印を付けるだけ。
+   ⚠️ 1か月ぶんで2秒ほどかかるので、一覧を出したあとに後ろで読む。画面を待たせない。 */
+let SCENISSUE = {};        // duty_id -> {kind, reason, detail}
+let SCENISSUE_ERR = '';    // 読めなかったときの理由。⚠️ 空にして「0件」に見せない
+async function hLoadScenIssues(){
+  const ym = _ym();
+  if(!ym){ SCENISSUE = {}; SCENISSUE_ERR = ''; hRenderScenIssue(); return; }
+  const from = ym + '-01', to = ym + '-' + _p2(_dim(ym));
+  try{
+    const r = await fetch(`${REST_URL}/rpc/duty_scenario_issues`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ p_from: from, p_to: to }) });
+    if(!r.ok){
+      SCENISSUE = {}; SCENISSUE_ERR = (await r.text()).slice(0,90);
+      hRenderScenIssue(); return;
+    }
+    const box = {};
+    (await r.json() || []).forEach(x => { box[x.duty_id] = x; });
+    SCENISSUE = box; SCENISSUE_ERR = '';
+  }catch(e){ SCENISSUE = {}; SCENISSUE_ERR = e.message; }
+  hRenderScenIssue();
+}
+/** 便ごとの小さな印 */
+function _scenIssueMark(id){
+  const x = SCENISSUE[id];
+  if(!x) return '';
+  const why = x.reason + (x.detail && x.detail['人'] ? '：' + x.detail['人'].join('、') : '')
+                       + (x.detail && x.detail['名前'] ? '：' + x.detail['名前'].join('、') : '');
+  return `<span class="onlyday" style="background:#fdf3e2;border-color:#e6c88a;color:#8a6d1f;"`
+       + ` title="${escAttr(why)}">⚠️ ${escHtml(x.kind)}</span>`;
+}
+function hRenderScenIssue(){
+  const el = document.getElementById('hScenIssue');
+  if(!el) return;
+  const box = (s, c1, c2, c3) => `<div style="background:${c1};border:1px solid ${c2};border-radius:7px;`
+    + `padding:8px 10px;margin:7px 0;font-size:12.5px;line-height:1.8;color:${c3};">${s}</div>`;
+  if(SCENISSUE_ERR){
+    /* ⚠️ 読めなかったことを「0件」と同じ見た目にしない（2026-09-01 の決めごと） */
+    el.innerHTML = box(`⚠️ 添乗員送迎の確認が<b>読み取れませんでした</b>（${escHtml(SCENISSUE_ERR)}）。<br>`
+      + `<b>「問題なし」という意味ではありません。</b>画面を読み直してください。`,
+      '#fdecea', '#e6b0aa', '#943126');
+    return;
+  }
+  const rows = Object.keys(SCENISSUE).map(k => SCENISSUE[k]);
+  if(!rows.length){ el.innerHTML = ''; return; }
+  const n1 = rows.filter(x => x.kind === 'ルート未作成').length;
+  const n2 = rows.length - n1;
+  el.innerHTML = box(
+      `🧑 <b>添乗員送迎が決まっていない便が ${rows.length}件</b> あります。`
+    + `<span style="color:#6f8078;">この便も、これまでどおり配置も保存もできます。</span>`
+    + (n1 ? `<br>・<b>ルート未作成</b> ${n1}件 … 到着地は分かりましたが、合う送迎が運行時程マスタにありません。`
+          + ` <a class="mini" style="text-decoration:none;" target="_blank" rel="noopener" href="unkou.html">🧑 送迎を作る</a>` : '')
+    + (n2 ? `<br>・<b>到着地が未整備</b> ${n2}件 … 添乗員の通勤経路に到着地が入っていません。`
+          + ` <a class="mini" style="text-decoration:none;" target="_blank" rel="noopener" href="keiro.html">🚶 通勤経路を開く</a>` : ''),
+    '#fdf6e3', '#e6c88a', '#8a6d1f');
+}
+
 const OD_LABEL = { start_time:'時刻', vehicle_id:'車両',
-                   driver_need:'運転手の必要人数', attendant_need:'添乗員の必要人数' };
+                   driver_need:'運転手の必要人数', attendant_need:'添乗員の必要人数',
+                   scenario_id:'添乗員送迎' };
+/* 🔴 印を外したときの戻り先は項目で違う（2026-09-02 八重樫さん・案C）。
+   ⚠️ 送迎だけは運行時程マスタではなく《その日の添乗員の到着地から自動で決めた送迎》に戻る。 */
+const OD_BACK = { scenario_id:'自動' };
+function _odBackLabel(f){ return OD_BACK[f]==='自動' ? '自動で決めた送迎' : '運行時程マスタの値'; }
 function _odMarked(d, f){ return (d.manual_fields||[]).indexOf(f) >= 0; }
 function _odBadge(d, f){
   return _odMarked(d, f)
     ? `<span class="onlyday" title="マスタを保存してもここは上書きされません">この日だけ</span>`
-      + `<button class="mini" onclick="hClearField(${d.id},'${f}')" title="印を外し、その場でマスタの値に戻します">マスタに戻す</button>`
+      + `<button class="mini" onclick="hClearField(${d.id},'${f}')" title="印を外し、その場で${_odBackLabel(f)}に戻します">${OD_BACK[f]==='自動'?'自動に戻す':'マスタに戻す'}</button>`
     : '';
 }
 async function hSetField(id, f){
-  const el = document.getElementById((f==='start_time'?'tm_':f==='vehicle_id'?'veh_':'nd_') + id);
+  const el = document.getElementById((f==='start_time'?'tm_':f==='vehicle_id'?'veh_':f==='scenario_id'?'scn_':'nd_') + id);
   if(!el) return;
   const v = String(el.value == null ? '' : el.value).trim();
   try{
@@ -2209,7 +2284,7 @@ async function hSetField(id, f){
   }catch(e){ status('変えられませんでした：'+e.message, false); }
 }
 async function hClearField(id, f){
-  if(!confirm(`「この日だけ」の印を外し、運行時程マスタの値に戻します。\n\n`
+  if(!confirm(`「この日だけ」の印を外し、${_odBackLabel(f)}に戻します。\n\n`
     + `　${OD_LABEL[f]||f}\n\n`
     + `いま入れている値は失われます。よろしいですか。`)) return;
   try{
@@ -2221,7 +2296,7 @@ async function hClearField(id, f){
     const j = JSON.parse(t);
     await hLoadMonth(); await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); await hLoadOrders(); hRender();
     if(CUR) hOpenAsg(CUR.cid, CUR.date);
-    status(`${j.work_date} ${j.segment} の${OD_LABEL[f]||f}をマスタに戻しました（${j.old||'—'} → ${j.new||'—'}）`, true);
+    status(`${j.work_date} ${j.segment} の${OD_LABEL[f]||f}を${_odBackLabel(f)}に戻しました（${j.old||'—'} → ${j.new||'—'}）`, true);
   }catch(e){ status('戻せませんでした：'+e.message, false); }
 }
 /** この日のこの便は走らせない。マスタが求めていても作り直さない */
