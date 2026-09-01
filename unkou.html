@@ -923,8 +923,8 @@ function _vers(cid){ return VERS[String(cid)]||[]; }
 function latestVerId(cid){ const a=_vers(cid); return a.length?a[0].id:null; }
 function curVer(){ const a=_vers(selCourseId); return a.find(v=>v.id===selVerId)||a[0]||null; }
 function isLatestVer(){ return selVerId!=null && selVerId===latestVerId(selCourseId); }
-function _mapForm(r){ return { form_name:r.form_name, gekou_departures:Array.isArray(r.gekou_departures)?r.gekou_departures.slice():[], after_toukou:r.after_toukou||'', after_toukou_place:r.after_toukou_place||'', after_toukou_addr:r.after_toukou_addr||'', after_toukou_coord:r.after_toukou_coord||'', dep_overrides:(r.dep_overrides&&typeof r.dep_overrides==='object')?r.dep_overrides:{} }; }
-function _mapStop(r){ return { name:r.name||'', address:r.address||'', toukou_time:r.toukou_time||'', gekou_offset:(r.gekou_offset==null?null:r.gekou_offset), gekou_only:!!r.gekou_only, coord:r.coord||'', gekou_seq:(r.gekou_seq==null?null:r.gekou_seq), gekou_overrides:(r.gekou_overrides&&typeof r.gekou_overrides==='object')?r.gekou_overrides:{} }; }
+function _mapForm(r){ return { id:(r.id==null?null:r.id), form_name:r.form_name, gekou_departures:Array.isArray(r.gekou_departures)?r.gekou_departures.slice():[], after_toukou:r.after_toukou||'', after_toukou_place:r.after_toukou_place||'', after_toukou_addr:r.after_toukou_addr||'', after_toukou_coord:r.after_toukou_coord||'', dep_overrides:(r.dep_overrides&&typeof r.dep_overrides==='object')?r.dep_overrides:{} }; }
+function _mapStop(r){ return { id:(r.id==null?null:r.id), name:r.name||'', address:r.address||'', toukou_time:r.toukou_time||'', gekou_offset:(r.gekou_offset==null?null:r.gekou_offset), gekou_only:!!r.gekou_only, coord:r.coord||'', gekou_seq:(r.gekou_seq==null?null:r.gekou_seq), gekou_overrides:(r.gekou_overrides&&typeof r.gekou_overrides==='object')?r.gekou_overrides:{} }; }
 
 /* 下校便の並び。gekou_seq の順に、STOPS 配列の添字を返す。
    ⚠️ 2026-08-24 まで「登校の逆順」を毎回計算していたが、あおば支援学校のように
@@ -1091,7 +1091,7 @@ function _cmpForm(a,b){
 // 各コースの「最新版」の内容をバッファへ（コース一覧の設定済表示＋既定編集対象）
 async function loadFormsLatest(){
   const buf = {};
-  const res = await fetch(`${REST_URL}/course_schedule_forms?select=course_id,version_id,form_name,gekou_departures,after_toukou,after_toukou_place,after_toukou_addr,after_toukou_coord,dep_overrides&order=form_name`, { headers: getH() });
+  const res = await fetch(`${REST_URL}/course_schedule_forms?select=id,course_id,version_id,form_name,gekou_departures,after_toukou,after_toukou_place,after_toukou_addr,after_toukou_coord,dep_overrides&order=form_name`, { headers: getH() });
   if(!res.ok){ _saveMsg('「②下校便」（日課）の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   (await res.json()).forEach(r=>{ if(r.version_id!==latestVerId(r.course_id)) return; const k=String(r.course_id); (buf[k]=buf[k]||[]).push(_mapForm(r)); });
   Object.keys(buf).forEach(k=>buf[k].sort(_cmpForm));
@@ -1099,7 +1099,7 @@ async function loadFormsLatest(){
 }
 async function loadStops(){
   const buf = {};   // 読み終えるまで STOPS には触らない（途中で空になる瞬間を作らない）
-  const res = await fetch(`${REST_URL}/course_locations?select=course_id,version_id,name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_seq,gekou_overrides&order=seq.nullslast,name`, { headers: getH() });
+  const res = await fetch(`${REST_URL}/course_locations?select=id,course_id,version_id,name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_seq,gekou_overrides&order=seq.nullslast,name`, { headers: getH() });
   if(!res.ok){ _saveMsg('バス停・登校ルートの読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   (await res.json()).forEach(r=>{ if(r.version_id!==latestVerId(r.course_id)) return; const k=String(r.course_id); (buf[k]=buf[k]||[]).push(_mapStop(r)); });
   STOPS = buf;
@@ -1123,10 +1123,10 @@ async function loadVersionInto(cid, verId){
   const k=String(cid);
   // 読み込みに失敗したときは**前の内容をそのまま残す**。
   // 空で上書きすると、その状態で保存されたときに消えてしまう（2026-08-19 の事故）
-  const rf = await fetch(`${REST_URL}/course_schedule_forms?version_id=eq.${verId}&select=form_name,gekou_departures,after_toukou,after_toukou_place,after_toukou_addr,after_toukou_coord,dep_overrides&order=form_name`, { headers: getH() });
+  const rf = await fetch(`${REST_URL}/course_schedule_forms?version_id=eq.${verId}&select=id,form_name,gekou_departures,after_toukou,after_toukou_place,after_toukou_addr,after_toukou_coord,dep_overrides&order=form_name`, { headers: getH() });
   if(rf.ok){ FORMS[k] = (await rf.json()).map(_mapForm); FORMS[k].sort(_cmpForm); }
   else { _saveMsg('「②下校便」（日課）の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
-  const rs = await fetch(`${REST_URL}/course_locations?version_id=eq.${verId}&select=name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_seq,gekou_overrides&order=seq.nullslast,name`, { headers: getH() });
+  const rs = await fetch(`${REST_URL}/course_locations?version_id=eq.${verId}&select=id,name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_seq,gekou_overrides&order=seq.nullslast,name`, { headers: getH() });
   if(rs.ok){ STOPS[k] = (await rs.json()).map(_mapStop); }
   else { _saveMsg('バス停・登校ルートの読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   const rr = await fetch(`${REST_URL}/course_route_points?version_id=eq.${verId}&select=id,form_name,segment,scenario_id,route_name,seq,name,lat,lng,is_stop,split_here,note&order=segment,seq`, { headers: getH() });
@@ -3490,7 +3490,7 @@ async function saveCourse(){
             x=>(x.form_name||''), x=>(x.form_name||'（名前なし）')))){
         _saveMsg('保存を中止しました。', false); return; }
     }
-    const forms = (FORMS[key]||[]).filter(f=>(f.form_name||'').trim()).map(f=>({ course_id:c.id, version_id:selVerId, form_name:f.form_name.trim(), gekou_departures:(f.gekou_departures||[]).filter(t=>t), after_toukou:(f.after_toukou||'')||null, after_toukou_place:(f.after_toukou==='他所移動'?(f.after_toukou_place||null):null), after_toukou_addr:(f.after_toukou==='他所移動'?(f.after_toukou_addr||null):null), after_toukou_coord:(f.after_toukou==='他所移動'?(f.after_toukou_coord||null):null), dep_overrides:(f.dep_overrides&&Object.keys(f.dep_overrides).length)?f.dep_overrides:{} }));
+    const forms = (FORMS[key]||[]).filter(f=>(f.form_name||'').trim()).map(f=>({ id:(f.id==null?null:f.id), course_id:c.id, version_id:selVerId, form_name:f.form_name.trim(), gekou_departures:(f.gekou_departures||[]).filter(t=>t), after_toukou:(f.after_toukou||'')||null, after_toukou_place:(f.after_toukou==='他所移動'?(f.after_toukou_place||null):null), after_toukou_addr:(f.after_toukou==='他所移動'?(f.after_toukou_addr||null):null), after_toukou_coord:(f.after_toukou==='他所移動'?(f.after_toukou_coord||null):null), dep_overrides:(f.dep_overrides&&Object.keys(f.dep_overrides).length)?f.dep_overrides:{} }));
     // 2026-08-25：削除＋入れ直しを1つのDB関数にまとめた（00_データを壊さない書き方）
     { const r2=await fetch(`${REST_URL}/rpc/save_course_schedule_forms`, { method:'POST', headers:getH(),
         body:JSON.stringify({ p_course_id:c.id, p_version_id:selVerId, p_rows:forms }) });
@@ -3528,7 +3528,7 @@ async function saveCourse(){
       return (A!==B)?(A-B):(a.i-b.i);
     }).forEach((x,k)=>gRank.set(x.i,k+1));
     const rows = keep.map((s,i)=>{
-      const r = { course_id:c.id, version_id:selVerId, name:(s.name||'').trim()||(s.address||'').trim(), address:(s.address||'').trim(),
+      const r = { id:(s.id==null?null:s.id), course_id:c.id, version_id:selVerId, name:(s.name||'').trim()||(s.address||'').trim(), address:(s.address||'').trim(),
                   toukou_time:s.toukou_time||null, gekou_offset:(s.gekou_offset==null?null:s.gekou_offset), gekou_only:!!s.gekou_only, coord:s.coord||null,
                   gekou_seq:gRank.get(i)||null, gekou_overrides:(s.gekou_overrides&&Object.keys(s.gekou_overrides).length)?s.gekou_overrides:{},
                   in_gekou:(s.gekou_offset!=null) };
