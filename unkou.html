@@ -1008,6 +1008,14 @@ const R_SEG_LABEL = { '登校':'登校便', '下校①':'1回目', '下校②':'
                       '便間回送①':'回送 1回目→2回目',
                       '便間回送②':'回送 2回目→3回目',
                       '帰庫回送下校':'回送 下校便の後' };
+/* 🔴 回送ルート（基準）モード（2026-09-01 八重樫さん）
+   「回送タグは登校便・下校の種別ごとのタグの右に一律で作れないでしょうか」
+   ⚠️ いままで回送は日課ごとにしか入れられず、日課の数だけコピーしていた。
+   　 岩﨑さん「これがミスの温床になっています」
+   基準＝日課によらない道。日課名を空で持つと、運転手には
+   　 ①その日の日課の回送 → ②送迎に合った回送 → ③基準　の順で届く
+   （この順で探す仕組みは _kaisou_routes にすでに入っている）。 */
+let selRBase  = false;  // true＝「回送ルート」タグ（基準）を編集中
 let selRScen  = '';   // どの送迎シナリオのときの道か（空＝送迎なし）
 let selRRoute = '';   // ルート名（空＝メイン）
 function _isKaisou(seg){ return R_KAISOU.indexOf(seg) >= 0; }
@@ -1022,7 +1030,8 @@ function _kaiWhich(){ return /^出庫/.test(selRSeg) ? '出庫' : '帰庫'; }
 const RK = String.fromCharCode(1);   // 日課名に現れない区切り文字
 function _rkey(seg, scen, route, form){
   seg = seg || selRSeg;
-  form = (form === undefined) ? (selRForm || '') : (form || '');
+  /* ⚠️ 基準モードでは日課名を空にする。保存時に null になり、基準として入る */
+  form = (form === undefined) ? (selRBase ? '' : (selRForm || '')) : (form || '');
   if(!_isGekouSide(seg)) form = '';
   if(!_isKaisou(seg)) return form + RK + seg + RK + RK;
   scen  = (scen  === undefined) ? selRScen  : scen;
@@ -2076,7 +2085,10 @@ function rptSyncFromInputs(){
 /** この日課の最後の下校便（帰庫回送の起点になる便） */
 function _lastGekouSeg(){
   const f = _curForm();
-  const n = f ? f.deps.length : 1;
+  /* ⚠️ 基準モードには日課が無いので、いちばん便の多い日課に合わせる */
+  const n = selRBase
+    ? _routeForms().reduce((m,x)=>Math.max(m, x.deps.length), 1)
+    : (f ? f.deps.length : 1);
   return R_GEKOU_MAIN[Math.max(0, Math.min(n, R_GEKOU_MAIN.length) - 1)] || '下校①';
 }
 
@@ -2175,6 +2187,7 @@ function _orphanFormBox(){
 /** 段1（登校便／日課）を選ぶ。段2は先頭の便に合わせる */
 function setRForm(name){
   rptSyncFromInputs();
+  selRBase = false;
   selRForm = name || '';
   selRScen = ''; selRRoute = '';
   selRSeg = (selRForm === '') ? '登校' : '下校①';
@@ -2300,6 +2313,16 @@ function rptFixAll(){
   renderEditor();
   _saveMsg('バス停の設定に合わせて直しました。前後の目印をご確認ください。', true);
 }
+/** 🔁 回送ルート（基準）タグを開く。日課によらない道をここで1回だけ入れる */
+function setRBase(){
+  rptSyncFromInputs();
+  selRBase = true; selRForm = '';
+  selRScen = ''; selRRoute = '';
+  selRSeg = '出庫回送登校';
+  rptSelIdx = null; rptPick = {};
+  renderEditor();
+}
+
 function setRSeg(seg){
   rptSyncFromInputs();
   if(selRSeg !== seg){ selRScen = ''; selRRoute = ''; }   // 便が変われば送迎もルートも選び直し
@@ -2983,22 +3006,46 @@ function renderRoutePoints(){
   const _formBtn = (name,label,on,n) =>
     `<button data-view="1" onclick="setRForm('${escAttr(name)}')" style="border:1px solid ${on?'#2d4a38':'#cfe0d5'};background:${on?'#2d4a38':'#fff'};color:${on?'#fff':'#2d4a38'};padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:${on?'700':'500'};font-family:inherit;">${label}${n?'':'（未入力）'}</button>`;
   const _rForms = _routeForms();
-  const _cntFor = (form) => {   // その日課に入っている地点の総数
-    let n=0; const pre = (form||'') + RK;
-    Object.keys(_box).forEach(kk=>{ if(kk.indexOf(pre)===0) n += (_box[kk]||[]).length; });
+  /* ⚠️ 段1のボタンに出す件数。回送は「回送ルート」タグの側で数えるので、
+     登校便・日課のボタンでは本線だけを数える（2026-09-01） */
+  const _cntSegs = (form, segs) => {
+    let n = 0;
+    segs.forEach(s=>{ const pre = (form||'') + RK + s + RK;
+      Object.keys(_box).forEach(kk=>{ if(kk.indexOf(pre)===0) n += (_box[kk]||[]).length; }); });
     return n;
   };
-  const tgtBtns = _formBtn('', '🚌 登校便', selRForm==='', _cntFor(''))
+  const _cntFor = (form) => _cntSegs(form, (form==='') ? R_TOUKOU_MAIN : R_GEKOU_MAIN);
+  const _cntBase = () => _cntSegs('', R_KAISOU);
+  /* 🔴 並びは 登校便 ／ 下校便（日課） ／ 回送ルート（2026-09-01 八重樫さんのご指示） */
+  const _baseBtn = `<button data-view="1" onclick="setRBase()" title="日課によらない、もとになる回送の道。ここに1回入れれば全部の日課に行き渡ります" style="border:1px solid ${selRBase?'#2d4a38':'#cfe0d5'};background:${selRBase?'#2d4a38':'#fff'};color:${selRBase?'#fff':'#2d4a38'};padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:${selRBase?'700':'500'};font-family:inherit;">🔁 回送ルート${_cntBase()?'':'（未入力）'}</button>`;
+  const tgtBtns = _formBtn('', '🚌 登校便', (selRForm==='' && !selRBase), _cntFor(''))
     + '<span style="align-self:center;color:#cfe0d5;">｜</span>'
     + (_rForms.length
         ? _rForms.map(f=>_formBtn(f.name, escHtml(f.name)+(f.deps.length>1?`<span style="font-weight:400;opacity:.8;"> ${f.deps.length}便</span>`:''), selRForm===f.name, _cntFor(f.name))).join('')
         : '<span class="muted" style="align-self:center;font-size:12px;">「②下校便」タブで日課を作ると、ここに並びます</span>')
     + _orphanForms().map(o=>_formBtn(o.name,
-        '⚠️ 使われていない日課：' + escHtml(o.name), selRForm===o.name, o.n)).join('');
+        '⚠️ 使われていない日課：' + escHtml(o.name), (selRForm===o.name && !selRBase), o.n)).join('')
+    + '<span style="align-self:center;color:#cfe0d5;">｜</span>' + _baseBtn;
   // 段2
   let segBtns;
-  if(selRForm === ''){
-    segBtns = R_TOUKOU_MAIN.concat(R_TOUKOU_KAI).map(s=>{
+  if(selRBase){
+    /* 🔁 回送ルート（基準）。日課によらない道を、ここで1回だけ入れる。
+       ⚠️ 便間回送は、いちばん便の多い日課に合わせて出す（2便以上ある日課があれば出す） */
+    const mx = _routeForms().reduce((m,x)=>Math.max(m, x.deps.length), 1);
+    const cntB = (s) => { let n=0; const pre = RK + s + RK;
+      Object.keys(_box).forEach(kk=>{ if(kk.indexOf(pre)===0) n+=(_box[kk]||[]).length; }); return n; };
+    const list = R_TOUKOU_KAI
+      .concat(['出庫回送下校'])
+      .concat(mx>1 ? ['便間回送①'] : [])
+      .concat(mx>2 ? ['便間回送②'] : [])
+      .concat(['帰庫回送下校']);
+    /* ⚠️ 便の少ないコースに切り替えたとき、選んでいたタグが一覧から消えることがある。
+       選ばれたままにすると、どこにも当たらない状態で入力してしまう（2026-09-01） */
+    if(list.indexOf(selRSeg) < 0) selRSeg = list[0];
+    segBtns = list.map(s=>_segBtn(s, R_SEG_LABEL[s], selRSeg===s, cntB(s))).join('');
+  }else if(selRForm === ''){
+    /* ⚠️ 回送は「回送ルート」タグへ移した。ここは登校の本線だけ */
+    segBtns = R_TOUKOU_MAIN.map(s=>{
       let n=0; const pre = RK + s + RK;
       Object.keys(_box).forEach(kk=>{ if(kk.indexOf(pre)===0) n+=(_box[kk]||[]).length; });
       return _segBtn(s, R_SEG_LABEL[s], selRSeg===s, n);
