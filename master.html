@@ -484,7 +484,7 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
             <div class="form-field"><label>退職年月日</label><input type="text" id="emp-retire" placeholder="令和8年3月31日"></div>
             <div class="form-field"><label>郵便番号</label><input type="text" id="emp-postal" placeholder="192-0000"></div>
             <div class="form-field"><label>住所</label><input type="text" id="emp-address" placeholder="東京都八王子市…" style="min-width:220px;"></div>
-            <div class="form-field"><label>メールアドレス</label><input type="email" id="emp-email" placeholder="yamada@example.com"></div>
+            <div class="form-field"><label>メールアドレス（配置用・日報の宛先）</label><input type="email" id="emp-email" placeholder="yamada@example.com"></div>
             <div class="form-field"><label>電話番号</label><input type="tel" id="emp-phone" placeholder="090-0000-0000"></div>
             <div class="form-field"><label>免許番号</label><input type="text" id="emp-license" placeholder="第123456号"></div>
             <div class="form-field"><label>免許有効期限</label><input type="date" id="emp-expiry"></div>
@@ -1746,7 +1746,11 @@ function startEditEmp(id) {
       <div class="form-field"><label>入社年月日</label><input type="text" id="ee-hire-${id}" value="${esc(emp.hire_date||'')}" placeholder="令和5年4月1日" style="min-width:140px;"></div>
       <div class="form-field"><label>生年月日</label><input type="date" id="ee-birth-${id}" value="${emp.birth_date||''}"></div>
       <div class="form-field"><label>退職年月日</label><input type="text" id="ee-retire-${id}" value="${esc(emp.retirement_date||'')}" placeholder="令和8年3月31日" style="min-width:140px;"></div>
-      <div class="form-field"><label>メール</label><input type="email" id="ee-email-${id}" value="${esc(emp.email||'')}" style="min-width:180px;"></div>
+      <!-- 🔴 メールは2つ（2026-09-01 八重樫さん）
+           配置用＝日報・通知・運行ボタンの宛先（曾木さんが管理）
+           給与用＝給与明細の送付先（TKCが正。取込はこちらにだけ入る） -->
+      <div class="form-field"><label>メール（配置用・日報の宛先）</label><input type="email" id="ee-email-${id}" value="${esc(emp.email||'')}" style="min-width:200px;"></div>
+      <div class="form-field"><label>メール（給与明細用・TKC）</label><input type="email" id="ee-pmail-${id}" value="${esc(emp.payroll_email||'')}" style="min-width:200px;"></div>
       <div class="form-field"><label>電話番号</label><input type="tel" id="ee-phone-${id}" value="${esc(emp.phone||'')}" style="min-width:140px;"></div>
       <div class="form-field"><label>免許番号</label><input type="text" id="ee-lic-${id}" value="${esc(emp.license_number||'')}" style="min-width:140px;"></div>
       <div class="form-field"><label>免許有効期限</label><input type="date" id="ee-exp-${id}" value="${emp.license_expiry||''}"></div>
@@ -1769,6 +1773,7 @@ async function saveEditEmp(id) {
   const hire    = document.getElementById(`ee-hire-${id}`).value.trim();
   const retire  = document.getElementById(`ee-retire-${id}`).value.trim();
   const email   = document.getElementById(`ee-email-${id}`).value.trim();
+  const pmail   = document.getElementById(`ee-pmail-${id}`).value.trim();
   const phone   = document.getElementById(`ee-phone-${id}`).value.trim();
   const license = document.getElementById(`ee-lic-${id}`).value.trim();
   const expiry  = document.getElementById(`ee-exp-${id}`).value;
@@ -1779,7 +1784,7 @@ async function saveEditEmp(id) {
   const p_data = {
     name, name_kana:kana||null, department:dept||null,
     employee_code:empCode||null, hire_date:hire||null, postal_code:postal||null, address:addr||null,
-    retirement_date:retire||null, email:email||null, phone:phone||null,
+    retirement_date:retire||null, email:email||null, payroll_email:pmail||null, phone:phone||null,
     license_number:license||null, license_expiry:expiry||null,
     license_required: licenseExempt ? false : null,
     note:note||null
@@ -4510,7 +4515,7 @@ const SI_FIELDS = [
   ['employee_code','社員番号'], ['name','氏名'], ['name_kana','フリガナ'],
   ['birth_date','生年月日'], ['phone','電話'], ['postal_code','郵便番号'],
   ['address','住所'], ['department','部署'], ['hire_date','入社日'],
-  ['retirement_date','退職日'], ['email','メール']
+  ['retirement_date','退職日'], ['email','メール（給与明細用）']
 ];
 // 推測の順番が大事：「氏名カナ」を氏名と取り違えないよう、フリガナを先に見る
 const SI_GUESS_ORDER = ['name_kana','employee_code','birth_date','postal_code','address',
@@ -4884,16 +4889,80 @@ function _norm_kana_js(s) {
 
 }
 
+/* 🔴 項目ごとの承認（2026-09-01 八重樫さん）
+   ご要望：修正があった場合は問い合わせてほしい／変更があった箇所だけ取り込む
+
+   ⚠️ 2026-08-04 の取込で、人が直した電話3件が黙って戻り、今日まで戻ったままだった。
+   既定は「連絡先と在籍だけ確認」（八重樫さんの選択）。
+   ⚠️ 判定はデータベース側の _si_default_ok が正。ここはその写しなので、
+      片方だけ直すと画面と実際の動きがずれる（2026-08-26 に一度やっている）。 */
+const SI_APPROVABLE = ['employee_code','department','hire_date','retirement_date',
+                       'birth_date','postal_code','address','phone','email','active'];
+
+/** CSVの列名 → データベースの列名。⚠️ メールは給与明細用へ入る */
+function siDbKey(k){ return k === 'email' ? 'payroll_email' : k; }
+
+/** その項目を取り込むか。行の指定が無ければ既定に従う */
+function siFieldOn(r, k){
+  const key = siDbKey(k);
+  const ok = r.field_ok || {}, def = r.field_default || {};
+  if (Object.prototype.hasOwnProperty.call(ok, key)) return ok[key] === true;
+  return def[key] !== false;
+}
+
+async function siField(rowId, k, on){
+  const r = _si.rows.find(x => x.id === rowId);
+  try {
+    const res = await _siRpc('staff_import_decide_fields',
+      { p_row_id: rowId, p_fields: JSON.parse('{"' + siDbKey(k) + '":' + (on ? 'true' : 'false') + '}') });
+    if (r) r.field_ok = res;
+  } catch (e) {
+    /* ⚠️ 失敗を黙って飲まない。チェックだけ動いて実際は保存されていない状態を残さない */
+    alert('この項目の設定を保存できませんでした。\n\n' + (e && e.message ? e.message : e)
+        + '\n\n画面を開き直してください。');
+    siLoadResult();
+  }
+}
+
 function _siVal(v) { return (v === null || v === undefined || v === '') ? '<span class="si-empty">（なし）</span>' : esc(String(v)); }
 
-function siCompareTable(data, ex) {
+function siCompareTable(data, ex, r) {
+  /* ⚠️ メールは給与明細用（payroll_email）と比べる。
+     配置用（email）は日報・通知・運行ボタンの宛先なので取込では触らない。 */
+  const canPick = !!(r && ex);
   return `<table class="si-cmp">
-    <thead><tr><th style="width:90px;">項目</th><th>取り込むデータ</th><th>今の登録${ex?('（#'+ex.id+'）'):''}</th></tr></thead>
+    <thead><tr><th style="width:110px;">項目</th><th>取り込むデータ</th><th>今の登録${ex?('（#'+ex.id+'）'):''}</th>
+      ${canPick?'<th style="width:82px;">取り込む</th>':''}</tr></thead>
     <tbody>${SI_FIELDS.map(([k,label]) => {
-      const a = (data && data[k]) || '', b = ex ? (ex[k] || '') : '';
+      const a = (data && data[k]) || '', b = ex ? (ex[siDbKey(k)] || '') : '';
       const diff = ex && String(a).trim() !== '' && !siSameValue(k, a, b);
-      return `<tr class="${diff?'diff':''}"><td>${label}</td><td>${_siVal(a)}</td><td>${_siVal(b)}</td></tr>`;
-    }).join('')}</tbody></table>`;
+      let cell = '';
+      if (canPick) {
+        if (diff && SI_APPROVABLE.indexOf(k) >= 0) {
+          const on = siFieldOn(r, k);
+          cell = `<td style="text-align:center;"><label style="cursor:pointer;">
+            <input type="checkbox" ${on?'checked':''} onchange="siField(${r.id},'${k}',this.checked)">
+            </label></td>`;
+        } else if (diff) {
+          cell = '<td style="text-align:center;font-size:11px;color:#8a9a91;">—</td>';
+        } else {
+          cell = '<td></td>';
+        }
+      }
+      return `<tr class="${diff?'diff':''}"><td>${label}</td><td>${_siVal(a)}</td><td>${_siVal(b)}</td>${cell}</tr>`;
+    }).join('')}
+    ${canPick && ex ? siActiveRow(data, ex, r) : ''}</tbody></table>`;
+}
+
+/** 在籍は CSV の列ではなく退職日から決まるので、行として自前で出す */
+function siActiveRow(data, ex, r){
+  const csvActive = String((data && data.retirement_date) || '').trim() === '';
+  if (csvActive === !!ex.active) return '';
+  const on = siFieldOn(r, 'active');
+  return `<tr class="diff"><td>在籍</td><td>${csvActive?'在籍':'退職'}</td><td>${ex.active?'在籍':'退職'}</td>
+    <td style="text-align:center;"><label style="cursor:pointer;">
+    <input type="checkbox" ${on?'checked':''} onchange="siField(${r.id},'active',this.checked)">
+    </label></td></tr>`;
 }
 
 function siRenderCheck() {
@@ -4925,7 +4994,7 @@ function siRenderCheck() {
         <span style="font-size:11.5px;color:#8a9a91;">CSV ${r.row_no}行目</span>
       </div>
       ${pick}
-      ${siCompareTable(r.data, r.existing)}
+      ${siCompareTable(r.data, r.existing, r)}
       ${done}
     </div>`;
   }).join('');
@@ -4935,13 +5004,16 @@ function siRenderPlain(kind) {
   const rows = _si.rows.filter(r => r.match_kind === kind);
   if (!rows.length) return '<p style="font-size:13px;color:#5b6b63;">該当する行はありません。</p>';
   if (kind === '一致') {
-    return '<p style="font-size:12.5px;color:#5b6b63;">社員番号が一致した行です。<b>色が付いた項目だけが書き換わります。</b>書き方が違うだけ（昭和22年01月13日 と 1947-01-13、平成24年08月10日 と 平成24年8月10日）のものは、同じ日と見なして<b>書き換えません</b>。</p>' +
+    return '<p style="font-size:12.5px;color:#5b6b63;">社員番号が一致した行です。<b>「取り込む」に印を付けた項目だけが書き換わります。</b>' +
+      '<br>⚠️ <b>電話と在籍は、はじめから印が付いていません。</b>現場で変えている場合があるためです。取り込むときはご自身で印を付けてください。' +
+      '<br>⚠️ <b>メールは「給与明細用」に入ります。</b>日報や運行ボタンの宛先（配置用のメール）は、この取込では書き換えません。' +
+      '<br>書き方が違うだけ（昭和22年01月13日 と 1947-01-13、平成24年08月10日 と 平成24年8月10日）のものは、同じ日と見なして<b>書き換えません</b>。</p>' +
       rows.map(r => `<div class="si-card">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <span class="si-kind k-match">一致</span>
           <b style="font-size:14px;">${esc(r.data.name||'')}</b>
           <span style="font-size:11.5px;color:#8a9a91;">CSV ${r.row_no}行目 → #${r.match_staff_id}</span>
-        </div>${siCompareTable(r.data, r.existing)}</div>`).join('');
+        </div>${siCompareTable(r.data, r.existing, r)}</div>`).join('');
   }
   return `<p style="font-size:12.5px;color:#5b6b63;">どの在籍者とも合わなかった行です。<b>新しく登録されます。</b></p>
     <div class="preview-wrap"><table class="preview-table">
