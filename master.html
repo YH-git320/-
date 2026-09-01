@@ -1422,6 +1422,22 @@ function getEmpColVisible() {
 }
 function applyEmpColVisible() { filterEmployees(); }
 
+function _empLoadFailed(why){
+  /* 🔴 読めなかったときに「該当する従業員がいません」と出さない（2026-09-01 八重樫さん）
+     ⚠️ 空の一覧は「1人も居ません」と見分けが付かない。理由をその場に出す。 */
+  allEmployees = [];
+  const grid = document.getElementById('emp-grid');
+  if (grid) grid.innerHTML = '<div style="padding:18px;border:1px solid #e0b4ac;background:#fbf1ef;'
+    + 'border-radius:10px;color:#94402f;font-size:13px;line-height:1.9;">'
+    + '⚠️ <b>従業員の一覧を読み取れませんでした。</b><br>'
+    + '（1人も居ないのではなく、読み込みに失敗しています）<br>'
+    + '画面を開き直してください。それでも直らないときは八重樫さんにお知らせください。'
+    + (why ? '<br><span style="color:#6f8078;font-size:12px;">' + esc(String(why)) + '</span>' : '')
+    + '</div>';
+  const c = document.getElementById('cnt-employees');
+  if (c) c.textContent = '⚠️';
+}
+
 async function loadEmployees() {
   const empFilter = document.querySelector('input[name="emp-filter"]:checked')?.value || 'active';
   const filter = empFilter === 'all' ? 'order=name' : empFilter === 'retired' ? 'active=eq.false&order=name' : 'active=eq.true&order=name';
@@ -1432,7 +1448,7 @@ async function loadEmployees() {
       method: 'POST', headers: getH(), body: JSON.stringify({ p_filter: _pf })
     });
     const empData = await empRes.json();
-    if (!empRes.ok) { console.error('staff error:', empData); allEmployees = []; renderEmployeeGrid([]); return; }
+    if (!empRes.ok) { console.error('staff error:', empData); _empLoadFailed('（' + empRes.status + '）'); return; }
     let employees = Array.isArray(empData) ? empData : [];
     employees.sort(function(a,b){ return (a.name||'').localeCompare(b.name||'','ja'); });
 
@@ -1458,11 +1474,12 @@ async function loadEmployees() {
     }));
 
     document.getElementById('cnt-employees').textContent = allEmployees.length;
+    /* ⚠️ 「全部」で0名は実務上ありえない。読めていない可能性を疑う */
+    if (!allEmployees.length && _pf === 'all'){ _empLoadFailed('0名で返ってきました'); return; }
     filterEmployees();
   } catch(e) {
     console.error('loadEmployees exception:', e);
-    allEmployees = [];
-    renderEmployeeGrid([]);
+    _empLoadFailed(e && e.message);
   }
 }
 
@@ -1656,7 +1673,10 @@ function renderEmployeeGrid(employees, col) {
           <div class="emp-actions">
             ${_canEdit ? `<button class="btn btn-edit btn-small" onclick="startEditEmp(${emp.id})">編集</button>` : ''}
             <button class="btn btn-gray btn-small" onclick="openAuditModal('staff',${emp.id},'従業員：${escAttr(emp.name)}')">変更履歴</button>
-            ${(_canEdit && !isRetired) ? `<button class="btn btn-danger btn-small" onclick="deleteEmployee(${emp.id},'${escAttr(emp.name)}')">無効化</button>` : ''}
+            <!-- ⚠️ 「退職」と出ているかどうかではなく、在籍の印（active）が残っているかで出す。
+                 退職日が過ぎて「退職」と表示された方こそ、この印を外す必要がある。
+                 表示で判断すると「⚠️ 在籍の印が残っています」と知らせながら、直す手段を隠すことになる（2026-09-01） -->
+            ${(_canEdit && emp.active !== false) ? `<button class="btn btn-danger btn-small" onclick="deleteEmployee(${emp.id},'${escAttr(emp.name)}')">無効化</button>` : ''}
           </div>
         </div>
         <div class="job-chips">
@@ -1803,7 +1823,12 @@ async function saveEditEmp(id) {
 }
 
 async function deleteEmployee(id, name) {
-  if (!confirm(`「${name}」さんを無効化します。よろしいですか？\n（データは削除されず、無効として保管されます。「退職者」表示で確認・復帰できます）`)) return;
+  /* ⚠️ 退職日が過ぎているのに在籍の印が残っている方は、これで印を外す（2026-09-01） */
+  const _e = (allEmployees || []).find(x => x.id === id);
+  const _mm = (_e && _e.retire_mismatch)
+    ? `\n\n⚠️ この方は退職日（${_e.retirement_date || ''}）が過ぎています。\n在籍の印を外すと、画面の表示と実際の記録がそろいます。`
+    : '';
+  if (!confirm(`「${name}」さんを無効化します。よろしいですか？\n（データは削除されず、無効として保管されます。「退職者」表示で確認・復帰できます）${_mm}`)) return;
   const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/deactivate_staff`, {
     method: 'POST', headers: getH(), body: JSON.stringify({ p_id: id })
   });
