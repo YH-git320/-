@@ -1078,7 +1078,7 @@ async function hLoadBase(){
   SCEN = await _fetchAll('course_scenarios?select=id,course_id,segment,label,seq&order=course_id,segment,seq');
   // 従業員（業務種別で添乗員／運転手を振り分け）
   /* 🔴 五十音順（2026-09-01 八重樫さん）。⚠️ 漢字の順は五十音順にならない */
-  const staff = await _fetchAll('staff?select=id,name,active,name_kana&active=eq.true&order=name_kana.asc.nullslast,name.asc');
+  const staff = await _fetchAll('staff?select=id,name,active,name_kana,retirement_date&active=eq.true&order=name_kana.asc.nullslast,name.asc');
   const jt    = await _fetchAll('job_types?select=id,name');
   const ejt   = await _fetchAll('employee_job_types?select=employee_id,job_type_id');
   const attId = new Set(jt.filter(j=>String(j.name).indexOf('添乗員')>=0).map(j=>j.id));
@@ -1088,6 +1088,13 @@ async function hLoadBase(){
   ejt.forEach(e=>{ if(attId.has(e.job_type_id)) att.add(e.employee_id); if(drvId.has(e.job_type_id)) drv.add(e.employee_id); });
   PEOPLE['添乗員'] = staff.filter(s=>att.has(s.id));
   PEOPLE['運転手'] = staff.filter(s=>drv.has(s.id));
+  /* 🔴 その月に退職された方も出せるようにする（2026-09-01 八重樫さん）。
+     ⚠️ 退職日が入っていない方は入れない（どの月に出せばよいか決められないため）。
+     　 その方が配置に入っている場合は EXSTAFF が拾う。 */
+  const gone = (await _fetchAll('staff?select=id,name,active,name_kana,retirement_date&active=eq.false'))
+                 .filter(s=>String(s.retirement_date||'').trim() !== '');
+  RETIRED_P['添乗員'] = gone.filter(s=>att.has(s.id));
+  RETIRED_P['運転手'] = gone.filter(s=>drv.has(s.id));
   // 車両
   VEH = await _fetchAll('vehicles_with_office?select=id,vehicle_number,vehicle_model,permit_type,capacity,current_office_name,active&active=eq.true&order=vehicle_number');
   VEHBY = {}; VEH.forEach(v=>VEHBY[v.id]=v);
@@ -1183,9 +1190,127 @@ function kanaCmp(a, b){
   return String(a && a.name || '').localeCompare(String(b && b.name || ''), 'ja');
 }
 
+/* 🔴 その月に退職された方は、リストに残して「（○/○ 退職）」と出す（2026-09-01 八重樫さん）
+
+   前の対処（EXSTAFF）は「すでに配置に入っている人」を守るためのもの。
+   これは別の話で、**退職日までの分をこれから入れられるようにする**ためのもの。
+   例）9月20日退職の方の、9月1日〜19日の配置を、あとから入れたり直したりできる。
+
+   ⚠️ retirement_date は文字で、形が2つある（2026-09-01 に全68種を確認）。
+   　　令和8年7月6日 …82件（すべて退職済み）
+   　　2026/9/20     … 4件（すべて在籍のまま）
+   ⚠️ 文字のまま比べてはいけない。「令和8年12月26日」は「令和8年1月8日」より前に並ぶ。
+   ⚠️ 読み取れないときは**出す**。落とすと、その方の配置ができなくなる。 */
+let RETIRED_P = { '添乗員': [], '運転手': [] };
+
+/** 退職日を YYYY-MM-DD にする。読み取れなければ null。 */
+function _retISO(v){
+  const s = String(v == null ? '' : v).trim();
+  if(!s) return null;
+  let m = s.match(/^令和\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日$/);
+  if(m) return _ymd(2018 + Number(m[1]), m[2], m[3]);        // 令和1年 = 2019年
+  m = s.match(/^平成\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日$/);
+  if(m) return _ymd(1988 + Number(m[1]), m[2], m[3]);        // 平成1年 = 1989年
+  m = s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);
+  if(m) return _ymd(m[1], m[2], m[3]);
+  return null;
+}
+function _ymd(y, m, d){
+  const Y = Number(y), M = Number(m), D = Number(d);
+  if(!Y || M < 1 || M > 12 || D < 1 || D > 31) return null;
+  return Y + '-' + _p2(M) + '-' + _p2(D);
+}
+
+/** 表示中の月に「○/○ 退職」と出すか。まだ先の日付なら出さない。 */
+function _retLabel(p, ym){
+  const iso = _retISO(p && p.retirement_date);
+  if(!iso || !ym) return '';
+  if(iso > ym + '-' + _p2(_dim(ym))) return '';   // 月末より後＝まだ在籍中
+  const a = iso.split('-');
+  return '（' + Number(a[1]) + '/' + Number(a[2]) + ' 退職）';
+}
+
+/** 表示中の月に出す人。在籍者＋その月に退職された方。ふりがな順。 */
+function _peopleFor(tab){
+  const base = (PEOPLE[tab] || []).slice();
+  const ym = _ym();
+  if(ym){
+    const first = ym + '-01';
+    (RETIRED_P[tab] || []).forEach(p=>{
+      const iso = _retISO(p.retirement_date);
+      if(iso === null || iso >= first) base.push(p);   // ⚠️ 読み取れないときは出す
+    });
+  }
+  return base.sort(kanaCmp);
+}
+
+/** 一覧に出す名前。⚠️ 退職された方は必ず見分けが付くようにする。
+    日付が分かればその日を出し、分からない・先の日付でも「（退職）」は必ず付ける
+    （付かないと在籍者と区別できない。実データに「退職済みだが日付は先」が1件ある）。 */
+function _nameWithRet(p, ym){
+  const nm = (p && p.name) || '';
+  const lb = _retLabel(p, ym);
+  if(lb) return nm + lb;
+  if(p && p.active === false) return nm + '（退職）';
+  return nm;
+}
+
+/* 🔴 退職された方でも、その期間の業務に関わっていれば名前を出す（2026-09-01 八重樫さん）
+
+   ⚠️ 名前が出ないだけの話ではない。割り当て欄は
+   　　　if(cw[i]) el.value = String(cw[i].staff_id);
+   　　で今の値を入れているが、選択肢に無いと**黙って「未割り当て」になる**。
+   　　さらに el.dataset.prev にその空の値を覚えるため、
+   　　**画面では外れて見え、保存でその方の配置が消える。**
+   　　（2026-09-01 時点では退職者の配置は0件。今後どなたかが退職された日から表に出る）
+
+   この月の配置に出てくる人のうち、在籍者の一覧に居ない方を名前で引き直す。 */
+let EXSTAFF = {};   // staff_id -> {id,name,name_kana,active:false}
+let EX_BROKEN = false;   // ⚠️ 名前を読めなかった＝保存すると配置が消える恐れ
+let EXROLE  = {};   // staff_id -> Set('添乗員'/'運転手')
+
+async function hLoadExStaff(){
+  const known = new Set([...(PEOPLE['添乗員']||[]), ...(PEOPLE['運転手']||[])].map(p=>String(p.id)));
+  const want = {};
+  Object.keys(CREW).forEach(did=>{
+    (CREW[did]||[]).forEach(c=>{
+      if(c.staff_id == null) return;
+      const k = String(c.staff_id);
+      if(known.has(k)) return;
+      (want[k] = want[k] || new Set()).add(c.role);
+    });
+  });
+  const ids = Object.keys(want).filter(k => !EXSTAFF[k]);
+  Object.keys(want).forEach(k => { EXROLE[k] = want[k]; });
+  if(!ids.length) return;
+  /* ⚠️ _fetchAll は失敗しても例外を投げず、空の配列を返して黙って進む。
+     取れなかったことに気づけないと、選択肢に出ないまま配置が消える。
+     頼んだ人数がそろったかを数えて確かめる。 */
+  const rows = await _fetchAll(`staff?select=id,name,name_kana,active,retirement_date&id=in.(${ids.join(',')})`);
+  rows.forEach(s => { EXSTAFF[String(s.id)] = s; });
+  const missing = ids.filter(k => !EXSTAFF[k]);
+  EX_BROKEN = missing.length > 0;
+  if(EX_BROKEN){
+    alert('この月の配置に、従業員の一覧に無い方が ' + missing.length + '名 入っています。\n'
+        + 'その方のお名前を読み取れませんでした。\n\n'
+        + '⚠️ このまま保存すると、その方の割り当てが外れる恐れがあります。\n'
+        + '画面を開き直すか、八重樫さんにお知らせください。');
+  }
+}
+
+
+/** この月の配置に入っている退職者のうち、いま見ている役の方 */
+function _exFor(){
+  return Object.keys(EXSTAFF)
+    .filter(k => EXROLE[k] && EXROLE[k].has(TAB))
+    .map(k => EXSTAFF[k])
+    .sort(kanaCmp);
+}
+
 function _optsFor(cid, segment){
   const sg = _segGroup(segment);
-  const all = PEOPLE[TAB] || [];
+  const all = _peopleFor(TAB);   // 在籍者＋その月に退職された方
+  const _ym0 = _ym();
   const byId = {}; all.forEach(p=>byId[p.id]=p);
   const hist = (HIST[cid+'|'+TAB+'|'+sg]||[]).filter(x=>byId[x.staff_id]);
   let h = '<option value="">（未割り当て）</option>';
@@ -1203,9 +1328,16 @@ function _optsFor(cid, segment){
   all.forEach(p=>{
     const g = kanaGyo(p.name_kana);
     if(g !== gyo){ if(gyo !== null) h += '</optgroup>'; h += `<optgroup label="${g}">`; gyo = g; }
-    h += `<option value="${p.id}">${escHtml(p.name)}</option>`;
+    h += `<option value="${p.id}">${escHtml(_nameWithRet(p, _ym0))}</option>`;
   });
   if(gyo !== null) h += '</optgroup>';
+  /* ⚠️ すでに入っている退職者は必ず選択肢に出す。無いと欄が空になり、保存で消える */
+  const ex = _exFor();   // ⚠️ 保存で消さないため、必ず選択肢に出す
+  if(ex.length){
+    h += '<optgroup label="⚠️ 退職された方（すでに入っている分）">'
+       + ex.map(p=>`<option value="${p.id}">${escHtml(_nameWithRet(p, _ym0))}</option>`).join('')
+       + '</optgroup>';
+  }
   return h;
 }
 
@@ -1220,6 +1352,7 @@ async function hLoadMonth(){
     const cw = Array.isArray(d.duty_crew) ? d.duty_crew : [];
     if(cw.length) CREW[d.id] = cw.map(c=>({ id:c.id, duty_id:d.id, staff_id:c.staff_id, role:c.role }));
   });
+  await hLoadExStaff();   // ⚠️ 退職された方が入っていると、選択肢に無く配置が消える
   _dirtyView();
 }
 
@@ -1385,9 +1518,15 @@ function hRenderPerson(){
   const [y,m]=ym.split('-').map(Number); const dim=_dim(ym); const HOL=_jpHolidays(y);
   const q=(document.getElementById('hFilter').value||'').trim();
   const idx=_buildPersonIndex();
-  const all=[...(PEOPLE['添乗員']||[]), ...(PEOPLE['運転手']||[])];
+  /* ⚠️ 退職された方も、その期間に乗務していれば名前を出す（2026-09-01 八重樫さん） */
+  const all=[..._peopleFor('添乗員'), ..._peopleFor('運転手'), ...Object.values(EXSTAFF)];
   const byId={}; all.forEach(p=>byId[p.id]=p);
-  let list=Object.keys(idx).map(id=>byId[id]||{id:Number(id), name:'ID'+id}).filter(p=>!q||(p.name||'').indexOf(q)!==-1);
+  let list=Object.keys(idx).map(id=>{
+    const p = byId[id];
+    if(!p) return {id:Number(id), name:'ID'+id};
+    const nm = _nameWithRet(p, ym);   // 退職された方には必ず印が付く
+    return nm === p.name ? p : {...p, name: nm};
+  }).filter(p=>!q||(p.name||'').indexOf(q)!==-1);
   list.sort(kanaCmp);   // ⚠️ 漢字の localeCompare は五十音順にならない
 
   const head=_headHtml(ym,y,m,dim,HOL,'従業員（この月に乗務あり）');
@@ -1897,6 +2036,15 @@ let _hSaving = false;
 
 async function hSave(){
   if(_hSaving){ status('保存中です。そのままお待ちください。', false); return; }
+  /* ⚠️ この月の配置に、名前を読み取れなかった方が入っている。
+     その方の欄は選択肢に無いので空に見えており、保存すると割り当てが消える。
+     消えてからでは戻せないので、保存させない（2026-09-01）。 */
+  if(EX_BROKEN){
+    alert('この月の配置に、お名前を読み取れなかった方が入っています。\n\n'
+        + '⚠️ このまま保存すると、その方の割り当てが消えます。\n'
+        + '画面を開き直してください。それでも直らないときは八重樫さんにお知らせください。');
+    return;
+  }
   const keys=Object.keys(DIRTY);
   const vkeys=Object.keys(DIRTYV);
   const skeys=Object.keys(DIRTYS);
