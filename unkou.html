@@ -1107,13 +1107,14 @@ async function loadStops(){
 // 各コースの最新版の経路点をバッファへ（コースを選ぶ前の一覧表示用）
 async function loadRoutePointsLatest(){
   const buf = {};
-  const res = await fetch(`${REST_URL}/course_route_points?select=course_id,version_id,form_name,segment,scenario_id,route_name,seq,name,lat,lng,is_stop,split_here,note&order=segment,seq`, { headers: getH() });
+  const res = await fetch(`${REST_URL}/course_route_points?select=id,course_id,version_id,form_name,segment,scenario_id,route_name,seq,name,lat,lng,is_stop,split_here,note&order=segment,seq`, { headers: getH() });
   if(!res.ok){ _saveMsg('「④ルート詳細」の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   (await res.json()).forEach(r=>{ if(r.version_id!==latestVerId(r.course_id)) return; const k=String(r.course_id);
     if(R_SEGS.indexOf(r.segment) < 0) return;
     buf[k] = buf[k] || _emptyRpts();
     const kk = _rkey(r.segment, r.scenario_id, r.route_name, r.form_name);
-    (buf[k][kk] = buf[k][kk] || []).push({ name:r.name||'', lat:(r.lat==null?'':String(r.lat)), lng:(r.lng==null?'':String(r.lng)), is_stop:!!r.is_stop, split_here:!!r.split_here, note:(r.note||'') });
+    /* ⚠️ 保存には使わない読み込みだが、形をそろえておかないと後で取り違える（2026-09-02） */
+    (buf[k][kk] = buf[k][kk] || []).push({ id:r.id, name:r.name||'', lat:(r.lat==null?'':String(r.lat)), lng:(r.lng==null?'':String(r.lng)), is_stop:!!r.is_stop, split_here:!!r.split_here, note:(r.note||'') });
   });
   RPTS = buf;
 }
@@ -1128,13 +1129,16 @@ async function loadVersionInto(cid, verId){
   const rs = await fetch(`${REST_URL}/course_locations?version_id=eq.${verId}&select=name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_seq,gekou_overrides&order=seq.nullslast,name`, { headers: getH() });
   if(rs.ok){ STOPS[k] = (await rs.json()).map(_mapStop); }
   else { _saveMsg('バス停・登校ルートの読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
-  const rr = await fetch(`${REST_URL}/course_route_points?version_id=eq.${verId}&select=form_name,segment,scenario_id,route_name,seq,name,lat,lng,is_stop,split_here,note&order=segment,seq`, { headers: getH() });
+  const rr = await fetch(`${REST_URL}/course_route_points?version_id=eq.${verId}&select=id,form_name,segment,scenario_id,route_name,seq,name,lat,lng,is_stop,split_here,note&order=segment,seq`, { headers: getH() });
   if(!rr.ok){ _saveMsg('「④ルート詳細」の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   const box = _emptyRpts();
   (await rr.json()).forEach(r=>{
     if(R_SEGS.indexOf(r.segment) < 0) return;
     const kk = _rkey(r.segment, r.scenario_id, r.route_name, r.form_name);
-    (box[kk] = box[kk] || []).push({ name:r.name||'', lat:(r.lat==null?'':String(r.lat)), lng:(r.lng==null?'':String(r.lng)), is_stop:!!r.is_stop, split_here:!!r.split_here, note:(r.note||'') });
+    /* 🔴 番号を持ち帰る（2026-09-02 八重樫さん）
+       ⚠️ これが無いと、保存のたびに全部消して入れ直すことになり、
+       　 1回の保存で1,000件前後の記録が出る（昨日 4回の保存で3,440件）。 */
+    (box[kk] = box[kk] || []).push({ id:r.id, name:r.name||'', lat:(r.lat==null?'':String(r.lat)), lng:(r.lng==null?'':String(r.lng)), is_stop:!!r.is_stop, split_here:!!r.split_here, note:(r.note||'') });
   });
   RPTS[k] = box;
   // ②の並びを、このあと保存時に「変わったか」比べるための目印（2026-08-24）
@@ -3604,7 +3608,9 @@ async function saveCourse(){
       const { form, seg, scen, route } = _rkeyParse(kk);
       if(R_SEGS.indexOf(seg) < 0) return;
       const list=((RPTS[key]||{})[kk]||[]).filter(p=>String(p.lat).trim()!==''&&String(p.lng).trim()!=='');
-      list.forEach((p,i)=>rptRows.push({ course_id:c.id, version_id:selVerId, form_name:form, segment:seg,
+      /* ⚠️ 新しく足した地点は id が無いので、そのまま追加される。
+         道を描くと順番（seq）は毎回変わるが、番号で対応づけるので並べ替えは更新になる。 */
+      list.forEach((p,i)=>rptRows.push({ id:(p.id==null?null:p.id), course_id:c.id, version_id:selVerId, form_name:form, segment:seg,
         scenario_id:scen, route_name:route, seq:i+1,
         name:(p.name||'').trim()||null, lat:Number(p.lat), lng:Number(p.lng), is_stop:!!p.is_stop, split_here:!!p.split_here, note:(p.note||'').trim()||null }));
     });
