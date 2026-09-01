@@ -1109,9 +1109,12 @@ let PEOPLE_FALLBACK = false;   // 古い判断で出しているか
 let PEOPLE_BROKEN = false;     // ⚠️ 従業員の一覧そのものが読めていない
 
 async function hLoadBase(){
-  CRS = await _fetchAll('courses?select=id,prefecture,school_name,course_name,active,driver_count,attendant_count,vehicle_id&order=prefecture,school_name,course_name');
+  /* ⚠️ ここを _fetchAll（失敗しても空を返す）で読むと、選択肢が空の画面ができる。
+     車両の欄が空に見えたまま保存すると、その便の車両が外れる（下の DIRTYV の所）。
+     読めなかったら空で進めず、その場で止める（2026-09-01 八重樫さん）。 */
+  CRS = await _fetchAllStrict('courses?select=id,prefecture,school_name,course_name,active,driver_count,attendant_count,vehicle_id&order=prefecture,school_name,course_name');
   // 添乗員送迎シナリオ（運行時程マスタ③タブで作る）。便ごとにどれを使うかを選ぶ
-  SCEN = await _fetchAll('course_scenarios?select=id,course_id,segment,label,seq&order=course_id,segment,seq');
+  SCEN = await _fetchAllStrict('course_scenarios?select=id,course_id,segment,label,seq&order=course_id,segment,seq');
   // 従業員（業務種別で添乗員／運転手を振り分け）
   /* 🔴 五十音順（2026-09-01 八重樫さん）。⚠️ 漢字の順は五十音順にならない */
   let staff;
@@ -1151,7 +1154,10 @@ async function hLoadBase(){
   RETIRED_P['添乗員'] = gone.filter(s=>att.has(s.id));
   RETIRED_P['運転手'] = gone.filter(s=>drv.has(s.id));
   // 車両
-  VEH = await _fetchAll('vehicles_with_office?select=id,vehicle_number,vehicle_model,permit_type,capacity,current_office_name,active&active=eq.true&order=vehicle_number');
+  VEH = await _fetchAllStrict('vehicles_with_office?select=id,vehicle_number,vehicle_model,permit_type,capacity,current_office_name,active&active=eq.true&order=vehicle_number');
+  /* ⚠️ 0台は実務上ありえない。読めていない可能性を疑う */
+  if(!VEH.length){ PEOPLE_BROKEN = true;
+    throw new Error('車両が1台も出てきませんでした。読み取りに失敗しているかもしれません。画面を開き直してください。'); }
   VEHBY = {}; VEH.forEach(v=>VEHBY[v.id]=v);
   await hLoadHist();
 }
@@ -2849,7 +2855,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     await hLoadMonth();
     await hLoadMismatch(); await hLoadSkips(); await hLoadDeleted(); await hLoadOrders();
     hRender();
-  }catch(e){ status('読み込みに失敗しました：'+e.message, false); }
+  }catch(e){
+    /* ⚠️ 途中で失敗したまま画面を使わせない。空の選択肢で保存すると割り当てが消える */
+    PEOPLE_BROKEN = true;
+    status('⚠️ 読み込みに失敗しました：'+e.message+'　画面を開き直してください。保存はできません。', false);
+  }
 
   // 予定表PDFの取り込み
   const drop=document.getElementById('ytDrop'), file=document.getElementById('ytFile');
