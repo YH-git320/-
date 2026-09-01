@@ -1549,7 +1549,10 @@ function renderEmployeeGrid(employees, col) {
     return;
   }
   grid.innerHTML = employees.map(emp => {
-    const isRetired = !emp.active;
+    /* 🔴 判断はデータベースの is_active_now（2026-09-01 八重樫さん）。
+       ⚠️ active の印だけで見ると、退職日が過ぎているのに現役に出る方がいる。
+       　 画面ごとに扱いが違う状態をなくすため、配置・通勤経路と同じ判断にそろえた。 */
+    const isRetired = (emp.is_active_now !== undefined) ? !emp.is_active_now : !emp.active;
     // operatorは電話・メールを表示するが「マスク済み」ラベルを付与
     const phoneTxt = (col.contact && emp.phone) ? emp.phone : null;
     const emailTxt = (col.contact && emp.email) ? emp.email : null;
@@ -1635,6 +1638,7 @@ function renderEmployeeGrid(employees, col) {
           <div class="emp-info">
             <div class="emp-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
               ${isRetired ? '<span style="font-size:11px;background:#c17f3e;color:white;padding:1px 6px;border-radius:4px;">退職</span>' : ''}
+              ${emp.retire_mismatch ? '<span title="退職日は過ぎていますが、在籍の印（active）が残っています。TKCの取込か、この画面の編集で直してください" style="font-size:11px;background:#fbf1ef;color:#94402f;border:1px solid #e0b4ac;padding:1px 6px;border-radius:4px;">⚠️ 在籍の印が残っています</span>' : ''}
               <span>${esc(emp.name)}${emp.name_kana ? `<span style="font-size:12px;font-weight:normal;color:#888;margin-left:8px;">${esc(emp.name_kana)}</span>` : ''}</span>
               ${warnHtml}
             </div>

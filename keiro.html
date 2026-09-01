@@ -917,9 +917,11 @@ async function loadStaff(){
      　 （ｱｶﾞﾂﾏ が ｱｵﾉ の後・ｱｽﾞﾏ の前に来る）。実データで確かめた。
      ⚠️ ふりがなが無い人は最後に回し、消さない。 */
   /* ⚠️ 在籍者だけを出す（2026-09-01 八重樫さん）。
+     🔴 判断は staff_now の is_active_now（データベース側で1か所）。
+     　 退職日が過ぎていれば、在籍の印が残っていても出さない。
      退職された方に通勤経路が残っていると一覧から消えて手が届かなくなるが、
      2026-09-01 時点で該当0件であることを確認したうえで絞っている。 */
-  const res = await fetch(`${REST_URL}/staff?select=id,name,employee_code,name_kana&active=eq.true&order=name_kana.asc.nullslast,name.asc`, { headers: getH() });
+  const res = await fetch(`${REST_URL}/staff_now?select=id,name,employee_code,name_kana&is_active_now=eq.true&order=name_kana.asc.nullslast,name.asc`, { headers: getH() });
   if (!res.ok) throw new Error('staff ' + res.status);
   STAFF = await res.json();
   const sel = document.getElementById('staffSelect');

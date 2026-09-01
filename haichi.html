@@ -1078,7 +1078,7 @@ async function hLoadBase(){
   SCEN = await _fetchAll('course_scenarios?select=id,course_id,segment,label,seq&order=course_id,segment,seq');
   // 従業員（業務種別で添乗員／運転手を振り分け）
   /* 🔴 五十音順（2026-09-01 八重樫さん）。⚠️ 漢字の順は五十音順にならない */
-  const staff = await _fetchAll('staff?select=id,name,active,name_kana,retirement_date&active=eq.true&order=name_kana.asc.nullslast,name.asc');
+  const staff = await _fetchAll('staff_now?select=id,name,active,is_active_now,name_kana,retirement_date&is_active_now=eq.true&order=name_kana.asc.nullslast,name.asc');
   const jt    = await _fetchAll('job_types?select=id,name');
   const ejt   = await _fetchAll('employee_job_types?select=employee_id,job_type_id');
   const attId = new Set(jt.filter(j=>String(j.name).indexOf('添乗員')>=0).map(j=>j.id));
@@ -1091,7 +1091,7 @@ async function hLoadBase(){
   /* 🔴 その月に退職された方も出せるようにする（2026-09-01 八重樫さん）。
      ⚠️ 退職日が入っていない方は入れない（どの月に出せばよいか決められないため）。
      　 その方が配置に入っている場合は EXSTAFF が拾う。 */
-  const gone = (await _fetchAll('staff?select=id,name,active,name_kana,retirement_date&active=eq.false'))
+  const gone = (await _fetchAll('staff_now?select=id,name,active,is_active_now,name_kana,retirement_date&is_active_now=eq.false'))
                  .filter(s=>String(s.retirement_date||'').trim() !== '');
   RETIRED_P['添乗員'] = gone.filter(s=>att.has(s.id));
   RETIRED_P['運転手'] = gone.filter(s=>drv.has(s.id));
@@ -1251,7 +1251,9 @@ function _nameWithRet(p, ym){
   const nm = (p && p.name) || '';
   const lb = _retLabel(p, ym);
   if(lb) return nm + lb;
-  if(p && p.active === false) return nm + '（退職）';
+  /* ⚠️ active ではなく is_active_now で見る。退職日が過ぎていれば印を付ける
+     （宮本さん・牧さんのように、在籍の印が残ったままの方がいる） */
+  if(p && (p.is_active_now === false || (p.is_active_now === undefined && p.active === false))) return nm + '（退職）';
   return nm;
 }
 
@@ -1286,7 +1288,7 @@ async function hLoadExStaff(){
   /* ⚠️ _fetchAll は失敗しても例外を投げず、空の配列を返して黙って進む。
      取れなかったことに気づけないと、選択肢に出ないまま配置が消える。
      頼んだ人数がそろったかを数えて確かめる。 */
-  const rows = await _fetchAll(`staff?select=id,name,name_kana,active,retirement_date&id=in.(${ids.join(',')})`);
+  const rows = await _fetchAll(`staff_now?select=id,name,name_kana,active,is_active_now,retirement_date&id=in.(${ids.join(',')})`);
   rows.forEach(s => { EXSTAFF[String(s.id)] = s; });
   const missing = ids.filter(k => !EXSTAFF[k]);
   EX_BROKEN = missing.length > 0;
@@ -3246,7 +3248,7 @@ async function ytImport(files) {
   setCourses(CRS.map(c => [c.id, c.course_name, c.school_name]));
   const keyed = buildKeys();
   // 退職者も含めて読む。過去の予定表には退職された方が当然に出てくるため
-  if (!PEOPLE_ALL.length) PEOPLE_ALL = await _fetchAll('staff?select=id,name,active&order=name');
+  if (!PEOPLE_ALL.length) PEOPLE_ALL = await _fetchAll('staff_now?select=id,name,active,is_active_now&order=name');
   YT_ALIAS = {};
   (await _fetchAll('staff_aliases?select=staff_id,alias')).forEach(a => { YT_ALIAS[norm(a.alias)] = a.staff_id; });
 
@@ -3478,11 +3480,11 @@ function ytNameCell(m) {
     const p = PEOPLE_ALL.find(x => x.id === chosen);
     const tag = m.by === '別名' ? '' : (m.by === '実績' ? '<span class="muted" style="font-size:9px;">実績</span>' : '');
     // 退職者は分かるようにする（過去の日付では正しいが、最近の日付なら誤りの目印になる）
-    const 退職 = (p && p.active === false) ? '<span class="muted" style="font-size:9px;">退職</span>' : '';
+    const 退職 = (p && p.is_active_now === false) ? '<span class="muted" style="font-size:9px;">退職</span>' : '';
     return `<span style="white-space:nowrap;">${escHtml(p ? p.name : chosen)}${退職}${tag}</span>`;
   }
   const opts = (m.candidates.length ? m.candidates : PEOPLE_ALL)
-    .map(p => `<option value="${p.id}">${escHtml(p.name)}${p.active === false ? '（退職）' : ''}</option>`).join('');
+    .map(p => `<option value="${p.id}">${escHtml(p.name)}${p.is_active_now === false ? '（退職）' : ''}</option>`).join('');
   return `<span style="white-space:nowrap;">
     <span class="tag warn">${escHtml(m.raw)}</span>
     <select onchange="ytPick('${key}',this.value)" style="width:auto;font-size:11px;padding:1px 3px;">

@@ -814,7 +814,7 @@ async function rpc(name, body){
 async function loadStaff(){
   /* 🔴 五十音順・在籍者だけ（2026-09-01 八重樫さん）
      ⚠️ 漢字の順は五十音順にならない。ふりがな（半角カナ）で並べる。 */
-  const res = await fetch(`${REST_URL}/staff?select=id,name,employee_code,email,name_kana&active=eq.true&order=name_kana.asc.nullslast,name.asc`, { headers: getH() });
+  const res = await fetch(`${REST_URL}/staff_now?select=id,name,employee_code,email,name_kana&is_active_now=eq.true&order=name_kana.asc.nullslast,name.asc`, { headers: getH() });
   if (!res.ok) throw new Error('staff ' + res.status);
   STAFF = await res.json();
   const sel = document.getElementById('staffSelect');
