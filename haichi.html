@@ -1930,9 +1930,14 @@ function hOpenAsg(cid,date){
     // 添乗員送迎シナリオ（便ごと。運行ボタンの案内と出庫時刻がこれで決まる）
     /* 🔴 送迎は、その日の添乗員の到着地から自動で決まる（2026-09-02 八重樫さん・案イ／案C）。
        手で選ぶと「この日だけ」の印が付き、以後その便は自動が触らない。 */
+    /* ⚠️ 送迎が1つも作られていないコースでは、この行ごと出ていなかった（2026-09-02 八重樫さんの画面で判明）。
+       送迎があるのは64コース中9コースだけなので、ほとんどの便で印を付ける場所が無かった。
+       登校・下校の便では、送迎が無くても行を出して、印だけは見えるようにする。 */
     const sc=_scenOptsFor(cid, d.segment);
-    if(sc) h+=`<div class="crewline"><span class="lb">🧑 添乗員送迎</span>`
-      +`<select id="scn_${d.id}" title="運行ボタンは、選んだ送迎の乗降地点を車庫と第1バス停の間に入れて案内します">${sc}</select>`
+    const _isTG = /^(登校|下校)/.test(d.segment||'');
+    if(sc || _isTG) h+=`<div class="crewline"><span class="lb">🧑 添乗員送迎</span>`
+      +(sc ? `<select id="scn_${d.id}" title="運行ボタンは、選んだ送迎の乗降地点を車庫と第1バス停の間に入れて案内します">${sc}</select>`
+           : `<span style="font-size:12px;color:#6f8078;">このコースには送迎が作られていません</span>`)
       +`${_odBadge(d,'scenario_id')}${_scenIssueMark(d.id)}</div>`;
     for(let i=0;i<need;i++){
       h+=`<div class="crewline"><span class="lb">${TAB}${need>1?(i+1):''}</span>`
