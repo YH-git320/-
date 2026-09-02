@@ -1072,10 +1072,55 @@ async function loadPlaces(){
 }
 
 /** 到着地の選択肢。①添乗員送迎の場所 ②バス停（学校を含む） */
+/* 🔴 到着地に「このコースの車庫」を出す（2026-09-02 八重樫さん）
+   > 全部どの経路もリストに入るのではなく、運行する車両の車庫だけが
+   > リストに出ることがミスをなくす方法だと思います
+
+   ⚠️ 車庫は**そのコースを走る車両の車庫を1つだけ**出す。全営業所を並べない。
+   ⚠️ 車庫は場所の一覧（places）にも入れてある。運行時程マスタの送迎の乗車地点も
+      同じ「場所」で持っているので、別の持ち方にすると
+      「到着地」と「乗車地点」が同じ場所か突き合わせられない。
+   ⚠️ 車両の車庫は `vehicles.office_name`（名前）で持っている。改名すると外れるので、
+      選んだあとは番号（場所id）で持つ。
+   ⚠️ courses.vehicle_id から vehicles への外部キーが無いので、
+      埋め込み（vehicles(office_name)）では取れない。別々に読んで突き合わせる。 */
+let COURSE_GARAGE = {};   // course_id(String) -> {id,name,address,coord}
+async function loadCourseGarages(){
+  try{
+    const [rc, rv] = await Promise.all([
+      fetch(`${REST_URL}/courses?select=id,vehicle_id&active=eq.true`, { headers: getH() }),
+      fetch(`${REST_URL}/vehicles?select=id,office_name`, { headers: getH() })
+    ]);
+    if(!rc.ok || !rv.ok) return;                   // 読めないときは前の内容を保つ
+    const gar = {};
+    (await rv.json() || []).forEach(v => { gar[String(v.id)] = (v.office_name||'').trim(); });
+    const byName = {};
+    Object.keys(PLACES).forEach(k => { byName[PLACES[k].name] = PLACES[k]; });
+    const buf = {};
+    (await rc.json() || []).forEach(c => {
+      if(c.vehicle_id == null) return;
+      const nm = gar[String(c.vehicle_id)];
+      if(!nm) return;
+      const p = byName[nm];
+      if(p) buf[String(c.id)] = p;                 // 場所の一覧にある車庫だけ
+    });
+    COURSE_GARAGE = buf;
+  }catch(e){ /* 読めないときは前の内容を保つ */ }
+}
+
 function arriveOpts(courseId, cur){
   const ps = COURSE_PLACES[String(courseId)] || [];
   const ls = COURSE_LOCS[String(courseId)] || [];
   let h = '<option value="">選んでください…</option>';
+  /* 🔴 このコースを走る車両の車庫だけを出す（2026-09-02 八重樫さん）。
+     ⚠️ 全営業所を並べない。選び間違いのもとになる。
+     ⚠️ 送迎の場所にも同じ車庫があるときは、二重に出さない。 */
+  const gr = COURSE_GARAGE[String(courseId)];
+  if(gr && !ps.some(p => String(p.id) === String(gr.id))){
+    h += '<optgroup label="🏢 このコースの車庫">';
+    h += `<option value="p:${gr.id}"${cur==='p:'+gr.id?' selected':''}>${escHtml(gr.name)}</option>`;
+    h += '</optgroup>';
+  }
   if(ps.length){
     h += '<optgroup label="📍 添乗員送迎の場所">';
     h += ps.map(p => `<option value="p:${p.id}"${cur==='p:'+p.id?' selected':''}>`
@@ -1453,6 +1498,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadCourses();
     await loadCourseLocations();
     await loadPlaces();
+    await loadCourseGarages();   // ⚠️ PLACES を使うので loadPlaces のあと
     await loadStaffAddr();
     status('準備ができました。添乗員をえらんでください。', true);
   } catch(e){ status('データ読み込みエラー：' + e.message, false); }
