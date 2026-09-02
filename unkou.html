@@ -1699,6 +1699,13 @@ function renderSide(){
       + '<div id="sideMap" style="margin-bottom:10px;"></div>'
       + '<div id="sideEdit"></div>';
   }
+  /* ⚠️ 地図は「いま中央にあるもの」だけを出す。
+     　 ④以外のタブでは中央に作られないので、捨てる相手が見つからず
+     　 前のコースの地図が residual として残ってしまう
+     　（2026-09-02 茅ケ崎の地図が金沢のコースに出た）。
+     　 移す前に必ず空にして、そのあと中央にあるものだけを入れる。 */
+  const _sm = document.getElementById('sideMap');
+  if(_sm) _sm.innerHTML = '';
   const a = _crumb();
   document.getElementById('sideNow').innerHTML =
     '<div style="font-size:11px;color:#8a9a90;margin-bottom:6px;">いまの作業</div>'
@@ -1727,8 +1734,18 @@ function renderSide(){
 }
 /** id の枠を、行き先の中へ動かす（無ければ何もしない） */
 function _moveTo(id, dstId){
-  const el = document.getElementById(id), dst = document.getElementById(dstId);
-  if(el && dst && el.parentNode !== dst) dst.appendChild(el);
+  const dst = document.getElementById(dstId);
+  const src = document.getElementById('editorArea');
+  if(!dst || !src) return;
+  /* ⚠️ 探すのは「中央にある新しいもの」だけ。
+     　 document.getElementById だと、右へ移した古いものを拾ってしまうことがある。 */
+  const el = src.querySelector('#' + id);
+  if(!el) return;                       // 作り直されていない（タブを変えただけ）なら何もしない
+  /* ⚠️ 先に、右にある古いものを捨てる。捨てないと同じものが2つ並ぶ
+     　（2026-09-02 保存のボタンが2組出た）。 */
+  const old = dst.querySelector('#' + id);
+  if(old && old !== el) old.remove();
+  dst.appendChild(el);
 }
 /* ⚠️ 貼り付け位置を下げる仕組みは、すでに _fitRptSticky がある。
    同じものを二重に作らない（片方だけ直して食い違う）。 */
