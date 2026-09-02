@@ -1261,6 +1261,137 @@ async function loadCourseGarages(){
 /** いま選ばれているものを、選択肢の値に直す */
 /** つながっていないときの案内。⚠️ 黙って落とさず、必ず名指しで出す。
     3通りに分けて書く（どれも直し方が違うため）。 */
+/* 🔴 登校便 出勤 の内容を、他の3つの場面へ写す（2026-09-02 八重樫さん）
+
+   > 登校便出勤の情報をいれたものを登校便帰宅、下校便出勤、下校便帰宅に
+   > コピーする機能が欲しいです。当然帰宅時は行程が逆になりますが。
+   > 例えば登校便出勤と下校便帰宅は行程が反対なだけ、
+   > 登校便帰宅と下校便出勤も行程が反対なだけというパターンが非常に多いと思われます。
+
+   行程（区間）の向き
+     登校便 帰宅   反対（バスを降りた所 → 自宅）
+     下校便 出勤   同じ（自宅 → バスに乗る所）
+     下校便 帰宅   反対（バスを降りた所 → 自宅）
+
+   ⚠️ 場所は場面ごとに選べるものが違うので、そのまま写せない。
+      「登校便の第1ポイント」は、下校便 帰宅では「下校便の最終ポイント」に読み替える。
+      車庫・学校はどの場面にもあるのでそのまま写す。
+      ③添乗員送迎の場所は、その場面にも登録があるときだけ写す。
+      写せなかった場所は**空にせず、元のまま残す**（消してしまうほうが困る）。 */
+
+/** いま選ばれている場所が「どういう役どころ」かを見る */
+function _arrRole(c, leg, dir){
+  const s = (c.routes && c.routes[leg] && c.routes[leg][dir]) || {};
+  const k = String(c.course_id);
+  const kp = COURSE_KEYPT[k] || {}, gr = COURSE_GARAGE[k];
+  if(s['バス停id'] != null){
+    if(kp.first  && String(kp.first.id)  === String(s['バス停id'])) return { role:'first' };
+    if(kp.last   && String(kp.last.id)   === String(s['バス停id'])) return { role:'last' };
+    if(kp.school && String(kp.school.id) === String(s['バス停id'])) return { role:'school' };
+    return { role:'stop' };
+  }
+  if(s['場所id'] != null){
+    if(gr && String(gr.id) === String(s['場所id'])) return { role:'garage' };
+    return { role:'place', pid: Number(s['場所id']) };
+  }
+  return { role:'none' };
+}
+
+/** 役どころを、写し先の場面での選択肢に読み替える。写せなければ null */
+function _arrForSlot(c, r, leg, dir){
+  const k = String(c.course_id);
+  const kp = COURSE_KEYPT[k] || {}, gr = COURSE_GARAGE[k];
+  const ph = phaseOf(leg, dir);
+  if(r.role === 'garage' && gr)   return { 場所id: gr.id, 場所: gr.name };
+  if(r.role === 'school' && kp.school) return { バス停id: kp.school.id, 場所: kp.school.name };
+  if(r.role === 'first' || r.role === 'last'){
+    if(ph === '登校前' && kp.first) return { バス停id: kp.first.id, 場所: kp.first.name };
+    if(ph === '下校後' && kp.last)  return { バス停id: kp.last.id,  場所: kp.last.name };
+    return null;                                  // その場面にはポイントが出ない
+  }
+  if(r.role === 'place'){
+    const p = (COURSE_PLACES[k] || []).find(x => String(x.id) === String(r.pid)
+                && (x.uses||[]).some(u => u.phase === ph));
+    return p ? { 場所id: p.id, 場所: p.name } : null;
+  }
+  return null;
+}
+
+/** 行程（区間）を反対にする */
+function _revSegs(segs){
+  return (segs || []).slice().reverse().map(x => ({
+    '手段': x['手段'] || '', '乗車': x['下車'] || '', '下車': x['乗車'] || '',
+    '運賃': Number(x['運賃']) || 0
+  }));
+}
+
+async function copyToukouToAll(ci){
+  const c = model.courses[ci];
+  const src = c.routes['登校']['出勤'];
+  if(!((src['場所']||'').trim()) && !(src['区間']||[]).length){
+    alert('「登校便 出勤」にまだ何も入っていません。先にこちらを入れてください。'); return;
+  }
+  const targets = [
+    { leg:'登校', dir:'帰宅', rev:true,  name:'登校便 帰宅' },
+    { leg:'下校', dir:'出勤', rev:false, name:'下校便 出勤' },
+    { leg:'下校', dir:'帰宅', rev:true,  name:'下校便 帰宅' }
+  ];
+  const used = targets.filter(t => {
+    const d = c.routes[t.leg][t.dir];
+    return (d['場所']||'').trim() || (d['区間']||[]).length;
+  });
+  if(used.length && !confirm(
+      `「登校便 出勤」の内容を、他の3つに写します。\n\n`
+    + `すでに入っている ${used.map(t=>t.name).join('・')} は上書きされます。\n\n`
+    + `よろしいですか。`)) return;
+
+  const r = _arrRole(c, '登校', '出勤');
+  const notSet = [];
+  targets.forEach(t => {
+    const d = c.routes[t.leg][t.dir];
+    d['手段']     = src['手段'] || '';
+    d['交通費']   = Number(src['交通費']) || 0;
+    d['移動時間'] = src['移動時間'] || '';
+    d['区間']     = t.rev ? _revSegs(src['区間']) : (src['区間']||[]).map(x => ({ ...x }));
+    const a = _arrForSlot(c, r, t.leg, t.dir);
+    if(a){
+      d['場所'] = a['場所'];
+      if(a['場所id'] != null){ d['場所id'] = a['場所id']; delete d['バス停id']; }
+      else { d['バス停id'] = a['バス停id']; delete d['場所id']; }
+    }else{
+      notSet.push(t.name);                        /* ⚠️ 場所は元のまま残す。消さない */
+    }
+  });
+  render();
+  _copyMsg = notSet.length
+    ? `行程を写しました。⚠️ <b>${escHtml(notSet.join('・'))}</b> の「バスに乗る・降りる場所」は、`
+      + `その場面では同じものが選べないので<b>写していません</b>。それぞれで選んでください。`
+    : '行程と場所を、他の3つに写しました。内容を確かめて保存してください。';
+  render();
+}
+let _copyMsg = '';
+
+/** 「写す」ボタンと、写したあとの知らせ */
+function copyBarHtml(ci, slot){
+  let h = '';
+  if(slot.leg === '登校' && slot.dir === '出勤'){
+    h += '<div style="margin:2px 0 8px;">'
+       + '<button class="mini" onclick="copyToukouToAll(' + ci + ')" title="帰宅の行程は自動で反対にします">'
+       + '📋 この内容を他の3つに写す</button>'
+       + '<span class="muted" style="font-size:12px;margin-left:6px;">'
+       + '登校便 帰宅・下校便 出勤・下校便 帰宅へ。<b>帰宅の行程は反対向きにします</b></span>'
+       + '</div>';
+  }
+  if(_copyMsg){
+    h += '<div style="background:#f4faf6;border:1px solid #cfe0d6;border-radius:8px;padding:8px 10px;'
+       + 'margin:0 0 8px;font-size:12.5px;line-height:1.75;color:#1d5c3f;">'
+       + _copyMsg
+       + '<button class="link" style="margin-left:8px;" onclick="closeCopyMsg()">閉じる</button></div>';
+  }
+  return h;
+}
+function closeCopyMsg(){ _copyMsg = ''; render(); }
+
 function arriveLostMsg(c, name){
   const cs = COURSES.find(x => String(x.id) === String(c.course_id));
   const school = cs ? (cs.school_name || '') : '';
@@ -1426,6 +1557,7 @@ function courseCardHtml(c, ci){
       <button class="link" onclick="delCourse(${ci})">コース削除</button>
     </div>
     <div class="tabs">${tabs.join('')}</div>
+    ${copyBarHtml(ci, slot)}
     <div style="background:#f6faf7;border:1px solid #e2ede6;border-radius:10px;padding:12px;margin:6px 0 12px;">
       <div style="display:flex;flex-wrap:wrap;gap:14px;">
         <div style="flex:1;min-width:230px;">
