@@ -1223,10 +1223,14 @@ function _nextApril(){ const d=new Date(); const y=d.getFullYear(); const ny=(d.
 // 編集タブ（主要・登校便／下校便／添乗員送迎）。再描画せず表示切替＝入力途中も保持・軽快
 function _tabBtn(k,label){ const on=(selTab===k); return `<button id="tabbtn-${k}" onclick="setTab('${k}')" style="border:1px solid ${on?'#4d7a5e':'#cfe0d5'};background:${on?'#4d7a5e':'#eef4ef'};color:${on?'#fff':'#2d4a38'};padding:7px 13px;border-radius:9px 9px 0 0;cursor:pointer;font-size:13px;font-weight:${on?'700':'500'};font-family:inherit;">${label}</button>`; }
 function setTab(t){ selTab=t; ['main','gekou','tensou','keiro'].forEach(k=>{ const el=document.getElementById('tab-'+k); if(el) el.style.display=(k===t?'':'none'); const b=document.getElementById('tabbtn-'+k); if(b){ const on=(k===t); b.style.background=on?'#4d7a5e':'#eef4ef'; b.style.color=on?'#fff':'#2d4a38'; b.style.borderColor=on?'#4d7a5e':'#cfe0d5'; b.style.fontWeight=on?'700':'500'; } });
-  // ④経路タブでは上の見出しの固定をやめ、作業する場所を広く取る
-  const hd=document.getElementById('stickyHead');
-  if(hd) hd.style.position = (t==='keiro' ? 'static' : 'sticky');
+  /* 🔴 ④でも見出しを貼り付けたままにする（2026-09-02 八重樫さん）。
+     > どの画面でも学校名コース名はスクロールしても表示されるようにしてもらいたい
+     ⚠️ ここで position を static に戻していたのが「④だけ帯が流れる」の正体だった。
+        入れ物の高さではなく、コードが意図的に外していた。 */
   _fitRptSticky();
+  /* ⚠️ タブを変えたら右の枠も作り直す。作り直さないと、
+     　 前のタブの数がそのまま残って嘘になる。 */
+  if(typeof renderSide === 'function') renderSide();
 }
 
 /* 🔴 保存したら見るだけに戻す（2026-08-27 八重樫さん）
