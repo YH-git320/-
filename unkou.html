@@ -1213,8 +1213,8 @@ function _refDeparture(){
   for(const f of forms){ for(const t of (f.gekou_departures||[])){ if(t) return t; } }
   return '';
 }
-async function selectCourse(id){ undoClear(); selCourseId = id; loadFormUsage(id); selVerId = currentVerId(id); _nvOpen=false; rptSelIdx=null; rptPick={}; _editMode=null; _fixReason=''; _impact=null; _loadImpact().then(_renderEditBar); if(selVerId) await loadVersionInto(id, selVerId); selRefD = _refDeparture() || '14:00'; renderCourseList(); renderEditor(); }
-async function changeVersion(verId){ undoClear(); selVerId = Number(verId); _editMode=null; _fixReason=''; _impact=null; await loadVersionInto(selCourseId, selVerId); selRefD = _refDeparture() || '14:00'; renderEditor(); _loadImpact().then(_renderEditBar); }
+async function selectCourse(id){ undoClear(); _editOpen=false; selCourseId = id; loadFormUsage(id); selVerId = currentVerId(id); _nvOpen=false; rptSelIdx=null; rptPick={}; _editMode=null; _fixReason=''; _impact=null; _loadImpact().then(_renderEditBar); if(selVerId) await loadVersionInto(id, selVerId); selRefD = _refDeparture() || '14:00'; renderCourseList(); renderEditor(); }
+async function changeVersion(verId){ undoClear(); _editOpen=false; selVerId = Number(verId); _editMode=null; _fixReason=''; _impact=null; await loadVersionInto(selCourseId, selVerId); selRefD = _refDeparture() || '14:00'; renderEditor(); _loadImpact().then(_renderEditBar); }
 function _nextApril(){ const d=new Date(); const y=d.getFullYear(); const ny=(d.getMonth()+1>=4)?y+1:y; return ny+'-04-01'; }
 // 編集タブ（主要・登校便／下校便／添乗員送迎）。再描画せず表示切替＝入力途中も保持・軽快
 function _tabBtn(k,label){ const on=(selTab===k); return `<button id="tabbtn-${k}" onclick="setTab('${k}')" style="border:1px solid ${on?'#4d7a5e':'#cfe0d5'};background:${on?'#4d7a5e':'#eef4ef'};color:${on?'#fff':'#2d4a38'};padding:7px 13px;border-radius:9px 9px 0 0;cursor:pointer;font-size:13px;font-weight:${on?'700':'500'};font-family:inherit;">${label}</button>`; }
@@ -1244,7 +1244,8 @@ function setTab(t){ selTab=t; ['main','gekou','tensou','keiro'].forEach(k=>{ con
    ⚠️ 道は2つに分ける。途中の確認画面は読み飛ばされる。
       📅 ○月○日から変える … 決まりが変わった。新しい版を作る。過去は残る
       ✏️ 訂正する          … 入力の間違い。いまの版の中身が変わる。理由が要る */
-let _editMode = null;   // null=見るだけ ／ 'fix'=訂正中 ／ 'new'=新しい版を作った直後
+let _editMode = null;
+let _editOpen = false;   /* 下の枠を開いているか（2026-09-03） */   // null=見るだけ ／ 'fix'=訂正中 ／ 'new'=新しい版を作った直後
 let _fixReason = '';
 let _impact = null;     // いまの版が前提になっている便・配置の件数
 
@@ -1338,14 +1339,14 @@ async function startFix(){
   if(reason === null) return;
   if(!reason.trim()){ _saveMsg('訂正の理由を書いてください（あとから見て分かるように）', false); return; }
   _fixReason = reason.trim();
-  _editMode = 'fix';
+  _editMode = 'fix'; _editOpen = true;
   renderEditor();
   _saveMsg('✏️ 訂正できる状態にしました。直したら保存してください。', true);
 }
 
 function cancelEdit(){
   if(!confirm('編集をやめます。\n\n保存していない変更は失われます。よろしいですか。')) return;
-  _editMode = null; _fixReason = '';
+  _editMode = null; _fixReason = ''; _editOpen = false;
   if(selCourseId && selVerId){ loadVersionInto(selCourseId, selVerId).then(()=>renderEditor()); }
   else renderEditor();
 }
@@ -1377,10 +1378,15 @@ function renderVersionBar(c){
       <div class="line" style="gap:6px;margin-top:6px;"><button class="primary" onclick="createVersion()">この内容で新版を作成</button><button class="mini" onclick="_nvOpen=false;renderEditor()">やめる</button></div>
       <div class="muted" style="font-size:11px;margin-top:4px;">選んだ版の路線・日課を複製し、新しい適用開始日で作ります。旧版はそのまま残ります（過去に干渉しません）。</div>
     </div>` : '';
-  return `<div class="line" style="margin:4px 0 12px;flex-wrap:wrap;gap:8px;align-items:center;">
-      <span class="muted" style="font-size:12px;">版（適用開始日）</span><select onchange="changeVersion(this.value)" style="font-size:12px;">${opts}</select>
+  /* 🔴 版の枠を1行にする（2026-09-03 八重樫さん）。
+     ⚠️ ラベル「版（適用開始日）」と長いボタン名で2行ぶん使っていた。
+        選ぶ欄そのものと注意書きは残す。コピー作成は 📋 の小さなボタンに。 */
+  return `<div class="line" style="margin:2px 0 6px;flex-wrap:wrap;gap:6px;align-items:center;">
+      <select onchange="changeVersion(this.value)" style="font-size:12px;flex:1;min-width:180px;max-width:420px;"
+        title="版（適用開始日）">${opts}</select>
       ${warn}
-      <button class="mini" onclick="_nvOpen=!_nvOpen;renderEditor()">📋 前年度／別コースからコピーして新版を作成</button>
+      <button class="mini" title="前年度／別コースからコピーして新版を作成"
+        onclick="_nvOpen=!_nvOpen;renderEditor()">📋 新版</button>
     </div>${panel}`;
 }
 
@@ -1462,7 +1468,7 @@ async function deleteVersion(){
     const d=JSON.parse(txt);
     await loadVersions();
     selVerId = currentVerId(c.id);
-    _editMode=null; _fixReason=''; _impact=null;
+    _editMode=null; _fixReason=''; _impact=null; _editOpen=false;
     if(selVerId) await loadVersionInto(c.id, selVerId);
     selRefD=_refDeparture()||'14:00';
     renderEditor(); _loadImpact().then(_renderEditBar);
@@ -1552,7 +1558,7 @@ async function createVersion(){
 
     await loadVersions(); selVerId=newId; await loadVersionInto(c.id, newId);
     _nvOpen=false; selRefD=_refDeparture()||'14:00';
-    _editMode='new'; _fixReason=''; _impact=null;   /* 作った直後はそのまま編集できる */
+    _editMode='new'; _fixReason=''; _impact=null; _editOpen=true;   /* 作った直後はそのまま編集できる */
     renderEditor(); _loadImpact().then(_renderEditBar);
     _saveMsg(`✅ ${vf} からの版を作りました`
       + `（日課 ${d.forms||0}・バス停 ${d.stops||0}・④ルート詳細 ${d.route_points||0} を写しました）。`
@@ -1837,8 +1843,17 @@ function renderEditor(){
       ${renderRoutePoints()}
     </div>
 
-    <div style="position:sticky;bottom:0;background:#fff;padding:10px 0 2px;margin-top:12px;border-top:1px solid #e2ede6;">
-      <div id="editBar"></div>
+    <!-- 🔴 下の枠は、ふだんは1行にたたむ（2026-09-03 八重樫さん）。
+         ⚠️ 161px を使っていた。編集していないときは「✏️ この版を直す」だけ出し、
+            押すと2つのボタンと説明が開く。編集中は開いたまま（保存を隠さない）。 -->
+    <div style="position:sticky;bottom:0;background:#fff;padding:6px 0 2px;margin-top:10px;border-top:1px solid #e2ede6;">
+      ${(_editMode === null && !_editOpen)
+        ? `<div class="line" style="gap:8px;align-items:center;">
+            <button class="mini" onclick="_editOpen=true;renderEditor()">✏️ この版を直す</button>
+            <span class="muted" style="font-size:11.5px;">${_impact ? `この改正は ${escHtml(String(_impact.valid_from||'—'))} から使われています（便 ${_impact.duties||0}件・配置 ${_impact.crew||0}件）` : ''}</span>
+          </div>`
+        : ''}
+      <div id="editBar" style="display:${(_editMode === null && !_editOpen) ? 'none' : ''};"></div>
       <div id="editSaveMsg" style="text-align:center;margin-top:8px;font-weight:600;min-height:20px;"></div></div>
   </div>`;
   _renderEditBar();
@@ -3597,10 +3612,6 @@ function renderRoutePoints(){
     ${copyRow}
     ${legNote}
     ${helpBox}
-    ${valid>=2?`<div style="background:#f6faf7;border:1px solid #e2ede6;border-radius:8px;padding:9px 12px;margin-bottom:8px;">
-      <span style="font-size:13px;color:#2d4a38;font-weight:700;">直線距離の積み上げ　${dist.total.toFixed(2)} km</span>
-      <div class="muted" style="font-size:12px;margin-top:4px;">地点が疎らな区間があると、実際の道のりより短く出ます。曲がり角ごとに地点を足すほど実際に近づきます。</div>
-    </div>`:''}
     ${orderWarn.length?`<div style="background:#fff8e8;border:1px solid #e8d9b0;border-radius:8px;padding:9px 12px;margin-bottom:8px;">
       <div style="font-size:13px;color:#8a6d1a;font-weight:700;margin-bottom:4px;">⚠️ 並び順が逆になっていませんか</div>
       <div style="font-size:12px;color:#8a6d1a;line-height:1.8;">
@@ -4010,7 +4021,7 @@ async function saveCourse(){
           body: JSON.stringify({ p_course_id:c.id, p_version_id:selVerId, p_reason:_fixReason }) });
       }catch(e){ /* 記録できなくても保存は止めない */ }
     }
-    _editMode = null; _fixReason = '';   /* 保存したら、また見るだけに戻す */
+    _editMode = null; _fixReason = ''; _editOpen = false;   /* 保存したら、また見るだけに戻す */
     /* ⚠️ 画面の作り直しはこの数行前に済んでいる。ここで鍵をかけ直さないと、
        保存したのに編集できたままになる（2026-08-27 実装中に気づいた） */
     _renderEditBar(); _applyLock(); _loadImpact().then(_renderEditBar);
