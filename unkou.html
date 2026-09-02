@@ -70,7 +70,15 @@ button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
   </div>
 
   <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;">
-    <div id="courseListArea" class="panel" style="flex:0 0 290px;max-height:72vh;overflow:auto;"></div>
+    <!-- 🔴 左の一覧は画面に貼り付ける（2026-09-02 八重樫さん）。
+         > コースを選ぶときにスクロールして選べばそのコースが色を付けて表示される。
+         > その後編集画面をスクロールしたときに消えないで表示されていれば
+         > 今選んだコースの表示が残ります
+         ⚠️ 一覧の中身は、この枠の中だけでスクロールする。
+            編集画面をどれだけスクロールしても、選んだ行は見えたまま。 -->
+    <div id="courseListArea" class="panel"
+         style="flex:0 0 290px;align-self:flex-start;position:sticky;top:8px;
+                max-height:calc(100vh - 24px);overflow:auto;"></div>
     <div id="editorArea" style="flex:1;min-width:300px;"></div>
   </div>
 </main>
@@ -1178,20 +1186,7 @@ function renderCourseList(){
   const activeOnly = document.getElementById('activeOnly').checked;
   const list = COURSES.filter(c => (!activeOnly || c.active) && (!q || courseLabel(c).indexOf(q)!==-1));
   if (!list.length){ area.innerHTML = '<p class="muted">該当コースなし</p>'; return; }
-  /* 🔴 いま開いているコースを、一覧の上に固定して出す（2026-09-02 八重樫さん）。
-     > 左のコースの表示ですが、選択したコースが固定されて表示できるようにしてもらえますか
-     ⚠️ 一覧を下までスクロールすると、どのコースを開いているか分からなくなる。
-        一覧の行を動かすのではなく、**別の帯を1つ作って**その中に名前を書く。
-        （行そのものを動かす作りは、今日それで何度も壊した） */
-  const _cur = COURSES.find(x => String(x.id) === String(selCourseId));
-  const _curBar = _cur
-    ? '<div style="position:sticky;top:0;z-index:3;background:#eef4ef;border:1px solid #cfe0d5;'
-      + 'border-radius:8px;padding:7px 8px;margin:0 0 8px;">'
-      + '<div style="font-size:11px;color:#6b7d72;">いま開いているコース</div>'
-      + '<div style="font-size:13px;font-weight:700;color:#2d4a38;line-height:1.5;">'
-      + escHtml(courseLabel(_cur)) + '</div></div>'
-    : '';
-  area.innerHTML = _curBar + list.map(c=>{
+  area.innerHTML = list.map(c=>{
     const on = String(c.id)===String(selCourseId);
     return `<div onclick="selectCourse(${c.id})" style="padding:8px 6px;border-radius:8px;cursor:pointer;margin-bottom:2px;${on?'background:#eef4ef;border:1px solid #cfe0d5;':'border:1px solid transparent;'}">
       <div style="font-size:13px;font-weight:${on?'700':'500'};color:#2d4a38;">${escHtml(courseLabel(c))}</div>
