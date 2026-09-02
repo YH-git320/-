@@ -3621,7 +3621,8 @@ function renderRoutePoints(){
           : ''}
       ${diffBox}
       ${legRowMain}
-      <div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+      <!-- ⚠️ 折り返すと 31px が 62px になる（2026-09-03 実測）。横に流して1行に収める -->
+      <div style="display:flex;gap:6px;margin-bottom:8px;align-items:center;overflow-x:auto;white-space:nowrap;padding-bottom:2px;">
         ${_isKaisou(selRSeg) ? '' : '<button class="mini" onclick="rptFillFromStops()" title="バス停一覧の並びから、この便の地点を作り直します（曲がり角の目印は消えます）">バス停一覧から並びを作る</button>'}
         <button class="mini" id="rptAddBtn" onclick="rptAdd()">${_rptAddLabel()}</button>
         ${(lock.from||lock.to)?`<span class="muted" style="font-size:12px;cursor:help"
