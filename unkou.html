@@ -1942,6 +1942,152 @@ function resetGekouOrder(){
 
 // ⑤ 添乗員の送迎シナリオ（人・日付は入れない）。登校用／下校用を別々に複数持てる＝途中交代に対応。
 function _scenList(){ return SCEN[String(selCourseId)] = SCEN[String(selCourseId)] || []; }
+/* 🔴 ③添乗員送迎の場所を、他の送迎から写す（2026-09-02 岩﨑さん → 八重樫さん）
+
+   > 同じように③添乗員送迎でも出来ないかという事です。
+   > 登校便の勤務前乗車場所と下校便の勤務後降車場所、
+   > 登校便の勤務後降車場所と下校便の勤務前乗車場所、あるいは全場所、
+   > 多くの場合で同じはずだという事です。
+   > 行き方面帰り方面位置は微妙な調整をするだけで良いので
+   > その他の名前や位置は一回で写すように出来ないでしょうか。
+
+   写す先の組み合わせ
+     同じ区分どうし    前 → 前 ／ 後 → 後   （同じ道すじの別パターン）
+     区分をまたぐとき  登校前 ↔ 下校後 ／ 登校後 ↔ 下校前
+
+   ⚠️ 写すのは **場所名・住所・座標** だけ。**時刻は写さない**。
+      乗車時刻（登校）と「下校便出発の◯分前」（下校）は持ち方そのものが違い、
+      岩﨑さんの言われる「微妙な調整」がまさにそこだから。
+   ⚠️ 乗車／降車は**写し先の局面で決める**（前＝乗車、後＝降車）。
+      源の種別をそのまま持ってくると、降車の場所が乗車として入ってしまう。 */
+
+/** 局面が「前」か */
+function _isMae(ph){ return ph === '登校前' || ph === '下校前'; }
+
+/** 源の局面 → 写し先の局面（同じ区分なら同じ側、またぐなら反対側） */
+function _scenDstPhase(srcSeg, srcPh, dstSeg){
+  const mae = _isMae(srcPh);
+  const same = (srcSeg === dstSeg);
+  const toMae = same ? mae : !mae;
+  return dstSeg + (toMae ? '前' : '後');
+}
+
+/** その局面へ写せる源の一覧 */
+function _scenSrcOpts(dstSi, dstPh){
+  const list = _scenList();
+  const dst = list[dstSi];
+  const out = [];
+  list.forEach(function(s, si){
+    if(si === dstSi) return;
+    (SEG_PHASES[s.segment] || []).forEach(function(ph){
+      const n = (s.pts || []).filter(function(r){ return r.phase === ph && (r.name || r.address || r.coord); }).length;
+      if(!n) return;
+      if(_scenDstPhase(s.segment, ph, dst.segment) !== dstPh) return;
+      const nm = (s.label || '').trim() || '(名前なし)';
+      out.push({ v: si + '|' + ph, t: s.segment + '「' + nm + '」' + ph + '（' + n + '件）' });
+    });
+  });
+  return out;
+}
+
+/** その局面へ写す */
+function scenCopyFrom(dstSi, dstPh, val){
+  if(!val) return;
+  const parts = String(val).split('|');
+  const srcSi = Number(parts[0]), srcPh = parts[1];
+  const list = _scenList();
+  const src = list[srcSi], dst = list[dstSi];
+  if(!src || !dst) return;
+  const rows = (src.pts || []).filter(function(r){ return r.phase === srcPh && (r.name || r.address || r.coord); });
+  if(!rows.length){ alert('写せる場所がありません。'); renderEditor(); return; }
+  const cur = (dst.pts || []).filter(function(r){ return r.phase === dstPh; });
+  const kind = _isMae(dstPh) ? '乗車' : '降車';
+  const msg = srcPh + ' の場所 ' + rows.length + '件 を「' + dstPh + '」へ ' + kind + ' として写します。\n\n'
+    + (cur.length ? 'いま「' + dstPh + '」に入っている ' + cur.length + '件 は消えます。\n\n' : '')
+    + '⚠️ 時刻は写しません。写したあとで入れてください。\n\n'
+    + 'よろしいですか。';
+  if(!confirm(msg)) { renderEditor(); return; }
+  dst.pts = (dst.pts || []).filter(function(r){ return r.phase !== dstPh; });
+  rows.forEach(function(r){
+    dst.pts.push({ phase: dstPh, kind: kind,
+      name: r.name || '', address: r.address || '', coord: r.coord || '',
+      bus_time: '', time_lead: null });   /* ⚠️ 時刻は写さない */
+  });
+  renderEditor();
+  status(srcPh + ' から ' + dstPh + ' へ ' + rows.length + '件 写しました。⚠️ 時刻は入っていません。保存前に確かめてください。', true);
+}
+
+/** 送迎まるごと写す（2つの局面を一度に） */
+function _scenWholeOpts(dstSi){
+  const list = _scenList();
+  const out = [];
+  list.forEach(function(s, si){
+    if(si === dstSi) return;
+    const n = (s.pts || []).filter(function(r){ return r.name || r.address || r.coord; }).length;
+    if(!n) return;
+    const nm = (s.label || '').trim() || '(名前なし)';
+    out.push({ v: String(si), t: s.segment + '「' + nm + '」（全' + n + '件）' });
+  });
+  return out;
+}
+function scenCopyWhole(dstSi, val){
+  if(!val) return;
+  const list = _scenList();
+  const src = list[Number(val)], dst = list[dstSi];
+  if(!src || !dst) return;
+  const plan = [];
+  (SEG_PHASES[src.segment] || []).forEach(function(ph){
+    const rows = (src.pts || []).filter(function(r){ return r.phase === ph && (r.name || r.address || r.coord); });
+    if(!rows.length) return;
+    plan.push({ srcPh: ph, dstPh: _scenDstPhase(src.segment, ph, dst.segment), rows: rows });
+  });
+  if(!plan.length){ alert('写せる場所がありません。'); renderEditor(); return; }
+  const cur = (dst.pts || []).filter(function(r){ return r.name || r.address || r.coord; }).length;
+  const msg = '「' + ((src.label||'').trim() || '(名前なし)') + '」の場所を、この送迎へ写します。\n\n'
+    + plan.map(function(p){ return '　' + p.srcPh + ' → ' + p.dstPh + '　' + p.rows.length + '件'; }).join('\n') + '\n\n'
+    + (cur ? 'いまこの送迎に入っている ' + cur + '件 は消えます。\n\n' : '')
+    + '⚠️ 時刻は写しません。写したあとで入れてください。\n\n'
+    + 'よろしいですか。';
+  if(!confirm(msg)) { renderEditor(); return; }
+  const keep = plan.map(function(p){ return p.dstPh; });
+  dst.pts = (dst.pts || []).filter(function(r){ return keep.indexOf(r.phase) < 0; });
+  let total = 0;
+  plan.forEach(function(p){
+    const kind = _isMae(p.dstPh) ? '乗車' : '降車';
+    p.rows.forEach(function(r){
+      dst.pts.push({ phase: p.dstPh, kind: kind,
+        name: r.name || '', address: r.address || '', coord: r.coord || '',
+        bus_time: '', time_lead: null });
+      total++;
+    });
+  });
+  renderEditor();
+  status('場所を ' + total + '件 写しました。⚠️ 時刻は入っていません。保存前に確かめてください。', true);
+}
+
+/** 局面の見出しに出す「他の送迎から写す」 */
+function scenCopyPhaseHtml(si, ph){
+  const opts = _scenSrcOpts(si, ph);
+  if(!opts.length) return '';
+  return '<select style="width:auto;max-width:260px;margin-left:8px;font-size:12px;"'
+    + ' title="場所名・住所・座標だけを写します。時刻は写しません"'
+    + ' onchange="scenCopyFrom(' + si + ',&quot;' + ph + '&quot;,this.value)">'
+    + '<option value="">📋 他の送迎から写す…</option>'
+    + opts.map(function(o){ return '<option value="' + escAttr(o.v) + '">' + escHtml(o.t) + '</option>'; }).join('')
+    + '</select>';
+}
+/** 送迎の見出しに出す「まるごと写す」 */
+function scenCopyWholeHtml(si){
+  const opts = _scenWholeOpts(si);
+  if(!opts.length) return '';
+  return '<select style="width:auto;max-width:260px;font-size:12px;"'
+    + ' title="2つの局面をまとめて写します。時刻は写しません"'
+    + ' onchange="scenCopyWhole(' + si + ',this.value)">'
+    + '<option value="">📋 他の送迎から全部写す…</option>'
+    + opts.map(function(o){ return '<option value="' + escAttr(o.v) + '">' + escHtml(o.t) + '</option>'; }).join('')
+    + '</select>';
+}
+
 function renderScenarios(){
   const list = _scenList();
   const seg = (segKey)=>{
@@ -1961,6 +2107,7 @@ function scenarioCard(s, si){
     <div class="line" style="margin-bottom:6px;flex-wrap:wrap;">
       <span style="font-weight:700;color:#2d4a38;">${s.segment}シナリオ</span>
       <input type="text" value="${escAttr(s.label)}" placeholder="名前(任意 例：2名乗車)" oninput="scenUpd(${si},'label',this.value)" style="flex:1;min-width:120px;max-width:240px;">
+      ${scenCopyWholeHtml(si)}
       <button class="link" style="margin-left:auto;" onclick="scenDel(${si})">このシナリオを削除</button>
     </div>
     ${phaseHtml}
@@ -2014,7 +2161,7 @@ function renderScenPhase(si, s, ph){
     </div>`;
   }).join('') || '<span class="muted" style="font-size:11px;">場所なし</span>';
   return `<div style="margin:4px 0 8px;padding:6px 8px;border-left:3px solid #cfe0d5;">
-    <div class="line" style="margin-bottom:4px;flex-wrap:wrap;align-items:center;gap:4px;"><span style="font-weight:600;color:#2d4a38;">${ph}</span>${hasSet?setHtml:''}${copyBtn}</div>
+    <div class="line" style="margin-bottom:4px;flex-wrap:wrap;align-items:center;gap:4px;"><span style="font-weight:600;color:#2d4a38;">${ph}</span>${hasSet?setHtml:''}${copyBtn}${scenCopyPhaseHtml(si, ph)}</div>
     ${rows}
     <button class="mini" onclick="scenPtAdd(${si},'${ph}')">＋場所を追加</button>
   </div>`;
