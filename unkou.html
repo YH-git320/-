@@ -1690,11 +1690,18 @@ function renderSide(){
   if(!side) return;
   const c = _c();   /* ⚠️ 2026-09-02 _course() と書き間違えていた。関数名は _c */
   if(!c){ side.innerHTML = ''; return; }
+  /* ⚠️ 右の枠をまるごと作り直すと、ここへ移してある地図や保存のボタンまで一緒に消える
+     （2026-09-02 実際に消した）。入れ物は一度だけ作り、
+     入れ替えるのは「いまの作業」の中身だけにする。 */
+  if(!document.getElementById('sideNow')){
+    side.innerHTML =
+      '<div id="sideNow" class="panel" style="padding:11px 12px;margin-bottom:10px;"></div>'
+      + '<div id="sideMap" style="margin-bottom:10px;"></div>'
+      + '<div id="sideEdit"></div>';
+  }
   const a = _crumb();
-  side.innerHTML =
-    '<div>'
-    + '<div class="panel" style="padding:11px 12px;margin-bottom:10px;">'
-    + '<div style="font-size:11px;color:#8a9a90;margin-bottom:6px;">いまの作業</div>'
+  document.getElementById('sideNow').innerHTML =
+    '<div style="font-size:11px;color:#8a9a90;margin-bottom:6px;">いまの作業</div>'
     + a.map(function(x, i){
         const last = (i === a.length - 1);
         return '<div style="font-size:' + (last ? '14px' : '12.5px')
@@ -1702,22 +1709,20 @@ function renderSide(){
           + ';font-weight:' + (last ? '700' : '500')
           + ';padding-left:' + (i * 10) + 'px;line-height:1.9;">'
           + (i ? '<span style="color:#c3d3c8;">└ </span>' : '') + escHtml(x) + '</div>';
-      }).join('')
-    + '</div>'
-    + '<div id="sideMap" style="margin-bottom:10px;"></div>'
-    + '<div id="sideEdit"></div>'
-    + '</div>';
+      }).join('');
   /* ⚠️ 見出しは動かさない（2026-09-02）。
      画面を作り直すと見出しが新しく作られ、外へ動かした古いものが残って**二重に出る**。
      地図や保存のボタンは、右の枠を作り直してから移すので二重にならない。 */
   _moveTo('legBox',  'sideMap');
   _moveTo('legBox2', 'sideMap');
-  _moveTo('distBox', 'sideMap');
   _moveTo('editBar', 'sideEdit');
   _moveTo('editSaveMsg', 'sideEdit');
   /* ⚠️ 中身を抜いた帯が空のまま残ると、線だけの帯が居座る */
   const foot = document.getElementById('editFoot');
   if(foot) foot.style.display = 'none';
+  /* ⚠️ 地図は④のためのもの。他のタブでは隠す（残っていると別の便の道を見てしまう） */
+  const sm = document.getElementById('sideMap');
+  if(sm) sm.style.display = (selTab === 'keiro' ? '' : 'none');
   if(typeof _fitRptSticky === 'function') _fitRptSticky();
 }
 /** id の枠を、行き先の中へ動かす（無ければ何もしない） */
@@ -3629,10 +3634,6 @@ function renderRoutePoints(){
     ${copyRow}
     ${legNote}
     ${helpBox}
-    ${valid>=2?`<div id="distBox" class="panel" style="padding:9px 12px;margin:0 0 10px;">
-      <div style="font-size:13px;color:#2d4a38;font-weight:700;">直線距離の積み上げ　${dist.total.toFixed(2)} km</div>
-      <div class="muted" style="font-size:12px;line-height:1.8;margin-top:4px;">地点が疎らな区間があると、実際の道のりより短く出ます。曲がり角ごとに地点を足すほど実際に近づきます。</div>
-    </div>`:''}
     ${orderWarn.length?`<div style="background:#fff8e8;border:1px solid #e8d9b0;border-radius:8px;padding:9px 12px;margin-bottom:8px;">
       <div style="font-size:13px;color:#8a6d1a;font-weight:700;margin-bottom:4px;">⚠️ 並び順が逆になっていませんか</div>
       <div style="font-size:12px;color:#8a6d1a;line-height:1.8;">
