@@ -1325,63 +1325,96 @@ function _revSegs(segs){
   }));
 }
 
-async function copyToukouToAll(ci){
-  const c = model.courses[ci];
-  const src = c.routes['登校']['出勤'];
-  if(!((src['場所']||'').trim()) && !(src['区間']||[]).length){
-    alert('「登校便 出勤」にまだ何も入っていません。先にこちらを入れてください。'); return;
+/* 🔴 場面から場面へ写す（2026-09-02 八重樫さん）
+
+   > 他の３つに移すしか選択肢がないと使いづらいので追加で
+   > 例えば登校便出勤と下校便帰宅は行程が反対なだけ、
+   > 登校便帰宅と下校便出勤も行程が反対なだけというパターンが非常に多いと思われます。
+
+   行程の向きの決まり（これで、どの場面からどこへでも写せる）
+     出勤どうし・帰宅どうし   そのまま
+     出勤 ↔ 帰宅              反対
+
+   相手（いちばん多い組み合わせ）
+     登校便 出勤 ↔ 下校便 帰宅
+     登校便 帰宅 ↔ 下校便 出勤 */
+let _copyMsg = '';
+const SLOT_PAIR = { '登校|出勤':['下校','帰宅'], '下校|帰宅':['登校','出勤'],
+                    '登校|帰宅':['下校','出勤'], '下校|出勤':['登校','帰宅'] };
+function slotName(leg, dir){ return leg + '便 ' + dir; }
+
+/** 1つの場面へ写す。rev は行程を反対にするか */
+function _copyOne(c, srcLeg, srcDir, dstLeg, dstDir, role, notSet){
+  const src = c.routes[srcLeg][srcDir], d = c.routes[dstLeg][dstDir];
+  const rev = (srcDir !== dstDir);
+  d['手段']     = src['手段'] || '';
+  d['交通費']   = Number(src['交通費']) || 0;
+  d['移動時間'] = src['移動時間'] || '';
+  d['区間']     = rev ? _revSegs(src['区間']) : (src['区間']||[]).map(x => ({ ...x }));
+  const a = _arrForSlot(c, role, dstLeg, dstDir);
+  if(a){
+    d['場所'] = a['場所'];
+    if(a['場所id'] != null){ d['場所id'] = a['場所id']; delete d['バス停id']; }
+    else { d['バス停id'] = a['バス停id']; delete d['場所id']; }
+  }else{
+    notSet.push(slotName(dstLeg, dstDir));   /* ⚠️ 場所は元のまま残す。消さない */
   }
-  const targets = [
-    { leg:'登校', dir:'帰宅', rev:true,  name:'登校便 帰宅' },
-    { leg:'下校', dir:'出勤', rev:false, name:'下校便 出勤' },
-    { leg:'下校', dir:'帰宅', rev:true,  name:'下校便 帰宅' }
-  ];
-  const used = targets.filter(t => {
-    const d = c.routes[t.leg][t.dir];
-    return (d['場所']||'').trim() || (d['区間']||[]).length;
+}
+
+/** いまの場面から、選んだ相手へ写す。dsts は [[leg,dir],...] */
+function copySlots(ci, dsts){
+  const c = model.courses[ci]; const { leg, dir } = c._slot;
+  const src = c.routes[leg][dir];
+  if(!((src['場所']||'').trim()) && !(src['区間']||[]).length){
+    alert('「' + slotName(leg, dir) + '」にまだ何も入っていません。先にこちらを入れてください。');
+    return;
+  }
+  const used = dsts.filter(([l,d]) => {
+    const x = c.routes[l][d];
+    return (x['場所']||'').trim() || (x['区間']||[]).length;
   });
   if(used.length && !confirm(
-      `「登校便 出勤」の内容を、他の3つに写します。\n\n`
-    + `すでに入っている ${used.map(t=>t.name).join('・')} は上書きされます。\n\n`
-    + `よろしいですか。`)) return;
+      '「' + slotName(leg, dir) + '」の内容を写します。\n\n'
+    + 'すでに入っている ' + used.map(([l,d]) => slotName(l,d)).join('・') + ' は上書きされます。\n\n'
+    + 'よろしいですか。')) return;
 
-  const r = _arrRole(c, '登校', '出勤');
+  const role = _arrRole(c, leg, dir);
   const notSet = [];
-  targets.forEach(t => {
-    const d = c.routes[t.leg][t.dir];
-    d['手段']     = src['手段'] || '';
-    d['交通費']   = Number(src['交通費']) || 0;
-    d['移動時間'] = src['移動時間'] || '';
-    d['区間']     = t.rev ? _revSegs(src['区間']) : (src['区間']||[]).map(x => ({ ...x }));
-    const a = _arrForSlot(c, r, t.leg, t.dir);
-    if(a){
-      d['場所'] = a['場所'];
-      if(a['場所id'] != null){ d['場所id'] = a['場所id']; delete d['バス停id']; }
-      else { d['バス停id'] = a['バス停id']; delete d['場所id']; }
-    }else{
-      notSet.push(t.name);                        /* ⚠️ 場所は元のまま残す。消さない */
-    }
+  const revd = [], samed = [];
+  dsts.forEach(([l,d]) => {
+    _copyOne(c, leg, dir, l, d, role, notSet);
+    ((dir !== d) ? revd : samed).push(slotName(l,d));
   });
-  render();
-  _copyMsg = notSet.length
-    ? `行程を写しました。⚠️ <b>${escHtml(notSet.join('・'))}</b> の「バスに乗る・降りる場所」は、`
-      + `その場面では同じものが選べないので<b>写していません</b>。それぞれで選んでください。`
-    : '行程と場所を、他の3つに写しました。内容を確かめて保存してください。';
+  _copyMsg = '「' + escHtml(slotName(leg,dir)) + '」を写しました。'
+    + (revd.length  ? '<br>・<b>' + escHtml(revd.join('・'))  + '</b>　行程を<b>反対</b>にしました' : '')
+    + (samed.length ? '<br>・<b>' + escHtml(samed.join('・')) + '</b>　行程は<b>そのまま</b>です' : '')
+    + (notSet.length
+        ? '<br>⚠️ <b>' + escHtml(notSet.join('・')) + '</b> の「バスに乗る・降りる場所」は、'
+          + 'その場面では同じものが選べないので<b>写していません</b>（元のまま残しています）。それぞれで選んでください。'
+        : '')
+    + '<br><span style="color:#6f8078;">まだ保存していません。内容を確かめて「保存する」を押してください。</span>';
   render();
 }
-let _copyMsg = '';
+function copyToPair(ci){
+  const c = model.courses[ci]; const { leg, dir } = c._slot;
+  copySlots(ci, [ SLOT_PAIR[leg + '|' + dir] ]);
+}
+function copyToOthers(ci){
+  const c = model.courses[ci]; const { leg, dir } = c._slot;
+  const all = [['登校','出勤'],['登校','帰宅'],['下校','出勤'],['下校','帰宅']];
+  copySlots(ci, all.filter(([l,d]) => !(l === leg && d === dir)));
+}
 
 /** 「写す」ボタンと、写したあとの知らせ */
 function copyBarHtml(ci, slot){
-  let h = '';
-  if(slot.leg === '登校' && slot.dir === '出勤'){
-    h += '<div style="margin:2px 0 8px;">'
-       + '<button class="mini" onclick="copyToukouToAll(' + ci + ')" title="帰宅の行程は自動で反対にします">'
-       + '📋 この内容を他の3つに写す</button>'
-       + '<span class="muted" style="font-size:12px;margin-left:6px;">'
-       + '登校便 帰宅・下校便 出勤・下校便 帰宅へ。<b>帰宅の行程は反対向きにします</b></span>'
-       + '</div>';
-  }
+  const pr = SLOT_PAIR[slot.leg + '|' + slot.dir];
+  let h = '<div style="margin:2px 0 8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'
+    + '<button class="mini" onclick="copyToPair(' + ci + ')" title="行程を反対にして写します">'
+    + '📋 ' + slotName(pr[0], pr[1]) + ' へ写す</button>'
+    + '<button class="mini" onclick="copyToOthers(' + ci + ')" title="出勤↔帰宅は行程を反対にします">'
+    + '📋 他の3つへ写す</button>'
+    + '<span class="muted" style="font-size:12px;">出勤どうし・帰宅どうしは<b>そのまま</b>、'
+    + '出勤↔帰宅は<b>行程を反対</b>にします</span></div>';
   if(_copyMsg){
     h += '<div style="background:#f4faf6;border:1px solid #cfe0d6;border-radius:8px;padding:8px 10px;'
        + 'margin:0 0 8px;font-size:12.5px;line-height:1.75;color:#1d5c3f;">'
@@ -1391,6 +1424,7 @@ function copyBarHtml(ci, slot){
   return h;
 }
 function closeCopyMsg(){ _copyMsg = ''; render(); }
+
 
 function arriveLostMsg(c, name){
   const cs = COURSES.find(x => String(x.id) === String(c.course_id));
