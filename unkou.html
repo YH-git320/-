@@ -1385,7 +1385,7 @@ function renderVersionBar(c){
   /* 🔴 版の枠を1行にする（2026-09-03 八重樫さん）。
      ⚠️ ラベル「版（適用開始日）」と長いボタン名で2行ぶん使っていた。
         選ぶ欄そのものと注意書きは残す。コピー作成は 📋 の小さなボタンに。 */
-  return `<div class="line" style="margin:2px 0 6px;flex-wrap:wrap;gap:6px;align-items:center;">
+  return `<div class="line" style="margin:0;flex-wrap:wrap;gap:6px;align-items:center;">
       <select onchange="changeVersion(this.value)" style="font-size:12px;flex:0 1 auto;width:auto;max-width:340px;"
         title="版（適用開始日）">${opts}</select>
       ${warn}
@@ -1791,8 +1791,13 @@ function renderEditor(){
         <div class="courseTitle">${escHtml(courseLabel(c))}</div>
         <button class="${c.active?'':'primary'}" onclick="toggleActive()">${c.active?'✅ 有効（クリックで廃止）':'🚫 廃止中（クリックで有効）'}</button>
       </div>
-      ${renderVersionBar(c)}
-      <div class="line" style="gap:4px;margin:2px 0 -1px;flex-wrap:wrap;align-items:center;">${_tabBtn('main','① 主要情報・登校便')}${_tabBtn('gekou','② 下校便')}${_tabBtn('tensou','③ 添乗員送迎')}${_tabBtn('keiro','④ ルート詳細')}${undoBtnHtml()}</div>
+      <!-- 🔴 版の行とタブの行を、広い画面では1行にまとめる（2026-09-03 八重樫さん）。
+           ⚠️ 狭い画面では折り返して逆に太るので、そのときは今までどおり2行に戻す
+              （flex-wrap:wrap なので、入らなければ自然に折り返る）。 -->
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:2px 0 -1px;">
+        <div style="flex:0 1 auto;min-width:0;">${renderVersionBar(c)}</div>
+        <div class="line" style="gap:4px;flex-wrap:wrap;align-items:center;margin:0;">${_tabBtn('main','① 主要情報・登校便')}${_tabBtn('gekou','② 下校便')}${_tabBtn('tensou','③ 添乗員送迎')}${_tabBtn('keiro','④ ルート詳細')}${undoBtnHtml()}</div>
+      </div>
     </div>
 
     <div id="tab-main" style="display:${selTab==='main'?'':'none'};">
@@ -3621,6 +3626,8 @@ function renderRoutePoints(){
         <button class="mini" id="rptAddBtn" onclick="rptAdd()">${_rptAddLabel()}</button>
         ${(lock.from||lock.to)?`<span class="muted" style="font-size:12px;cursor:help"
             title="${lock.from&&lock.to?'出発地と到着地':(lock.from?'出発地':'到着地')}（灰色の行）は「①主要情報・登校便」タブで決まります">🔒</span>`:''}
+        <!-- 🔴 コピー／貼り付けもこの行へ（2026-09-03 八重樫さん）。行が1つ減る -->
+        ${clipRow}
       </div>
     </div>
     ${scenRow}
@@ -3635,7 +3642,7 @@ function renderRoutePoints(){
         <span class="muted" style="font-size:11px;">行き来する運行なら問題ありません。差し込む位置を1つ間違えたときにも出ます（「▲」で入れ替えられます）。</span>
       </div>
     </div>`:''}
-    <div id="rptClipBar" style="position:sticky;z-index:4;background:#fff;padding:6px 0 2px;">${clipRow}</div>
+    <!-- ⚠️ コピー／貼り付けは上の行へ移した。枠だけ残すと 39px 居座るので消す -->
     <div style="overflow-x:auto;"><table id="rptTable" style="width:100%;border-collapse:collapse;font-size:13px;">
       <thead><tr style="background:#f6f9f7;">
         <th style="width:28px;"></th>
