@@ -1590,13 +1590,23 @@ function _undoSnap(){
     });
   }catch(e){ return null; }
 }
-/** 控えを1つ積む。⚠️ 中身が前と同じなら積まない（押しただけ・入っただけ） */
-function _undoPush(label){
-  const s = _undoSnap(); if(s == null) return;
-  if(UNDO.length && UNDO[UNDO.length-1].s === s) return;
-  UNDO.push({ t: label || '', s: s });
+/** 控えを1つ積む。⚠️ 呼ばれた時点では積まない。
+    「何も変わっていないのに戻せると出る」のを避けるため、
+    あとで見比べて、**本当に変わっていたときだけ**積む
+    （2026-09-02 八重樫さん「編集していない気がします。1つ遡るというのは何か入力したのでしょうか」）。 */
+function _undoCommit(before){
+  if(before == null) return;
+  const after = _undoSnap();
+  if(after == null || after === before) return;              // 変わっていない → 積まない
+  if(UNDO.length && UNDO[UNDO.length-1].s === before) return; // 同じものを二重に積まない
+  UNDO.push({ s: before });
   if(UNDO.length > UNDO_MAX) UNDO.shift();
   _undoPaint();
+}
+/** 押した直後に見比べる（押した処理は同じ流れの中で終わるので、次の順番で足りる） */
+function _undoPush(label){
+  const before = _undoSnap(); if(before == null) return;
+  setTimeout(function(){ _undoCommit(before); }, 0);
 }
 /** 1つ前に戻す */
 function undoStep(){
@@ -1646,19 +1656,28 @@ function undoBtnHtml(){
    　 どちらも capture（先に届く側）で受けるので、画面が変わる前の姿が残る。 */
 (function(){
   let armed = false;
+  let pendFocus = null;   // その欄に入った時点の姿
   function arm(){
     if(armed) return;
     const area = document.getElementById('editorArea');
     if(!area) return;
-    area.addEventListener('click',   function(e){
+    area.addEventListener('click', function(e){
       /* 戻すボタン自身では控えない */
       if(e.target && e.target.id === 'undoBtn') return;
       _undoPush('押す前');
     }, true);
+    /* ⚠️ 文字は「欄に入った時点」を控え、**欄を離れたとき**に見比べる。
+       押した直後に見比べると、まだ何も打っていないので必ず「変わっていない」になる。 */
     area.addEventListener('focusin', function(e){
       const t = e.target;
       if(!t || !/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
-      _undoPush('入力の前');
+      pendFocus = _undoSnap();
+    }, true);
+    area.addEventListener('focusout', function(e){
+      const t = e.target;
+      if(!t || !/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+      const p = pendFocus; pendFocus = null;
+      setTimeout(function(){ _undoCommit(p); }, 0);
     }, true);
     armed = true;
   }
