@@ -1782,7 +1782,7 @@ function renderEditor(){
         <button class="${c.active?'':'primary'}" onclick="toggleActive()">${c.active?'✅ 有効（クリックで廃止）':'🚫 廃止中（クリックで有効）'}</button>
       </div>
       ${renderVersionBar(c)}
-      <div class="line" style="gap:4px;margin:2px 0 -1px;flex-wrap:wrap;align-items:center;">${_tabBtn('main','① 主要情報・登校便')}${_tabBtn('gekou','② 下校便')}${_tabBtn('tensou','「③添乗員送迎」')}${_tabBtn('keiro','④ ルート詳細')}${undoBtnHtml()}</div>
+      <div class="line" style="gap:4px;margin:2px 0 -1px;flex-wrap:wrap;align-items:center;">${_tabBtn('main','① 主要情報・登校便')}${_tabBtn('gekou','② 下校便')}${_tabBtn('tensou','③ 添乗員送迎')}${_tabBtn('keiro','④ ルート詳細')}${undoBtnHtml()}</div>
     </div>
 
     <div id="tab-main" style="display:${selTab==='main'?'':'none'};">
@@ -3575,7 +3575,12 @@ function renderRoutePoints(){
   return `
     <div id="rptSticky" style="position:sticky;top:0;z-index:5;background:#fff;padding-top:6px;box-shadow:0 6px 8px -6px rgba(0,0,0,0.12);">
       <div class="line" style="gap:6px;margin-bottom:6px;flex-wrap:wrap;align-items:center;">${tgtBtns}</div>
-      <div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;">${segBtns}</div>
+      ${/* 🔴 2段目は、選べる先が1つしかないときは出さない（2026-09-03 八重樫さん）。
+           「登校便」を選ぶと2段目も「登校便」だけになり、45px を無駄に使っていた。
+           ⚠️ 2つ以上あるときは必ず出す。隠すと どの便を触っているか分からなくなる。 */
+        ((segBtns.match(/<button/g)||[]).length >= 2)
+          ? `<div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;">${segBtns}</div>`
+          : ''}
       ${diffBox}
       ${legRowMain}
       <div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;">
