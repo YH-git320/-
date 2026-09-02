@@ -1593,7 +1593,7 @@ function _crumbHtml(){
 function renderSide(){
   const side = document.getElementById('sideArea');
   if(!side) return;
-  const c = _course();
+  const c = _c();   /* ⚠️ 2026-09-02 _course() と書き間違えていた。関数名は _c */
   if(!c){ side.innerHTML = ''; return; }
   const a = _crumb();
   side.innerHTML =
