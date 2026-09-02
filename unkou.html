@@ -11,7 +11,11 @@ body{margin:0;font-family:'Noto Sans JP','Hiragino Kaku Gothic Pro','Meiryo',san
 header{background:#fff;border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
 header .brand{font-size:16px;font-weight:700;color:var(--g2);}
 header nav a{color:var(--g);text-decoration:none;font-size:13px;margin-right:12px;}
-main{max-width:1240px;margin:0 auto;padding:16px;}
+/* 🔴 画面の幅を使う（2026-09-03 八重樫さん）。
+   ⚠️ 上限を上げても、画面が狭ければ画面の幅までしか使わない。
+      小さいパソコンでいままでより見えにくくなることはない。
+   ⚠️ 1800pxより広げると、表の欄が間延びして目が左右に振られる。 */
+main{max-width:1800px;margin:0 auto;padding:16px;}
 h1{font-size:19px;color:var(--g2);margin:0 0 4px;}
 .sub{font-size:13px;color:#6b7d72;margin:0 0 16px;line-height:1.6;}
 .panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px;}
@@ -3597,7 +3601,9 @@ function renderRoutePoints(){
   }).join('');
   return `
     <div id="rptSticky" style="position:sticky;top:0;z-index:5;background:#fff;padding-top:6px;box-shadow:0 6px 8px -6px rgba(0,0,0,0.12);">
-      <div class="line" style="gap:6px;margin-bottom:6px;flex-wrap:wrap;align-items:center;">${tgtBtns}
+      <!-- ⚠️ 折り返すと1行が3行ぶんの高さになる（2026-09-03 実測 31px→93px）。
+           横に流して1行に収める。はみ出す分は横スクロールで見る。 -->
+      <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;overflow-x:auto;white-space:nowrap;padding-bottom:2px;">${tgtBtns}
         ${wholeBtns ? `<span style="align-self:center;color:#cfe0d5;">｜</span>
           <span style="font-size:12px;color:#6b7d72;white-space:nowrap;"
             title="全区間をひとつづきでGoogleマップに出します">🗺 全ルート表示</span>
