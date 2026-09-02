@@ -81,6 +81,12 @@ button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
   <style>
     /* ⚠️ 列は直書きにしない。直書きは下の @media より強く、狭い画面で効かなくなる（2026-09-02 実機で判明） */
     #mainGrid{ display:grid; grid-template-columns:290px minmax(0,1fr) 300px; gap:14px; align-items:start; }
+    /* 🔴 中央の枠は、いちばん高い列にそろえて伸ばす（2026-09-02）。
+       ⚠️ 貼り付きは「入れ物の底」までしか効かない。中央が右の枠より短いと、
+          下までスクロールしたときに見出しが流れてしまう
+          （④ ルート詳細で実際に起きた。帯が -217px まで押し上げられた）。 */
+    #editorArea{ align-self:stretch; display:flex; flex-direction:column; }
+    #editorArea > .courseCard{ flex:1 1 auto; }
     /* 狭い画面では右の枠を下へ回す。3列のままだと窮屈で読めない */
     @media (max-width:1400px){ #mainGrid{ grid-template-columns:250px minmax(0,1fr); }
       #sideArea{ grid-column:1 / -1; } #sideArea > div{ position:static !important; } }
@@ -1594,6 +1600,87 @@ function _crumbHtml(){
 
 /** 右の枠を作り、地図と保存のボタンを引っ越しさせる。
     ⚠️ 部品を作り直さず、出来上がった枠ごと動かす。作り替えると壊しやすい。 */
+/* 🔴 右の枠に「そこがどうなっているか」を出す（2026-09-02 八重樫さん・案B）
+
+   > パンくずについては右の画面に同じ機能ものものがありますよね。
+   > そことの機能の分担を考えてもらえると良いと思います。
+
+   分担
+     タブ・便のボタン   移動する
+     右の「いまの作業」  いまどこで、そこが どうなっているか
+     パンくず           役目がないのでやめた（タブのすぐ下で同じことを言っていた）
+
+   ⚠️ 場所だけを繰り返すと、タブがある以上どのみち重複する。
+      **タブでは分からないこと（数と、足りていないもの）**を出す。 */
+function _tabState(){
+  const c = _c(); if(!c) return [];
+  const key = String(c.id);
+  const out = [];
+  const n = function(label, v, warn){ out.push({ label: label, v: v, warn: !!warn }); };
+
+  if(selTab === 'main'){
+    const stops = (STOPS[key] || []).filter(function(s){ return (s.name||'').trim() || (s.address||'').trim(); });
+    n('バス停', stops.length + ' か所', !stops.length);
+    const t = (c.toukou_shussha||'').trim(), k = (c.toukou_shukko||'').trim();
+    n('出社・出庫', (t && k) ? (t + ' ／ ' + k) : '未入力', !(t && k));
+    const noCoord = stops.filter(function(s){ return !(s.coord||'').trim(); }).length;
+    if(noCoord) n('座標のないバス停', noCoord + ' か所', true);
+
+  } else if(selTab === 'gekou'){
+    const forms = (FORMS[key] || []).filter(function(f){ return (f.form_name||'').trim(); });
+    n('日課', forms.length + ' 種', !forms.length);
+    let dep = 0;
+    forms.forEach(function(f){ dep += (f.gekou_departures||[]).filter(function(x){ return x; }).length; });
+    n('下校便', dep + ' 本', !dep);
+    const empty = forms.filter(function(f){ return !(f.gekou_departures||[]).some(function(x){ return x; }); });
+    if(empty.length) n('出発時刻のない日課', empty.length + ' 種', true);
+
+  } else if(selTab === 'tensou'){
+    const list = _scenList();
+    n('送迎', list.length + ' 通り', !list.length);
+    let pts = 0;
+    list.forEach(function(s){
+      pts += (s.pts||[]).filter(function(p){ return (p.name||'').trim() || (p.address||'').trim() || (p.coord||'').trim(); }).length;
+    });
+    n('乗降の場所', pts + ' か所', !pts);
+    const noPt = list.filter(function(s){
+      return !(s.pts||[]).some(function(p){ return (p.name||'').trim() || (p.address||'').trim() || (p.coord||'').trim(); });
+    }).length;
+    if(noPt) n('場所のない送迎', noPt + ' 通り', true);
+
+  } else if(selTab === 'keiro'){
+    const pts = _rpts().filter(function(p){ return String(p.lat).trim() !== '' && String(p.lng).trim() !== ''; });
+    n('この便の地点', pts.length + ' か所', pts.length < 2);
+    if(pts.length >= 2){
+      try { n('直線の積み上げ', rptDistances().total.toFixed(2) + ' km'); } catch(e){ /* 出せなくても止めない */ }
+    }
+    n('うちバス停', pts.filter(function(p){ return p.is_stop; }).length + ' か所');
+    /* ⚠️ 「地点のない便」は、この日課の中だけ数える。他の日課まで数えると
+          いまの作業と関係のない数が出て、かえって分かりにくい */
+    const box = RPTS[key] || {};
+    let none = 0;
+    R_MAIN.forEach(function(seg){
+      const kk = _rkey(seg, null, null, undefined);
+      const a = box[kk] || [];
+      if(!a.filter(function(p){ return String(p.lat).trim() !== '' && String(p.lng).trim() !== ''; }).length) none++;
+    });
+    if(none) n('地点のない便', none + ' 本', true);
+  }
+  return out;
+}
+function _tabStateHtml(){
+  const a = _tabState();
+  if(!a.length) return '';
+  return '<div style="border-top:1px solid #e2ede6;margin-top:8px;padding-top:8px;">'
+    + a.map(function(x){
+        return '<div style="display:flex;justify-content:space-between;gap:8px;font-size:12.5px;line-height:1.9;'
+          + (x.warn ? 'color:#8a6d1f;' : 'color:#4a5d52;') + '">'
+          + '<span>' + (x.warn ? '⚠️ ' : '') + escHtml(x.label) + '</span>'
+          + '<span style="font-weight:700;white-space:nowrap;">' + escHtml(x.v) + '</span></div>';
+      }).join('')
+    + '</div>';
+}
+
 function renderSide(){
   const side = document.getElementById('sideArea');
   if(!side) return;
@@ -1612,6 +1699,7 @@ function renderSide(){
           + ';padding-left:' + (i * 10) + 'px;line-height:1.9;">'
           + (i ? '<span style="color:#c3d3c8;">└ </span>' : '') + escHtml(x) + '</div>';
       }).join('')
+    + _tabStateHtml()
     + '</div>'
     + '<div id="sideMap" style="margin-bottom:10px;"></div>'
     + '<div id="sideEdit"></div>'
@@ -1621,6 +1709,7 @@ function renderSide(){
      地図や保存のボタンは、右の枠を作り直してから移すので二重にならない。 */
   _moveTo('legBox',  'sideMap');
   _moveTo('legBox2', 'sideMap');
+  _moveTo('distBox', 'sideMap');
   _moveTo('editBar', 'sideEdit');
   _moveTo('editSaveMsg', 'sideEdit');
   /* ⚠️ 中身を抜いた帯が空のまま残ると、線だけの帯が居座る */
@@ -1731,7 +1820,6 @@ function renderEditor(){
       </div>
       ${renderVersionBar(c)}
       <div class="line" style="gap:4px;margin:2px 0 -1px;flex-wrap:wrap;">${_tabBtn('main','① 主要情報・登校便')}${_tabBtn('gekou','② 下校便')}${_tabBtn('tensou','「③添乗員送迎」')}${_tabBtn('keiro','④ ルート詳細')}</div>
-      <div style="padding:6px 0 7px;">${_crumbHtml()}</div>
     </div>
 
     <div id="tab-main" style="display:${selTab==='main'?'':'none'};">
@@ -3538,9 +3626,8 @@ function renderRoutePoints(){
     ${copyRow}
     ${legNote}
     ${helpBox}
-    ${valid>=2?`<div style="background:#f6faf7;border:1px solid #e2ede6;border-radius:8px;padding:9px 12px;margin-bottom:8px;">
-      <span style="font-size:13px;color:#2d4a38;font-weight:700;">直線距離の積み上げ　${dist.total.toFixed(2)} km</span>
-      <div class="muted" style="font-size:12px;margin-top:4px;">地点が疎らな区間があると、実際の道のりより短く出ます。曲がり角ごとに地点を足すほど実際に近づきます。</div>
+    ${valid>=2?`<div id="distBox" class="panel" style="padding:9px 12px;margin:0 0 10px;">
+      <div class="muted" style="font-size:12px;line-height:1.8;">地点が疎らな区間があると、実際の道のりより短く出ます。曲がり角ごとに地点を足すほど実際に近づきます。</div>
     </div>`:''}
     ${orderWarn.length?`<div style="background:#fff8e8;border:1px solid #e8d9b0;border-radius:8px;padding:9px 12px;margin-bottom:8px;">
       <div style="font-size:13px;color:#8a6d1a;font-weight:700;margin-bottom:4px;">⚠️ 並び順が逆になっていませんか</div>
