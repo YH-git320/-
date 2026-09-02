@@ -69,16 +69,14 @@ button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
     </div>
   </div>
 
-  <!-- 🔴 上の帯はここに置く（2026-09-02）。
-       ⚠️ 中の枠に入れると、親の高さぶんしか動けず貼り付かないことがある。
-       main の直下なら、ページ全体の高さぶん動けるので確実に貼り付く。 -->
-  <div id="headArea" style="position:sticky;top:0;z-index:20;background:var(--bg);"></div>
   <div id="mainGrid">
-    <div id="courseListArea" class="panel" style="max-height:calc(100vh - 40px);overflow:auto;position:sticky;top:0;align-self:start;"></div>
+    <div id="courseListArea" class="panel" style="max-height:calc(100vh - 40px);overflow:auto;position:sticky;top:8px;align-self:start;"></div>
     <div id="editorArea" style="min-width:0;"></div>
     <!-- ⚠️ 貼り付けは「枠の中の子」ではなく「枠そのもの」に付ける。
          子に付けると、親の高さ＝子の高さになって動く余地がない -->
-    <div id="sideArea" style="position:sticky;top:0;align-self:start;"></div>
+    <!-- ⚠️ 画面より高くなると、下のボタン（訂正する）に手が届かなくなる。
+         枠の中だけでスクロールできるようにしておく -->
+    <div id="sideArea" style="position:sticky;top:8px;align-self:start;max-height:calc(100vh - 16px);overflow:auto;"></div>
   </div>
   <style>
     /* ⚠️ 列は直書きにしない。直書きは下の @media より強く、狭い画面で効かなくなる（2026-09-02 実機で判明） */
@@ -1618,7 +1616,9 @@ function renderSide(){
     + '<div id="sideMap" style="margin-bottom:10px;"></div>'
     + '<div id="sideEdit"></div>'
     + '</div>';
-  _moveTo('stickyHead', 'headArea');
+  /* ⚠️ 見出しは動かさない（2026-09-02）。
+     画面を作り直すと見出しが新しく作られ、外へ動かした古いものが残って**二重に出る**。
+     地図や保存のボタンは、右の枠を作り直してから移すので二重にならない。 */
   _moveTo('legBox',  'sideMap');
   _moveTo('legBox2', 'sideMap');
   _moveTo('editBar', 'sideEdit');
@@ -1800,9 +1800,8 @@ function renderEditor(){
  *  ⚠️ 2026-09-02 から、④でも学校名・コース名の帯を固定するようにした（八重樫さん）。
  *  そのため④でも帯の高さのぶんだけ下げる。高さは版の表示などで変わるので毎回測る。 */
 function _fitRptSticky(){
-  const head=document.getElementById('headArea'), bar=document.getElementById('rptSticky');
+  const head=document.getElementById('stickyHead'), bar=document.getElementById('rptSticky');
   if(!bar) return;
-  /* ⚠️ 測るのは「上の帯の入れ物」。中身を動かしたので stickyHead 単体では測れない */
   const stuck = head && getComputedStyle(head).position === 'sticky';
   const t0 = (stuck ? head.offsetHeight : 0);
   bar.style.top = t0 + 'px';
