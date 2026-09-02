@@ -11,7 +11,7 @@ body{margin:0;font-family:'Noto Sans JP','Hiragino Kaku Gothic Pro','Meiryo',san
 header{background:#fff;border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
 header .brand{font-size:16px;font-weight:700;color:var(--g2);}
 header nav a{color:var(--g);text-decoration:none;font-size:13px;margin-right:12px;}
-main{max-width:1240px;margin:0 auto;padding:16px;}
+main{max-width:1800px;margin:0 auto;padding:16px;}
 h1{font-size:19px;color:var(--g2);margin:0 0 4px;}
 .sub{font-size:13px;color:#6b7d72;margin:0 0 16px;line-height:1.6;}
 .panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px;}
@@ -69,10 +69,18 @@ button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
     </div>
   </div>
 
-  <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;">
-    <div id="courseListArea" class="panel" style="flex:0 0 290px;max-height:72vh;overflow:auto;"></div>
-    <div id="editorArea" style="flex:1;min-width:300px;"></div>
+  <div id="mainGrid" style="display:grid;grid-template-columns:290px minmax(0,1fr) 300px;gap:14px;align-items:start;">
+    <div id="courseListArea" class="panel" style="max-height:calc(100vh - 40px);overflow:auto;position:sticky;top:8px;"></div>
+    <div id="editorArea" style="min-width:0;"></div>
+    <div id="sideArea"></div>
   </div>
+  <style>
+    /* 狭い画面では右の枠を下へ回す。3列のままだと窮屈で読めない */
+    @media (max-width:1400px){ #mainGrid{ grid-template-columns:250px minmax(0,1fr); }
+      #sideArea{ grid-column:1 / -1; } #sideArea > div{ position:static !important; } }
+    @media (max-width:900px){ #mainGrid{ grid-template-columns:1fr; }
+      #courseListArea{ position:static !important; max-height:40vh; } }
+  </style>
 </main>
 
 <script>
@@ -1543,6 +1551,78 @@ async function createVersion(){
   }catch(e){ _saveMsg('版作成エラー：'+e.message, false); }
 }
 
+/* 🔴 いまどこで何をしているかを、いつでも見えるようにする（2026-09-02 八重樫さん）
+
+   > 入力画面のタグやボタンが多すぎて今どこの何の作業をやっているか分からなくなりやすいです。
+   > 画面の幅を大きく使ってほしいです。…どの画面でも学校名コース名はスクロールしても
+   > 表示されるようにしてもらいたいです。…入力画面の右に今どのタグのどの便の
+   > 更にどの日課等の作業をしているか分かりやすく表示してもらえないでしょうか。
+
+   ⚠️ 混乱のもとは「タグが多いこと」よりも、3段のタブが同じ見た目で並んでいて
+      上下関係が見えないことだと考えた。そこで
+      ① 学校名・コース名・版・いまの居場所（パンくず）を上に貼り付ける
+      ② 右の枠に「いまの作業」と地図のボタン、保存のボタンを寄せる
+      ③ 入力の流れの途中から、地図と保存を追い出す */
+
+/** いまの居場所を組み立てる。[大きい順] */
+function _crumb(){
+  const tabName = { main:'① 主要情報・登校便', gekou:'② 下校便',
+                    tensou:'③ 添乗員送迎', keiro:'④ ルート詳細' };
+  const out = [ tabName[selTab] || selTab ];
+  if(selTab === 'keiro'){
+    out.push(selRBase ? '回送ルートの基準' : (selRForm || '登校便'));
+    if(selRSeg) out.push(selRSeg);
+  }
+  return out;
+}
+function _crumbHtml(){
+  const a = _crumb();
+  return a.map(function(x, i){
+    const last = (i === a.length - 1);
+    return '<span style="display:inline-block;background:' + (last ? '#4d7a5e' : '#eef4ef')
+      + ';color:' + (last ? '#fff' : '#2d4a38')
+      + ';border-radius:6px;padding:2px 8px;font-size:12px;font-weight:' + (last ? '700' : '500') + ';">'
+      + escHtml(x) + '</span>';
+  }).join('<span style="color:#9bb0a3;margin:0 4px;">›</span>');
+}
+
+/** 右の枠を作り、地図と保存のボタンを引っ越しさせる。
+    ⚠️ 部品を作り直さず、出来上がった枠ごと動かす。作り替えると壊しやすい。 */
+function renderSide(){
+  const side = document.getElementById('sideArea');
+  if(!side) return;
+  const c = _course();
+  if(!c){ side.innerHTML = ''; return; }
+  const a = _crumb();
+  side.innerHTML =
+    '<div style="position:sticky;top:8px;">'
+    + '<div class="panel" style="padding:11px 12px;margin-bottom:10px;">'
+    + '<div style="font-size:11px;color:#8a9a90;margin-bottom:6px;">いまの作業</div>'
+    + a.map(function(x, i){
+        const last = (i === a.length - 1);
+        return '<div style="font-size:' + (last ? '14px' : '12.5px')
+          + ';color:' + (last ? '#2d4a38' : '#6b7d72')
+          + ';font-weight:' + (last ? '700' : '500')
+          + ';padding-left:' + (i * 10) + 'px;line-height:1.9;">'
+          + (i ? '<span style="color:#c3d3c8;">└ </span>' : '') + escHtml(x) + '</div>';
+      }).join('')
+    + '</div>'
+    + '<div id="sideMap" style="margin-bottom:10px;"></div>'
+    + '<div id="sideEdit"></div>'
+    + '</div>';
+  _moveTo('legBox', 'sideMap');
+  _moveTo('editBar', 'sideEdit');
+  if(typeof _fitRptSticky === 'function') _fitRptSticky();
+}
+/** id の枠を、行き先の中へ動かす（無ければ何もしない） */
+function _moveTo(id, dstId){
+  const el = document.getElementById(id), dst = document.getElementById(dstId);
+  if(el && dst && el.parentNode !== dst) dst.appendChild(el);
+}
+/* ⚠️ 貼り付け位置を下げる仕組みは、すでに _fitRptSticky がある。
+   同じものを二重に作らない（片方だけ直して食い違う）。 */
+window.addEventListener('resize', function(){ if(typeof _fitRptSticky === 'function') _fitRptSticky(); });
+
 function renderEditor(){
   const area = document.getElementById('editorArea');
   if (!selCourseId){ area.innerHTML = '<div class="panel"><p class="muted">左からコースを選んでください。</p></div>'; return; }
@@ -1630,13 +1710,14 @@ function renderEditor(){
   const refD = _refDeparture();
   const firstFormName = (forms.find(f=>(f.gekou_departures||[]).some(t=>t))||{}).form_name || '';
   area.innerHTML = `<div class="courseCard">
-    <div id="stickyHead" style="position:${selTab==='keiro'?'static':'sticky'};top:0;z-index:6;background:#fff;padding:8px 0 0;border-bottom:1px solid #e2ede6;margin-bottom:12px;">
+    <div id="stickyHead" style="position:sticky;top:0;z-index:8;background:#fff;padding:8px 0 0;border-bottom:1px solid #e2ede6;margin-bottom:12px;">
       <div class="courseHead" style="margin-bottom:8px;">
         <div class="courseTitle">${escHtml(courseLabel(c))}</div>
         <button class="${c.active?'':'primary'}" onclick="toggleActive()">${c.active?'✅ 有効（クリックで廃止）':'🚫 廃止中（クリックで有効）'}</button>
       </div>
       ${renderVersionBar(c)}
       <div class="line" style="gap:4px;margin:2px 0 -1px;flex-wrap:wrap;">${_tabBtn('main','① 主要情報・登校便')}${_tabBtn('gekou','② 下校便')}${_tabBtn('tensou','「③添乗員送迎」')}${_tabBtn('keiro','④ ルート詳細')}</div>
+      <div style="padding:6px 0 7px;">${_crumbHtml()}</div>
     </div>
 
     <div id="tab-main" style="display:${selTab==='main'?'':'none'};">
@@ -1698,11 +1779,12 @@ function renderEditor(){
   _renderEditBar();
   _applyLock();
   _fitRptSticky();
+  renderSide();   /* 🔴 地図と保存のボタンを右の枠へ移す（2026-09-02） */
 }
 
 /** ④経路タブの「便・区間ボタン」を画面の上に貼り付ける。
- *  ④では上の見出しは固定しない（作業する場所を広く取るため）ので top=0。
- *  ①〜③では見出しが固定なので、その高さのぶんだけ下げる（高さは版の表示などで変わるため毎回測る） */
+ *  ⚠️ 2026-09-02 から、④でも学校名・コース名の帯を固定するようにした（八重樫さん）。
+ *  そのため④でも帯の高さのぶんだけ下げる。高さは版の表示などで変わるので毎回測る。 */
 function _fitRptSticky(){
   const head=document.getElementById('stickyHead'), bar=document.getElementById('rptSticky');
   if(!bar) return;
@@ -3346,7 +3428,7 @@ function renderRoutePoints(){
      「通し」は全体を1本にまとめただけの確認用で、作ったときに1度見れば足りるので、
      バス停ごとがあるときはそちらを固定にし、通しは非固定に回す（八重樫さんの整理）。
      バス停ごとが無い（通しと同じ）ときは、通し自体が区間ボタンの役目を兼ねるので固定に残す。 */
-  const legRowMain = legsWhole.length ? `<div style="background:#f6faf7;border:1px solid #e2ede6;border-radius:8px;padding:9px 12px;margin-bottom:6px;">
+  const legRowMain = legsWhole.length ? `<div id="legBox" class="panel" style="padding:9px 12px;margin:0;">
       <div style="font-size:13px;color:#2d4a38;font-weight:700;margin-bottom:4px;">🗺 Googleマップで道を確かめる</div>
       <div style="font-size:12px;color:#6b7d72;margin-bottom:4px;">${sameAsWhole?(legsWhole.length===1?'通し（全区間）':`通し（${legsWhole.length}区間・「区切」で分かれています）`):`バス停ごと（${legsStop.length}区間）`}</div>
       <div class="line" style="gap:6px;flex-wrap:wrap;">${sameAsWhole?legBtns(legsWhole,false):legBtns(legsStop,true)}</div>
