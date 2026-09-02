@@ -1188,11 +1188,19 @@ function renderCourseList(){
   if (!list.length){ area.innerHTML = '<p class="muted">該当コースなし</p>'; return; }
   area.innerHTML = list.map(c=>{
     const on = String(c.id)===String(selCourseId);
-    return `<div onclick="selectCourse(${c.id})" style="padding:8px 6px;border-radius:8px;cursor:pointer;margin-bottom:2px;${on?'background:#eef4ef;border:1px solid #cfe0d5;':'border:1px solid transparent;'}">
+    return `<div ${on?'id="curCourseRow"':''} onclick="selectCourse(${c.id})" style="padding:8px 6px;border-radius:8px;cursor:pointer;margin-bottom:2px;${on?'background:#eef4ef;border:1px solid #cfe0d5;':'border:1px solid transparent;'}">
       <div style="font-size:13px;font-weight:${on?'700':'500'};color:#2d4a38;">${escHtml(courseLabel(c))}</div>
       <div style="margin-top:2px;">${statusBadge(c)} ${c.prefecture?`<span class="muted">${escHtml(c.prefecture)}</span>`:''}</div>
     </div>`;
   }).join('');
+  /* 🔴 選んだ行を、一覧の枠の中に送る（2026-09-02 八重樫さん）。
+     > その後編集画面をスクロールしたときに消えないで表示されていれば
+     > 今選んだコースの表示が残ります
+     ⚠️ 枠を貼り付けるだけでは足りない。枠の中でその行まで送らないと、
+        枠の外（ずっと下）にあって見えないままになる。
+     ⚠️ ページ全体は動かさない（block:'nearest'）。動かすと編集画面が飛ぶ。 */
+  const _row = document.getElementById('curCourseRow');
+  if(_row && _row.scrollIntoView) _row.scrollIntoView({ block: 'nearest' });
 }
 function _gekouBins(){
   const set = new Set();
