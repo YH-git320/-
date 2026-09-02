@@ -1178,7 +1178,20 @@ function renderCourseList(){
   const activeOnly = document.getElementById('activeOnly').checked;
   const list = COURSES.filter(c => (!activeOnly || c.active) && (!q || courseLabel(c).indexOf(q)!==-1));
   if (!list.length){ area.innerHTML = '<p class="muted">該当コースなし</p>'; return; }
-  area.innerHTML = list.map(c=>{
+  /* 🔴 いま開いているコースを、一覧の上に固定して出す（2026-09-02 八重樫さん）。
+     > 左のコースの表示ですが、選択したコースが固定されて表示できるようにしてもらえますか
+     ⚠️ 一覧を下までスクロールすると、どのコースを開いているか分からなくなる。
+        一覧の行を動かすのではなく、**別の帯を1つ作って**その中に名前を書く。
+        （行そのものを動かす作りは、今日それで何度も壊した） */
+  const _cur = COURSES.find(x => String(x.id) === String(selCourseId));
+  const _curBar = _cur
+    ? '<div style="position:sticky;top:0;z-index:3;background:#eef4ef;border:1px solid #cfe0d5;'
+      + 'border-radius:8px;padding:7px 8px;margin:0 0 8px;">'
+      + '<div style="font-size:11px;color:#6b7d72;">いま開いているコース</div>'
+      + '<div style="font-size:13px;font-weight:700;color:#2d4a38;line-height:1.5;">'
+      + escHtml(courseLabel(_cur)) + '</div></div>'
+    : '';
+  area.innerHTML = _curBar + list.map(c=>{
     const on = String(c.id)===String(selCourseId);
     return `<div onclick="selectCourse(${c.id})" style="padding:8px 6px;border-radius:8px;cursor:pointer;margin-bottom:2px;${on?'background:#eef4ef;border:1px solid #cfe0d5;':'border:1px solid transparent;'}">
       <div style="font-size:13px;font-weight:${on?'700':'500'};color:#2d4a38;">${escHtml(courseLabel(c))}</div>
@@ -1203,9 +1216,10 @@ function _nextApril(){ const d=new Date(); const y=d.getFullYear(); const ny=(d.
 // 編集タブ（主要・登校便／下校便／添乗員送迎）。再描画せず表示切替＝入力途中も保持・軽快
 function _tabBtn(k,label){ const on=(selTab===k); return `<button id="tabbtn-${k}" onclick="setTab('${k}')" style="border:1px solid ${on?'#4d7a5e':'#cfe0d5'};background:${on?'#4d7a5e':'#eef4ef'};color:${on?'#fff':'#2d4a38'};padding:7px 13px;border-radius:9px 9px 0 0;cursor:pointer;font-size:13px;font-weight:${on?'700':'500'};font-family:inherit;">${label}</button>`; }
 function setTab(t){ selTab=t; ['main','gekou','tensou','keiro'].forEach(k=>{ const el=document.getElementById('tab-'+k); if(el) el.style.display=(k===t?'':'none'); const b=document.getElementById('tabbtn-'+k); if(b){ const on=(k===t); b.style.background=on?'#4d7a5e':'#eef4ef'; b.style.color=on?'#fff':'#2d4a38'; b.style.borderColor=on?'#4d7a5e':'#cfe0d5'; b.style.fontWeight=on?'700':'500'; } });
-  // ④経路タブでは上の見出しの固定をやめ、作業する場所を広く取る
-  const hd=document.getElementById('stickyHead');
-  if(hd) hd.style.position = (t==='keiro' ? 'static' : 'sticky');
+  /* 🔴 ④でも見出しを固定する（2026-09-02 八重樫さん）。
+     > スクロールすると戻るボタンが無くなってしまうので固定してください
+     ⚠️ 2026-08 に「④は作業する場所を広く取る」として固定を外していたが、
+        戻すボタンと学校名を常に見せる方を採る。 */
   _fitRptSticky();
 }
 
@@ -1600,7 +1614,7 @@ function undoStep(){
   if(o.scen)  SCEN[k]  = o.scen;  else delete SCEN[k];
   if(typeof FORM_RENAMES !== 'undefined'){ if(o.ren) FORM_RENAMES[k] = o.ren; else delete FORM_RENAMES[k]; }
   renderEditor();
-  _saveMsg('1つ前に戻しました' + (UNDO.length ? '（あと ' + UNDO.length + ' 回戻れます）' : '（これ以上は戻れません）')
+  _saveMsg('1つ前に戻しました' + (UNDO.length ? '' : '（これ以上は戻れません）')
     + '　⚠️ 保存はしていません。', true);
 }
 /** 控えを捨てる（保存した・コースを変えた・版を変えたとき） */
@@ -1614,8 +1628,10 @@ function _undoPaint(){
   b.disabled = !n;
   b.style.opacity = n ? '1' : '0.45';
   b.style.cursor = n ? 'pointer' : 'default';
-  b.textContent = n ? ('↩ 戻す（' + n + '）') : '↩ 戻す';
-  b.title = n ? ('1つ前の状態に戻します。あと ' + n + ' 回戻れます（保存すると戻せなくなります）')
+  /* ⚠️ 回数は出さない（2026-09-02 八重樫さん「必要ないように思います」）。
+     押せるかどうかは、濃さで分かるようにしてある。 */
+  b.textContent = '↩ 戻す';
+  b.title = n ? '1つ前の状態に戻します（保存すると戻せなくなります）'
               : '戻せる作業がありません';
 }
 function undoBtnHtml(){
