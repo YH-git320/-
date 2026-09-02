@@ -1382,7 +1382,7 @@ function renderVersionBar(c){
      ⚠️ ラベル「版（適用開始日）」と長いボタン名で2行ぶん使っていた。
         選ぶ欄そのものと注意書きは残す。コピー作成は 📋 の小さなボタンに。 */
   return `<div class="line" style="margin:2px 0 6px;flex-wrap:wrap;gap:6px;align-items:center;">
-      <select onchange="changeVersion(this.value)" style="font-size:12px;flex:1;min-width:180px;max-width:420px;"
+      <select onchange="changeVersion(this.value)" style="font-size:12px;flex:0 1 auto;width:auto;max-width:340px;"
         title="版（適用開始日）">${opts}</select>
       ${warn}
       <button class="mini" title="前年度／別コースからコピーして新版を作成"
@@ -1852,6 +1852,10 @@ function renderEditor(){
             <button class="mini" onclick="_editOpen=true;renderEditor()">✏️ この版を直す</button>
             <span class="muted" style="font-size:11.5px;">${_impact ? `この改正は ${escHtml(String(_impact.valid_from||'—'))} から使われています（便 ${_impact.duties||0}件・配置 ${_impact.crew||0}件）` : ''}</span>
           </div>`
+        : ''}
+      ${(_editMode === null && _editOpen)
+        ? `<div class="line" style="justify-content:flex-end;margin-bottom:4px;">
+            <button class="link" onclick="_editOpen=false;renderEditor()">✕ 閉じる</button></div>`
         : ''}
       <div id="editBar" style="display:${(_editMode === null && !_editOpen) ? 'none' : ''};"></div>
       <div id="editSaveMsg" style="text-align:center;margin-top:8px;font-weight:600;min-height:20px;"></div></div>
@@ -3513,13 +3517,14 @@ function renderRoutePoints(){
         実測で 157px → 45px 前後。④の入力スペースがそのぶん広がる。 */
   const legRowMain = legsWhole.length ? `<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
       <span style="flex:0 0 auto;font-size:12px;color:#6b7d72;white-space:nowrap;"
-        title="Googleマップで道を確かめます">🗺 ${sameAsWhole?'通し':'バス停ごと'}</span>
+        title="Googleマップで道を確かめます">🗺 ${sameAsWhole?'全ルート表示':'バス停ごと'}</span>
       <div style="flex:1;min-width:0;overflow-x:auto;white-space:nowrap;padding-bottom:2px;">${sameAsWhole?legBtns(legsWhole,false):legBtns(legsStop,true)}</div>
     </div>` : '';
-  const legRowWhole = (legsWhole.length && !sameAsWhole) ? `<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-      <span style="flex:0 0 auto;font-size:12px;color:#6b7d72;white-space:nowrap;">🗺 通し</span>
-      <div style="flex:1;min-width:0;overflow-x:auto;white-space:nowrap;padding-bottom:2px;">${legBtns(legsWhole,false)}</div>
-    </div>` : '';
+  /* 🔴 「全ルート表示」は1行目（回送ルートの右）へ移した（2026-09-03 八重樫さん）。
+     > グーグルマップの通しのボタンの並びは…回送ルートボタンの右におけませんか
+     ⚠️ 行を増やさないため、便を選ぶ列の右端に区切りを入れて並べる。 */
+  const legRowWhole = '';
+  const wholeBtns = (legsWhole.length && !sameAsWhole) ? legBtns(legsWhole,false) : '';
   // 地点が多すぎる区間だけは、たたまずに出す（見落とすと運転手に届かないため）
   const legNote = (legsWhole.length && legsWhole.some(g=>g.pts.length-2>RPT_MAX_VIA))
     ? `<div style="background:#fdeeee;border:1px solid #e6b8b8;border-radius:8px;padding:8px 12px;margin:0 0 10px;font-size:12px;color:#a03434;font-weight:700;">
@@ -3536,7 +3541,7 @@ function renderRoutePoints(){
       <b>その座標がどこか確かめる</b>：各行の経度のとなりの <b>🗺</b> で、その地点だけをGoogleマップで開きます。コピーする前に場所を確かめられます。<hr style="border:none;border-top:1px solid #e2ede6;margin:7px 0;">
       <b>コピーと貼り付け</b>：「コピー」列で選んだ地点だけをコピーします。<b>何も選ばなければ、中（2番目〜最後から2番目）をまとめて</b>コピーします（「全部」でも同じです）。<br>
       貼り付けは、<b>行を選んでいればその上に差し込み</b>、<b>選んでいなければ中を入れ替えます</b>。どちらでも<b>出発地と到着地は変わりません</b>。別のコースへも貼り付けられます。貼り付けただけでは保存されません。<hr style="border:none;border-top:1px solid #e2ede6;margin:7px 0;">
-      <b>Googleマップで確かめる</b>：<b>有料道路・高速道路は使わない</b>設定で開きます。「通し」は全体を1本で、「バス停ごと」はバス停で分けて開きます（運転手がバス停ごとに開く想定）。<br>
+      <b>Googleマップで確かめる</b>：<b>有料道路・高速道路は使わない</b>設定で開きます。「全ルート表示」は全体を1本で、「バス停ごと」はバス停で分けて開きます（運転手がバス停ごとに開く想定）。<br>
       <b>「区切」は、Uターンなどナビが通してくれない場所で使います。</b>その地点で案内を終え、<b>次の地点から</b>新しい案内が始まります（間の動きは運転手が行います）。どちらの開き方でも区切は必ず効きます。<br>
       <b>狙った道を通らないときは、その手前に地点を足してください。</b>地点は<b>曲がった直後の道の上（曲がり角から50〜100m先）</b>に置くとよく効きます。交差点そのものに置くと、どの道に付くかGoogleが決めてしまい、手前で曲がることがあります。まっすぐな道には置かなくて構いません。${
       _isKaisou(selRSeg)?`<hr style="border:none;border-top:1px solid #e2ede6;margin:7px 0;">
@@ -3592,7 +3597,11 @@ function renderRoutePoints(){
   }).join('');
   return `
     <div id="rptSticky" style="position:sticky;top:0;z-index:5;background:#fff;padding-top:6px;box-shadow:0 6px 8px -6px rgba(0,0,0,0.12);">
-      <div class="line" style="gap:6px;margin-bottom:6px;flex-wrap:wrap;align-items:center;">${tgtBtns}</div>
+      <div class="line" style="gap:6px;margin-bottom:6px;flex-wrap:wrap;align-items:center;">${tgtBtns}
+        ${wholeBtns ? `<span style="align-self:center;color:#cfe0d5;">｜</span>
+          <span style="font-size:12px;color:#6b7d72;white-space:nowrap;"
+            title="全区間をひとつづきでGoogleマップに出します">🗺 全ルート表示</span>
+          ${wholeBtns}` : ''}</div>
       ${/* 🔴 2段目は、選べる先が1つしかないときは出さない（2026-09-03 八重樫さん）。
            「登校便」を選ぶと2段目も「登校便」だけになり、45px を無駄に使っていた。
            ⚠️ 2つ以上あるときは必ず出す。隠すと どの便を触っているか分からなくなる。 */
@@ -3604,7 +3613,8 @@ function renderRoutePoints(){
       <div class="line" style="gap:6px;margin-bottom:8px;flex-wrap:wrap;">
         ${_isKaisou(selRSeg) ? '' : '<button class="mini" onclick="rptFillFromStops()" title="バス停一覧の並びから、この便の地点を作り直します（曲がり角の目印は消えます）">バス停一覧から並びを作る</button>'}
         <button class="mini" id="rptAddBtn" onclick="rptAdd()">${_rptAddLabel()}</button>
-        ${(lock.from||lock.to)?`<span class="muted" style="font-size:12px;">🔒 ${lock.from&&lock.to?'出発地と到着地':(lock.from?'出発地':'到着地')}（灰色の行）は「①主要情報・登校便」タブで決まります</span>`:''}
+        ${(lock.from||lock.to)?`<span class="muted" style="font-size:12px;cursor:help"
+            title="${lock.from&&lock.to?'出発地と到着地':(lock.from?'出発地':'到着地')}（灰色の行）は「①主要情報・登校便」タブで決まります">🔒</span>`:''}
       </div>
     </div>
     ${scenRow}
