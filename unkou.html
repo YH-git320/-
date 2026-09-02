@@ -1703,7 +1703,6 @@ function renderSide(){
           + ';padding-left:' + (i * 10) + 'px;line-height:1.9;">'
           + (i ? '<span style="color:#c3d3c8;">└ </span>' : '') + escHtml(x) + '</div>';
       }).join('')
-    + _tabStateHtml()
     + '</div>'
     + '<div id="sideMap" style="margin-bottom:10px;"></div>'
     + '<div id="sideEdit"></div>'
@@ -3631,7 +3630,8 @@ function renderRoutePoints(){
     ${legNote}
     ${helpBox}
     ${valid>=2?`<div id="distBox" class="panel" style="padding:9px 12px;margin:0 0 10px;">
-      <div class="muted" style="font-size:12px;line-height:1.8;">地点が疎らな区間があると、実際の道のりより短く出ます。曲がり角ごとに地点を足すほど実際に近づきます。</div>
+      <div style="font-size:13px;color:#2d4a38;font-weight:700;">直線距離の積み上げ　${dist.total.toFixed(2)} km</div>
+      <div class="muted" style="font-size:12px;line-height:1.8;margin-top:4px;">地点が疎らな区間があると、実際の道のりより短く出ます。曲がり角ごとに地点を足すほど実際に近づきます。</div>
     </div>`:''}
     ${orderWarn.length?`<div style="background:#fff8e8;border:1px solid #e8d9b0;border-radius:8px;padding:9px 12px;margin-bottom:8px;">
       <div style="font-size:13px;color:#8a6d1a;font-weight:700;margin-bottom:4px;">⚠️ 並び順が逆になっていませんか</div>
