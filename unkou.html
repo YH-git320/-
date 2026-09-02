@@ -1197,8 +1197,8 @@ function _refDeparture(){
   for(const f of forms){ for(const t of (f.gekou_departures||[])){ if(t) return t; } }
   return '';
 }
-async function selectCourse(id){ selCourseId = id; loadFormUsage(id); selVerId = currentVerId(id); _nvOpen=false; rptSelIdx=null; rptPick={}; _editMode=null; _fixReason=''; _impact=null; _loadImpact().then(_renderEditBar); if(selVerId) await loadVersionInto(id, selVerId); selRefD = _refDeparture() || '14:00'; renderCourseList(); renderEditor(); }
-async function changeVersion(verId){ selVerId = Number(verId); _editMode=null; _fixReason=''; _impact=null; await loadVersionInto(selCourseId, selVerId); selRefD = _refDeparture() || '14:00'; renderEditor(); _loadImpact().then(_renderEditBar); }
+async function selectCourse(id){ undoClear(); selCourseId = id; loadFormUsage(id); selVerId = currentVerId(id); _nvOpen=false; rptSelIdx=null; rptPick={}; _editMode=null; _fixReason=''; _impact=null; _loadImpact().then(_renderEditBar); if(selVerId) await loadVersionInto(id, selVerId); selRefD = _refDeparture() || '14:00'; renderCourseList(); renderEditor(); }
+async function changeVersion(verId){ undoClear(); selVerId = Number(verId); _editMode=null; _fixReason=''; _impact=null; await loadVersionInto(selCourseId, selVerId); selRefD = _refDeparture() || '14:00'; renderEditor(); _loadImpact().then(_renderEditBar); }
 function _nextApril(){ const d=new Date(); const y=d.getFullYear(); const ny=(d.getMonth()+1>=4)?y+1:y; return ny+'-04-01'; }
 // 編集タブ（主要・登校便／下校便／添乗員送迎）。再描画せず表示切替＝入力途中も保持・軽快
 function _tabBtn(k,label){ const on=(selTab===k); return `<button id="tabbtn-${k}" onclick="setTab('${k}')" style="border:1px solid ${on?'#4d7a5e':'#cfe0d5'};background:${on?'#4d7a5e':'#eef4ef'};color:${on?'#fff':'#2d4a38'};padding:7px 13px;border-radius:9px 9px 0 0;cursor:pointer;font-size:13px;font-weight:${on?'700':'500'};font-family:inherit;">${label}</button>`; }
@@ -1543,6 +1543,114 @@ async function createVersion(){
   }catch(e){ _saveMsg('版作成エラー：'+e.message, false); }
 }
 
+/* 🔴 作業を遡る（2026-09-02 岩﨑さん → 八重樫さん）
+
+   > 作業を遡るボタンは作れますか。保存をしたらそれ以上は遡らなくて結構ですが、
+   > ワードやエクセルの遡るボタンのような機能です。
+
+   決めたこと（八重樫さん）
+     遡る単位   ボタンは1回ぶん／文字は「欄ごと」（1文字ずつではない）
+     回数       50回
+     置き場所   タブの並びの右端
+     やり直し   作らない（入れると作りが倍になり、間違いも増える）
+
+   ⚠️ 控えを取る場所は**1か所だけ**にする。
+      直す関数を1つずつ書き換えると必ず取り漏らす（今日それで8回やり直した）。
+      editorArea の中で「押した・欄に入った」瞬間を、まとめて捕まえる。
+   ⚠️ 遡ってもDBには一切触れない。画面の中だけ。保存すると控えは消える。 */
+const UNDO_MAX = 50;
+let UNDO = [];            // [{ t: 何をする前か, s: 控え(JSON) }]
+
+/** いま編集中のコースの中身を、まるごと文字にする */
+function _undoSnap(){
+  const c = _c(); if(!c) return null;
+  const k = String(c.id);
+  try{
+    return JSON.stringify({
+      c: c,
+      forms: FORMS[k] || null,
+      stops: STOPS[k] || null,
+      rpts:  RPTS[k]  || null,
+      scen:  SCEN[k]  || null,
+      ren:   (typeof FORM_RENAMES !== 'undefined' ? (FORM_RENAMES[k] || null) : null)
+    });
+  }catch(e){ return null; }
+}
+/** 控えを1つ積む。⚠️ 中身が前と同じなら積まない（押しただけ・入っただけ） */
+function _undoPush(label){
+  const s = _undoSnap(); if(s == null) return;
+  if(UNDO.length && UNDO[UNDO.length-1].s === s) return;
+  UNDO.push({ t: label || '', s: s });
+  if(UNDO.length > UNDO_MAX) UNDO.shift();
+  _undoPaint();
+}
+/** 1つ前に戻す */
+function undoStep(){
+  if(!UNDO.length) return;
+  const top = UNDO.pop();
+  let o; try{ o = JSON.parse(top.s); }catch(e){ _undoPaint(); return; }
+  const c = _c(); if(!c){ _undoPaint(); return; }
+  const k = String(c.id);
+  /* ⚠️ コースの行は入れ替えず、中身だけ書き戻す。
+     　 入れ替えると、他の場所が持っている参照が古いものを指したままになる。 */
+  Object.keys(o.c).forEach(function(f){ c[f] = o.c[f]; });
+  if(o.forms) FORMS[k] = o.forms; else delete FORMS[k];
+  if(o.stops) STOPS[k] = o.stops; else delete STOPS[k];
+  if(o.rpts)  RPTS[k]  = o.rpts;  else delete RPTS[k];
+  if(o.scen)  SCEN[k]  = o.scen;  else delete SCEN[k];
+  if(typeof FORM_RENAMES !== 'undefined'){ if(o.ren) FORM_RENAMES[k] = o.ren; else delete FORM_RENAMES[k]; }
+  renderEditor();
+  _saveMsg('1つ前に戻しました' + (UNDO.length ? '（あと ' + UNDO.length + ' 回戻れます）' : '（これ以上は戻れません）')
+    + '　⚠️ 保存はしていません。', true);
+}
+/** 控えを捨てる（保存した・コースを変えた・版を変えたとき） */
+function undoClear(){ UNDO = []; _undoPaint(); }
+
+/** ボタンの見た目を合わせる */
+function _undoPaint(){
+  const b = document.getElementById('undoBtn');
+  if(!b) return;
+  const n = UNDO.length;
+  b.disabled = !n;
+  b.style.opacity = n ? '1' : '0.45';
+  b.style.cursor = n ? 'pointer' : 'default';
+  b.textContent = n ? ('↩ 戻す（' + n + '）') : '↩ 戻す';
+  b.title = n ? ('1つ前の状態に戻します。あと ' + n + ' 回戻れます（保存すると戻せなくなります）')
+              : '戻せる作業がありません';
+}
+function undoBtnHtml(){
+  return '<button id="undoBtn" onclick="undoStep()" disabled'
+    + ' style="margin-left:auto;border:1px solid #cfe0d5;background:#fff;color:#2d4a38;'
+    + 'padding:7px 13px;border-radius:9px;font-size:13px;font-family:inherit;opacity:0.45;cursor:default;"'
+    + ' title="戻せる作業がありません">↩ 戻す</button>';
+}
+
+/* ⚠️ 控えを取るのはここ1か所だけ。
+   　 click は「押す前」に、focusin は「その欄に入った時点」に控える。
+   　 どちらも capture（先に届く側）で受けるので、画面が変わる前の姿が残る。 */
+(function(){
+  let armed = false;
+  function arm(){
+    if(armed) return;
+    const area = document.getElementById('editorArea');
+    if(!area) return;
+    area.addEventListener('click',   function(e){
+      /* 戻すボタン自身では控えない */
+      if(e.target && e.target.id === 'undoBtn') return;
+      _undoPush('押す前');
+    }, true);
+    area.addEventListener('focusin', function(e){
+      const t = e.target;
+      if(!t || !/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+      _undoPush('入力の前');
+    }, true);
+    armed = true;
+  }
+  if(document.readyState === 'loading') window.addEventListener('DOMContentLoaded', arm);
+  else arm();
+  /* editorArea は作り直されないので（中身だけ差し替わる）、一度付ければ足りる */
+})();
+
 function renderEditor(){
   const area = document.getElementById('editorArea');
   if (!selCourseId){ area.innerHTML = '<div class="panel"><p class="muted">左からコースを選んでください。</p></div>'; return; }
@@ -1636,7 +1744,7 @@ function renderEditor(){
         <button class="${c.active?'':'primary'}" onclick="toggleActive()">${c.active?'✅ 有効（クリックで廃止）':'🚫 廃止中（クリックで有効）'}</button>
       </div>
       ${renderVersionBar(c)}
-      <div class="line" style="gap:4px;margin:2px 0 -1px;flex-wrap:wrap;">${_tabBtn('main','① 主要情報・登校便')}${_tabBtn('gekou','② 下校便')}${_tabBtn('tensou','「③添乗員送迎」')}${_tabBtn('keiro','④ ルート詳細')}</div>
+      <div class="line" style="gap:4px;margin:2px 0 -1px;flex-wrap:wrap;align-items:center;">${_tabBtn('main','① 主要情報・登校便')}${_tabBtn('gekou','② 下校便')}${_tabBtn('tensou','「③添乗員送迎」')}${_tabBtn('keiro','④ ルート詳細')}${undoBtnHtml()}</div>
     </div>
 
     <div id="tab-main" style="display:${selTab==='main'?'':'none'};">
@@ -1698,6 +1806,7 @@ function renderEditor(){
   _renderEditBar();
   _applyLock();
   _fitRptSticky();
+  _undoPaint();
 }
 
 /** ④経路タブの「便・区間ボタン」を画面の上に貼り付ける。
@@ -3839,6 +3948,8 @@ async function saveCourse(){
     // 保存後の読み直しは**このコースだけ**にする。
     // 以前は毎回64コース分（バス停331行・日課238行）を取り直しており、
     // 1回の保存に数秒かかって「押しても反応がない」状態になっていた（2026-08-19）
+    /* 🔴 保存したら、それより前には戻さない（2026-09-02 岩﨑さん・八重樫さん） */
+    undoClear();
     await Promise.all([ loadVersionInto(c.id, selVerId), loadScenarios() ]);
     renderCourseList(); renderEditor();
     // ⚠️ 「保存しました」は**画面を作り直したあと**に出す。
