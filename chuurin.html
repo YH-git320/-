@@ -1,0 +1,1181 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>駐輪場 — 高尾輸送サービス</title>
+<style>
+:root{--g:#4d7a5e;--g2:#2d4a38;--bg:#f5f8f4;--line:#e0e6e0;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:'Noto Sans JP','Hiragino Kaku Gothic Pro','Meiryo',sans-serif;background:var(--bg);color:#2d3b35;}
+header{background:#fff;border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+header .brand{font-size:16px;font-weight:700;color:var(--g2);}
+header nav a{color:var(--g);text-decoration:none;font-size:13px;margin-right:12px;}
+main{max-width:840px;margin:0 auto;padding:16px;}
+h1{font-size:19px;color:var(--g2);margin:0 0 4px;}
+.sub{font-size:13px;color:#6b7d72;margin:0 0 16px;line-height:1.6;}
+.panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px;}
+label.fld{display:block;font-size:13px;color:#6b7d72;margin-bottom:5px;}
+select,input{font-family:inherit;font-size:15px;padding:9px 10px;border:1px solid #c9d3cc;border-radius:8px;background:#fff;color:#2d3b35;}
+select,input[type=text]{width:100%;}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+button{font-family:inherit;font-size:14px;padding:9px 14px;border:1px solid var(--g);background:#fff;color:var(--g);border-radius:8px;cursor:pointer;}
+button.primary{background:var(--g);color:#fff;}
+button.mini{font-size:12px;padding:6px 10px;}
+button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
+.courseCard{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px;background:#fff;}
+.courseHead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;}
+.courseTitle{font-size:16px;font-weight:700;color:var(--g2);}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
+.tab{font-size:13px;padding:7px 11px;border:1px solid #c9d3cc;border-radius:8px;background:#fff;color:#6b7d72;cursor:pointer;}
+.tab.active{border:2px solid var(--g);color:var(--g2);background:#eef4ef;font-weight:700;}
+.seg{border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;background:#fbfdfb;}
+.seg .line{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;}
+.seg .mode{min-width:100px;width:auto;}
+.seg .st{flex:1;min-width:110px;}
+.arrow{color:#9bb0a3;font-size:16px;}
+.total{display:flex;justify-content:space-between;align-items:center;padding-top:10px;margin-top:4px;border-top:1px solid var(--line);}
+.total .amt{font-size:18px;font-weight:700;color:var(--g2);}
+.muted{color:#9bb0a3;font-size:12px;}
+#status{font-size:13px;padding:9px 12px;border-radius:8px;margin-bottom:12px;display:none;}
+#status.ok{display:block;background:#eef7ef;color:#2f7d32;border:1px solid #bfe3c0;}
+#status.err{display:block;background:#fdeceb;color:#b5453a;border:1px solid #f3c3bf;}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">🅿 駐輪場</div>
+  <nav>
+    <a href="index.html">ホーム</a>
+    <a href="master.html">マスタ</a>
+    <a href="keiro.html">通勤経路</a>
+    <a href="yotei.html">月間予定</a>
+    <a href="haichi.html">配置管理</a>
+    <a href="daicho.html">車両台帳</a>
+    <a href="chuurin.html">駐輪場</a>
+  </nav>
+</header>
+<main>
+  <h1>駐輪場</h1>
+  <p class="sub">
+    自転車で通勤される方の駐輪場代を管理します。<b>会社が払うのは最大1か月契約まで</b>です。
+    3か月以上の契約はご本人の判断で、会社は関与しません。<br>
+    支払いは<b>月ごと</b>に見ます。<b>その月に実勤務が1日でもあればその月分を払い、0日なら払いません</b>。
+    実勤務は<b>日報</b>から数えます。
+  </p>
+
+  <div id="status"></div>
+
+  <div class="tabs" style="margin-bottom:14px;">
+    <button class="tab active" id="tab1" onclick="setTab(1)">🅿 駐輪場と料金</button>
+    <button class="tab" id="tab2" onclick="setTab(2)">👤 人ごとの取り決め</button>
+    <button class="tab" id="tab3" onclick="setTab(3)">📅 月ごとの金額</button>
+  </div>
+
+  <!-- ① 駐輪場と料金 -->
+  <div id="pane1">
+    <div class="panel">
+      <label class="fld">駐輪場を追加</label>
+      <div class="row">
+        <input type="text" id="npName" placeholder="名称（例：二子玉川駅 第2駐輪場）" style="flex:2;min-width:200px;">
+        <input type="text" id="npAddr" placeholder="住所（任意）" style="flex:2;min-width:200px;">
+        <button class="primary" onclick="addParking()">追加</button>
+      </div>
+    </div>
+    <div id="parkArea"></div>
+  </div>
+
+  <!-- ② 人ごとの取り決め -->
+  <div id="pane2" style="display:none;">
+    <div class="panel">
+      <label class="fld" for="spStaff">添乗員をえらぶ</label>
+      <select id="spStaff" onchange="renderUses()"><option value="">— 選択してください —</option></select>
+    </div>
+    <div id="useArea"></div>
+  </div>
+
+  <!-- ③ 月ごとの金額 -->
+  <div id="pane3" style="display:none;">
+    <div class="panel">
+      <div class="row">
+        <label class="fld" style="margin:0;">対象月</label>
+        <input type="month" id="pmMonth" style="width:auto;">
+        <button class="primary" onclick="loadMonth()">出す</button>
+      </div>
+      <p class="muted" style="margin:8px 0 0;line-height:1.7;">
+        ⚠️ <b>金額が出せない行も、消さずに出します。</b>一覧から消えると払い漏れます。
+      </p>
+    </div>
+    <div id="monthArea"></div>
+  </div>
+</main>
+
+<script>
+// ===== 高尾輸送サービス 管理システム 共通認証モジュール =====
+// initAuth(['admin', 'staff'])  → 管理者・事務員どちらも可
+// initAuth(['admin'])           → 管理者のみ
+
+const AUTH_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/auth/v1';
+const REST_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/rest/v1';
+
+/* 🔴 権限の案内（2026-08-27 八重樫さん）。正本：業務管理システム_マスタ連動の原則
+
+   > 権限では「指示のもとで編集する」と「自分で判断して編集する」を区別できません。
+   > 区別できるのは「書けるか」「記録が残るか」「戻せるか」の3つだけです。（2026-08-27）
+
+   ⚠️ ここは案内だけ。守っているのはデータベース側（RLS と RPC）。
+      画面の判定だけに頼らない（画面は書き換えられる）。
+   ⚠️ 権限が分からないときは止めない。止めるのはサーバーの役目。
+      ここで止めると「通信できないだけ」で仕事が止まる。 */
+const PAGE_PERM = { key: 'w_commute', what: '通勤経路' };
+let MYPERM = null;
+async function permLoad(){
+  if (MYPERM) return MYPERM;
+  try {
+    const r = await fetch(`${REST_URL}/rpc/my_permissions`, { method:'POST', headers:getH(), body:'{}' });
+    MYPERM = r.ok ? (await r.json() || []) : [];
+  } catch(e){ MYPERM = []; }
+  return MYPERM;
+}
+function permHas(key){
+  if (!MYPERM || !MYPERM.length) return true;   // 分からないときは止めない
+  const p = MYPERM.find(x => x.key === key);
+  return p ? !!p.allowed : true;
+}
+function permLabel(key){
+  const p = (MYPERM||[]).find(x => x.key === key);
+  return p ? p.label : key;
+}
+/** 変更できないときに、画面の上に帯を出す（押す前に分かるように） */
+async function permGuard(){
+  if (!PAGE_PERM.key) return true;
+  await permLoad();
+  const keys = Array.isArray(PAGE_PERM.key) ? PAGE_PERM.key : [PAGE_PERM.key];
+  if (keys.some(permHas)) return true;
+  const names = keys.map(permLabel).join('・');
+  const d = document.createElement('div');
+  d.style.cssText = 'position:sticky;top:0;z-index:9999;background:#fdf2f2;border-bottom:2px solid #e0a9a2;'
+    + 'color:#8c3b30;padding:10px 16px;font-size:13.5px;line-height:1.85;';
+  d.innerHTML = '⚠️ <b>' + PAGE_PERM.what + 'を変更する権限がありません。</b>'
+    + '見ることはできますが、保存・追加・削除はできません。<br>'
+    + '<span style="font-size:12.5px;">必要でしたら、権限をお持ちの方に「' + names + '」を付けてもらってください。</span>';
+  document.body.insertBefore(d, document.body.firstChild);
+  return false;
+}
+/** サーバーから返る英語のエラーを、何の権限が足りないかに言い換える */
+const _PERM_TBL = {
+  bicycle_parkings:'駐輪場', bicycle_parking_rates:'駐輪場の料金',
+  staff_parking_uses:'駐輪場の取り決め',
+  course_schedule_calendar:'月間予定', permits:'営業許可', vehicles:'車両台帳',
+  vehicle_assignments:'車両の割り当て', commute_routes:'通勤経路', courses:'コース',
+  job_types:'業務マスタ', employee_job_types:'業務マスタ', offices:'営業所',
+  duties:'便のその日だけの変更', duty_skips:'便のその日だけの変更',
+  duty_crew:'配置', assignments:'配置（添乗員）', duty_stop_orders:'バス停への指示',
+  course_schedule_forms:'運行時程マスタ', course_locations:'運行時程マスタ',
+  course_route_points:'運行時程マスタ', course_transfer_points:'運行時程マスタ',
+  course_phase_settings:'運行時程マスタ', course_timetable_versions:'運行時程マスタ',
+  course_scenarios:'運行時程マスタ'
+};
+function permMsg(t){
+  const s = String(t == null ? '' : t);
+  const m = /row-level security policy for table "([a-z_]+)"/.exec(s);
+  if (!m) return t;
+  const n = _PERM_TBL[m[1]] || m[1];
+  return '「' + n + '」を変更する権限がありません。権限をお持ちの方にご相談ください。';
+}
+window.addEventListener('DOMContentLoaded', function(){ permGuard(); });
+
+const ANON_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4ZHlxa3lxdGl6aHRrd3RwdnJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NzYxODEsImV4cCI6MjA5OTQ1MjE4MX0.yVbClXBk2JVeglevsBLY5sH2_m2ybCf71u4i_YYWyHE';
+
+const ROLE_LABEL = { super_admin: '権限付与者', admin: 'システム管理者', operator: '担当者', staff: '事務員' };
+
+/* ===================== セッション管理 ===================== */
+
+function _saveSession(data) {
+  const session = {
+    access_token:  data.access_token,
+    refresh_token: data.refresh_token,
+    expires_at:    data.expires_at || (Math.floor(Date.now() / 1000) + (data.expires_in || 3600)),
+    user_id:       data.user?.id || data.user_id,
+    email:         data.user?.email || data.email,
+  };
+  sessionStorage.setItem('takao_session', JSON.stringify(session));
+  return session;
+}
+
+function _getSession() {
+  try { return JSON.parse(sessionStorage.getItem('takao_session')); }
+  catch { return null; }
+}
+
+function _clearSession() {
+  sessionStorage.removeItem('takao_session');
+  sessionStorage.removeItem('takao_role');
+  sessionStorage.removeItem('takao_name');
+  sessionStorage.removeItem('takao_permissions');
+  sessionStorage.removeItem('takao_mfa_enforced');
+}
+
+// refresh_token でアクセストークンを更新する（成功=true）。長時間開いても保存が切れないように使う
+async function refreshSession() {
+  const s = _getSession();
+  if (!s || !s.refresh_token) return false;
+  try {
+    const res = await fetch(`${AUTH_URL}/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { 'apikey': ANON_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: s.refresh_token })
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (!data || !data.access_token) return false;
+    _saveSession(data);
+    return true;
+  } catch { return false; }
+}
+// 期限が近い/切れていれば先に更新
+async function ensureFreshToken() {
+  const s = _getSession();
+  if (s && s.expires_at && (s.expires_at - 60) < Math.floor(Date.now() / 1000)) {
+    await refreshSession();
+  }
+}
+
+function getPermissions() {
+  try { return JSON.parse(sessionStorage.getItem('takao_permissions')) || {}; }
+  catch { return {}; }
+}
+
+function isMfaEnforced() {
+  return sessionStorage.getItem('takao_mfa_enforced') === 'true';
+}
+
+function _isExpired(session) {
+  if (!session?.expires_at) return true;
+  return Math.floor(Date.now() / 1000) > session.expires_at - 60;
+}
+
+function _authHeaders(token) {
+  return {
+    'Content-Type': 'application/json',
+    'apikey': ANON_KEY,
+    'Authorization': `Bearer ${token || ANON_KEY}`
+  };
+}
+
+/* ===================== Supabase Auth API ===================== */
+
+async function _refresh(session) {
+  try {
+    const res = await fetch(`${AUTH_URL}/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': ANON_KEY },
+      body: JSON.stringify({ refresh_token: session.refresh_token }),
+    });
+    if (!res.ok) return null;
+    return _saveSession(await res.json());
+  } catch { return null; }
+}
+
+async function _getRole(accessToken) {
+  const cached = sessionStorage.getItem('takao_role');
+  if (cached) return cached;
+  try {
+    const res = await fetch(`${REST_URL}/user_roles?select=role,display_name,permissions,mfa_enforced`, {
+      headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${accessToken}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const row = data[0];
+    if (!row) return null;
+    sessionStorage.setItem('takao_role', row.role);
+    if (row.display_name) sessionStorage.setItem('takao_name', row.display_name);
+    if (row.permissions) sessionStorage.setItem('takao_permissions', JSON.stringify(row.permissions));
+    if (row.mfa_enforced != null) sessionStorage.setItem('takao_mfa_enforced', String(row.mfa_enforced));
+    return row.role;
+  } catch { return null; }
+}
+
+/* ===================== 公開 API ===================== */
+
+/**
+ * ログアウト
+ */
+async function signOut() {
+  const session = _getSession();
+  if (session?.access_token) {
+    fetch(`${AUTH_URL}/logout`, {
+      method: 'POST',
+      headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` },
+    }).catch(() => {});
+  }
+  _clearSession();
+  window.location.href = 'login.html';
+}
+
+/**
+ * パスワード変更（ログイン中のユーザー自身）
+ */
+async function changePassword(newPassword) {
+  const session = _getSession();
+  if (!session?.access_token) return { ok: false, error: 'セッションが無効です' };
+  try {
+    const res = await fetch(`${AUTH_URL}/user`, {
+      method: 'PUT',
+      headers: _authHeaders(session.access_token),
+      body: JSON.stringify({ password: newPassword })
+    });
+    if (res.ok) return { ok: true };
+    const d = await res.json();
+    return { ok: false, error: d.msg || d.message || 'パスワード変更に失敗しました' };
+  } catch (e) {
+    return { ok: false, error: 'ネットワークエラー: ' + e.message };
+  }
+}
+
+/**
+ * TOTP登録開始（QRコードURIを返す）
+ */
+async function enrollTotp() {
+  let session = _getSession();
+  if (!session?.access_token) return { ok: false, error: 'セッションが無効です' };
+
+  // セッションの有効期限が近い場合はリフレッシュ
+  if (_isExpired(session)) {
+    session = await _refresh(session);
+    if (!session) return { ok: false, error: 'セッションの更新に失敗しました。再ログインしてください。' };
+  }
+
+  try {
+    // 未確認（unverified）のTOTPファクターのみ削除（確認済みのものは絶対に削除しない）
+    const listRes = await fetch(`${AUTH_URL}/factors`, {
+      headers: _authHeaders(session.access_token)
+    });
+    if (listRes.ok) {
+      const factors = await listRes.json();
+      if (Array.isArray(factors)) {
+        // 確認済みファクターが既にある場合はエラーを返す
+        const verified = factors.find(f => f.factor_type === 'totp' && f.status === 'verified');
+        if (verified) {
+          return { ok: false, error: '二段階認証はすでに設定済みです。一度「解除する」してから再設定してください。' };
+        }
+        // 未確認ファクターのみ削除
+        for (const f of factors) {
+          if (f.factor_type === 'totp' && f.status === 'unverified') {
+            await fetch(`${AUTH_URL}/factors/${f.id}`, {
+              method: 'DELETE',
+              headers: _authHeaders(session.access_token)
+            });
+          }
+        }
+      }
+    }
+
+    const res = await fetch(`${AUTH_URL}/factors`, {
+      method: 'POST',
+      headers: _authHeaders(session.access_token),
+      body: JSON.stringify({ factor_type: 'totp', friendly_name: '高尾輸送サービス', issuer: '高尾輸送サービス' })
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const msg = errData.msg || errData.message || errData.error_description || errData.code || `エラー(${res.status})`;
+      return { ok: false, error: 'QRコードの生成に失敗しました: ' + msg };
+    }
+    const d = await res.json();
+    return { ok: true, factorId: d.id, totpUri: d.totp?.uri, secret: d.totp?.secret };
+  } catch (e) {
+    return { ok: false, error: 'ネットワークエラー: ' + e.message };
+  }
+}
+
+/**
+ * TOTP登録確認（初回コード検証）
+ */
+async function verifyTotpEnrollment(factorId, code) {
+  const session = _getSession();
+  if (!session?.access_token) return { ok: false, error: 'セッションが無効です' };
+  try {
+    const chRes = await fetch(`${AUTH_URL}/factors/${factorId}/challenge`, {
+      method: 'POST', headers: _authHeaders(session.access_token), body: JSON.stringify({})
+    });
+    if (!chRes.ok) return { ok: false, error: 'チャレンジ作成に失敗しました' };
+    const { id: challengeId } = await chRes.json();
+
+    const vRes = await fetch(`${AUTH_URL}/factors/${factorId}/verify`, {
+      method: 'POST',
+      headers: _authHeaders(session.access_token),
+      body: JSON.stringify({ challenge_id: challengeId, code })
+    });
+    if (!vRes.ok) return { ok: false, error: 'コードが正しくありません。もう一度お試しください。' };
+    _saveSession(await vRes.json());
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: 'ネットワークエラー: ' + e.message };
+  }
+}
+
+/**
+ * 登録済みTOTPファクター一覧
+ */
+async function getEnrolledFactors() {
+  const session = _getSession();
+  if (!session?.access_token) return [];
+  try {
+    const res = await fetch(`${AUTH_URL}/factors`, {
+      headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
+    });
+    if (!res.ok) return [];
+    const factors = await res.json();
+    return Array.isArray(factors) ? factors.filter(f => f.factor_type === 'totp' && f.status === 'verified') : [];
+  } catch { return []; }
+}
+
+/**
+ * TOTP解除
+ */
+async function unenrollTotp(factorId) {
+  const session = _getSession();
+  if (!session?.access_token) return { ok: false };
+  try {
+    const res = await fetch(`${AUTH_URL}/factors/${factorId}`, {
+      method: 'DELETE',
+      headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
+    });
+    return { ok: res.ok };
+  } catch { return { ok: false }; }
+}
+
+/**
+ * 認証チェック（各ページのDOMContentLoaded前に呼ぶ）
+ */
+async function initAuth(allowedRoles) {
+  document.documentElement.style.visibility = 'hidden';
+  try {
+    let session = _getSession();
+    if (!session) { _redirectLogin(); return false; }
+    if (_isExpired(session)) {
+      session = await _refresh(session);
+      if (!session) { _clearSession(); _redirectLogin(); return false; }
+    }
+    const role = await _getRole(session.access_token);
+    if (!role || !allowedRoles.includes(role)) {
+      _showDenied(role);
+      document.documentElement.style.visibility = 'visible';
+      return false;
+    }
+    _injectUserInfo(session.email, role);
+    _injectModals();
+    document.documentElement.style.visibility = 'visible';
+    return true;
+  } catch (err) {
+    console.error('[auth.js] initAuth error:', err);
+    document.documentElement.style.visibility = 'visible';
+    return false;
+  }
+}
+
+/* ===================== 内部ヘルパー ===================== */
+
+function _redirectLogin() {
+  document.documentElement.style.visibility = 'visible';
+  window.location.href = 'login.html?redirect=' + encodeURIComponent(location.href);
+}
+
+function _showDenied(role) {
+  document.body.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;
+      background:#f5f8f4;font-family:'Noto Sans JP','Hiragino Kaku Gothic Pro',sans-serif;">
+      <div style="background:white;border-radius:18px;padding:44px 40px;text-align:center;
+        box-shadow:0 4px 24px rgba(77,122,94,0.13);max-width:400px;">
+        <div style="font-size:52px;margin-bottom:16px;">🔒</div>
+        <h2 style="color:#b5453a;font-size:18px;margin-bottom:10px;">アクセス権限がありません</h2>
+        <p style="color:#5c7066;font-size:13px;line-height:1.7;margin-bottom:28px;">
+          この画面は表示できません。<br>権限については管理者にお問い合わせください。
+        </p>
+        <div style="display:flex;gap:10px;justify-content:center;">
+          <a href="index.html" style="background:#4d7a5e;color:white;padding:10px 22px;
+            border-radius:9px;text-decoration:none;font-size:13px;font-weight:700;">🏠 トップへ</a>
+          <button onclick="signOut()" style="background:#eef7f1;color:#4d7a5e;border:1px solid #b4d4c0;
+            padding:10px 22px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">
+            ログアウト
+          </button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function _injectUserInfo(email, role) {
+  const header = document.querySelector('header');
+  if (!header) return;
+
+  const name = sessionStorage.getItem('takao_name') || email;
+  const label = (function(){var p={};try{p=JSON.parse(sessionStorage.getItem('takao_permissions')||'{}')}catch(e){}if(p.title)return p.title;if(role==='super_admin')return '権限付与者';if(role==='admin')return 'システム管理者';if(role==='staff')return '事務員';if(role==='operator'){if(p.staff_edit&&p.export)return '情報取扱責任者';if(p.staff_edit)return '情報取扱者';return '操作担当者';}return role;})();
+  const badgeColor = role === 'super_admin' ? '#c0392b'
+    : role === 'admin'    ? '#9b7eb8'
+    : role === 'operator' ? '#2980b9'
+    : '#6b9e7e';
+  const badgeBg    = 'transparent';
+  const badgeBorder = 'transparent';
+
+  const menuId = '_takao_usermenu';
+  const html = `
+    <span style="display:inline-block;width:1px;height:18px;background:rgba(77,122,94,0.25);
+      margin:0 4px;vertical-align:middle;"></span>
+    <div style="position:relative;display:inline-block;">
+      <button id="_takao_menubtn" onclick="_toggleUserMenu()" style="background:rgba(77,122,94,0.10);
+        color:#2d4a38;border:1px solid rgba(77,122,94,0.45);padding:5px 12px;border-radius:9px;
+        font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;
+        display:flex;align-items:center;gap:6px;">
+        <span style="background:${badgeColor};color:white;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:700;letter-spacing:0.03em;">${label}</span>
+        ${name} ▾
+      </button>
+      <div id="${menuId}" style="display:none;position:absolute;right:0;top:calc(100% + 6px);
+        background:white;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.15);
+        min-width:160px;z-index:9999;overflow:hidden;">
+        <button onclick="_closeUserMenu();showPasswordChangeModal();" style="${_menuItemStyle()}">
+          🔑 パスワード変更
+        </button>
+        <button onclick="_closeUserMenu();showTotpSetupModal();" style="${_menuItemStyle()}">
+          🛡️ 二段階認証設定
+        </button>
+        <hr style="margin:0;border:none;border-top:1px solid #eee;">
+        <button onclick="signOut()" style="${_menuItemStyle('danger')}">
+          ログアウト
+        </button>
+      </div>
+    </div>`;
+
+  const divs = header.querySelectorAll(':scope > div');
+  if (divs.length >= 2) {
+    const navDiv = divs[divs.length - 1];
+    navDiv.style.display = 'flex';
+    navDiv.style.alignItems = 'center';
+    navDiv.style.gap = '8px';
+    navDiv.insertAdjacentHTML('beforeend', html);
+  } else {
+    header.style.display = 'flex';
+    header.style.alignItems = 'center';
+    header.style.justifyContent = 'space-between';
+    header.style.flexWrap = 'wrap';
+    const div = document.createElement('div');
+    div.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;';
+    div.innerHTML = html;
+    header.appendChild(div);
+  }
+
+  // メニュー外クリックで閉じる
+  document.addEventListener('click', e => {
+    const btn = document.getElementById('_takao_menubtn');
+    const menu = document.getElementById(menuId);
+    if (btn && menu && !btn.contains(e.target) && !menu.contains(e.target)) {
+      menu.style.display = 'none';
+    }
+  });
+}
+
+function _menuItemStyle(type) {
+  const base = 'width:100%;text-align:left;padding:10px 16px;border:none;background:none;font-size:13px;cursor:pointer;font-family:inherit;display:block;';
+  if (type === 'danger') return base + 'color:#b5453a;';
+  return base + 'color:#2d3b35;';
+}
+
+function _toggleUserMenu() {
+  const menu = document.getElementById('_takao_usermenu');
+  if (menu) menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+function _closeUserMenu() {
+  const menu = document.getElementById('_takao_usermenu');
+  if (menu) menu.style.display = 'none';
+}
+
+/* ===================== モーダル注入 ===================== */
+
+function _injectModals() {
+  if (document.getElementById('_takao_modals')) return;
+  const div = document.createElement('div');
+  div.id = '_takao_modals';
+  div.innerHTML = `
+  <style>
+    ._tm-overlay {
+      display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:10000;
+      align-items:center;justify-content:center;
+    }
+    ._tm-overlay.open { display:flex; }
+    ._tm-box {
+      background:white;border-radius:20px;padding:36px 32px;width:100%;max-width:420px;
+      box-shadow:0 8px 40px rgba(0,0,0,0.18);font-family:'Noto Sans JP','Hiragino Kaku Gothic Pro',sans-serif;
+      position:relative;
+    }
+    ._tm-title { font-size:17px;font-weight:700;color:#2d4a36;margin-bottom:6px; }
+    ._tm-sub { font-size:13px;color:#5c7066;margin-bottom:20px;line-height:1.6; }
+    ._tm-label { font-size:12px;font-weight:700;color:#4d7a5e;margin-bottom:5px;display:block; }
+    ._tm-input {
+      width:100%;padding:10px 14px;border:1.5px solid #c8d8cc;border-radius:9px;
+      font-size:14px;font-family:inherit;color:#2d4a36;background:#f9fbfa;outline:none;
+      margin-bottom:14px;
+    }
+    ._tm-input:focus { border-color:#4d7a5e;box-shadow:0 0 0 3px rgba(77,122,94,0.12); }
+    ._tm-btn {
+      width:100%;padding:12px;background:linear-gradient(135deg,#4d7a5e,#3d6a4e);color:white;
+      border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;
+    }
+    ._tm-btn:disabled { opacity:0.6;cursor:default; }
+    ._tm-btn-sub {
+      width:100%;padding:10px;background:#eef7f1;color:#4d7a5e;border:1px solid #b4d4c0;
+      border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px;
+    }
+    ._tm-err { background:#fdf2f2;color:#b5453a;border:1px solid #eeaaa4;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px;display:none; }
+    ._tm-ok  { background:#eef7f1;color:#2e7d52;border:1px solid #95d0aa;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px;display:none; }
+    ._tm-close { position:absolute;top:14px;right:16px;background:none;border:none;font-size:20px;cursor:pointer;color:#aaa;line-height:1; }
+    ._tm-qr { text-align:center;margin:16px 0; }
+    ._tm-secret { background:#f5f8f4;border:1px solid #c8d8cc;border-radius:8px;padding:8px 12px;font-size:12px;color:#4d7a5e;word-break:break-all;text-align:center;margin-bottom:14px; }
+    ._tm-step { display:none; }
+    ._tm-step.active { display:block; }
+    ._tm-otp { letter-spacing:0.3em;font-size:22px;text-align:center; }
+  </style>
+
+  <!-- パスワード変更モーダル -->
+  <div id="_tm_pw" class="_tm-overlay" onclick="if(event.target===this)closePasswordChangeModal()">
+    <div class="_tm-box">
+      <button class="_tm-close" onclick="closePasswordChangeModal()">×</button>
+      <div class="_tm-title">🔑 パスワード変更</div>
+      <div class="_tm-sub">新しいパスワードを設定します（8文字以上）</div>
+      <div id="_tm_pw_err" class="_tm-err"></div>
+      <div id="_tm_pw_ok" class="_tm-ok">✅ パスワードを変更しました</div>
+      <label class="_tm-label">新しいパスワード</label>
+      <input id="_tm_pw_new" class="_tm-input" type="password" placeholder="新しいパスワード（8文字以上）">
+      <label class="_tm-label">確認（再入力）</label>
+      <input id="_tm_pw_conf" class="_tm-input" type="password" placeholder="もう一度入力">
+      <button id="_tm_pw_btn" class="_tm-btn" onclick="_doChangePassword()">変更する</button>
+      <button class="_tm-btn-sub" onclick="closePasswordChangeModal()">キャンセル</button>
+    </div>
+  </div>
+
+  <!-- 二段階認証設定モーダル -->
+  <div id="_tm_totp" class="_tm-overlay" onclick="if(event.target===this)closeTotpSetupModal()">
+    <div class="_tm-box">
+      <button class="_tm-close" onclick="closeTotpSetupModal()">×</button>
+      <div class="_tm-title">🛡️ 二段階認証設定</div>
+      <div id="_tm_totp_err" class="_tm-err"></div>
+      <div id="_tm_totp_ok" class="_tm-ok"></div>
+
+      <!-- ステップ0: 現在の状態 -->
+      <div id="_tm_totp_s0" class="_tm-step active">
+        <div class="_tm-sub" id="_tm_totp_status">状態を確認中...</div>
+        <button id="_tm_totp_start_btn" class="_tm-btn" onclick="_startTotpSetup()" style="display:none;">QRコードを表示して設定開始</button>
+        <button id="_tm_totp_disable_btn" class="_tm-btn-sub" onclick="_disableTotp()" style="display:none;background:#fdf2f2;color:#b5453a;border-color:#eeaaa4;">二段階認証を解除する</button>
+        <div id="_tm_totp_lock_note" style="display:none;font-size:12px;color:#888;background:#f5f8f4;border-radius:8px;padding:8px 12px;margin-top:8px;">🔒 組織のポリシーにより二段階認証の解除は制限されています。</div>
+        <button class="_tm-btn-sub" onclick="closeTotpSetupModal()" style="margin-top:8px;">閉じる</button>
+      </div>
+
+      <!-- ステップ1: QRコード表示 -->
+      <div id="_tm_totp_s1" class="_tm-step">
+        <div class="_tm-sub">① Google Authenticator または Microsoft Authenticator でQRコードを読み取ってください</div>
+        <div class="_tm-qr" id="_tm_qr_canvas"></div>
+        <div style="font-size:12px;color:#888;margin-bottom:6px;text-align:center;">QRコードが読めない場合はこのコードを手動入力</div>
+        <div class="_tm-secret" id="_tm_totp_secret"></div>
+        <button class="_tm-btn" onclick="_showTotpStep2()">次へ（コード入力）→</button>
+        <button class="_tm-btn-sub" onclick="_showTotpStep0()">キャンセル</button>
+      </div>
+
+      <!-- ステップ2: コード確認 -->
+      <div id="_tm_totp_s2" class="_tm-step">
+        <div class="_tm-sub">② アプリに表示されている6桁のコードを入力して設定を完了します</div>
+        <label class="_tm-label">6桁のコード</label>
+        <input id="_tm_totp_code" class="_tm-input _tm-otp" type="text" inputmode="numeric" maxlength="6" placeholder="000000">
+        <button id="_tm_totp_verify_btn" class="_tm-btn" onclick="_verifyTotpSetup()">設定を完了する</button>
+        <button class="_tm-btn-sub" onclick="_showTotpStep1()">← QRコードに戻る</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(div);
+}
+
+/* ===================== パスワード変更 ===================== */
+
+function showPasswordChangeModal() {
+  _injectModals();
+  document.getElementById('_tm_pw_new').value = '';
+  document.getElementById('_tm_pw_conf').value = '';
+  document.getElementById('_tm_pw_err').style.display = 'none';
+  document.getElementById('_tm_pw_ok').style.display = 'none';
+  document.getElementById('_tm_pw').classList.add('open');
+  setTimeout(() => document.getElementById('_tm_pw_new').focus(), 100);
+}
+
+function closePasswordChangeModal() {
+  document.getElementById('_tm_pw').classList.remove('open');
+}
+
+async function _doChangePassword() {
+  const np   = document.getElementById('_tm_pw_new').value;
+  const conf = document.getElementById('_tm_pw_conf').value;
+  const err  = document.getElementById('_tm_pw_err');
+  const ok   = document.getElementById('_tm_pw_ok');
+  const btn  = document.getElementById('_tm_pw_btn');
+  err.style.display = 'none';
+  ok.style.display = 'none';
+  if (np.length < 8) { err.textContent = 'パスワードは8文字以上で設定してください'; err.style.display = 'block'; return; }
+  if (np !== conf)   { err.textContent = 'パスワードが一致しません'; err.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = '変更中…';
+  const result = await changePassword(np);
+  btn.disabled = false; btn.textContent = '変更する';
+  if (result.ok) {
+    ok.style.display = 'block';
+    document.getElementById('_tm_pw_new').value = '';
+    document.getElementById('_tm_pw_conf').value = '';
+    setTimeout(() => closePasswordChangeModal(), 2000);
+  } else {
+    err.textContent = result.error; err.style.display = 'block';
+  }
+}
+
+/* ===================== 二段階認証設定 ===================== */
+
+let _totpFactorId = null;
+
+async function showTotpSetupModal() {
+  _injectModals();
+  _showTotpStep0();
+  document.getElementById('_tm_totp_err').style.display = 'none';
+  document.getElementById('_tm_totp_ok').style.display = 'none';
+  document.getElementById('_tm_totp').classList.add('open');
+
+  const status = document.getElementById('_tm_totp_status');
+  const startBtn  = document.getElementById('_tm_totp_start_btn');
+  const disableBtn = document.getElementById('_tm_totp_disable_btn');
+  status.textContent = '状態を確認中...';
+  startBtn.style.display = 'none';
+  disableBtn.style.display = 'none';
+
+  const factors = await getEnrolledFactors();
+  const role = sessionStorage.getItem('takao_role');
+  const canDisable = !isMfaEnforced() || role === 'super_admin';
+  if (factors.length > 0) {
+    _totpFactorId = factors[0].id;
+    if (canDisable) {
+      status.textContent = '✅ 二段階認証は有効です。認証アプリが設定されています。';
+      disableBtn.style.display = 'block';
+    } else {
+      status.textContent = '✅ 二段階認証は有効です（組織の設定により解除できません）。';
+      disableBtn.style.display = 'none';
+      const lockNote = document.getElementById('_tm_totp_lock_note');
+      if (lockNote) lockNote.style.display = 'block';
+    }
+  } else {
+    status.textContent = '二段階認証は現在無効です。設定するとログイン時にアプリのコード入力が必要になります。';
+    startBtn.style.display = 'block';
+  }
+}
+
+function closeTotpSetupModal() {
+  document.getElementById('_tm_totp').classList.remove('open');
+}
+
+function _showTotpStep0() {
+  ['_tm_totp_s0','_tm_totp_s1','_tm_totp_s2'].forEach((id, i) => {
+    document.getElementById(id).classList.toggle('active', i === 0);
+  });
+}
+function _showTotpStep1() {
+  ['_tm_totp_s0','_tm_totp_s1','_tm_totp_s2'].forEach((id, i) => {
+    document.getElementById(id).classList.toggle('active', i === 1);
+  });
+}
+function _showTotpStep2() {
+  document.getElementById('_tm_totp_code').value = '';
+  ['_tm_totp_s0','_tm_totp_s1','_tm_totp_s2'].forEach((id, i) => {
+    document.getElementById(id).classList.toggle('active', i === 2);
+  });
+  setTimeout(() => document.getElementById('_tm_totp_code').focus(), 100);
+}
+
+async function _startTotpSetup() {
+  const startBtn = document.getElementById('_tm_totp_start_btn');
+  const err = document.getElementById('_tm_totp_err');
+  err.style.display = 'none';
+  startBtn.disabled = true; startBtn.textContent = 'QRコード生成中…';
+
+  const result = await enrollTotp();
+  startBtn.disabled = false; startBtn.textContent = 'QRコードを表示して設定開始';
+  if (!result.ok) { err.textContent = result.error; err.style.display = 'block'; return; }
+
+  _totpFactorId = result.factorId;
+  document.getElementById('_tm_totp_secret').textContent = result.secret || '';
+
+  // QRコード描画
+  const canvas = document.getElementById('_tm_qr_canvas');
+  canvas.innerHTML = '';
+  _loadQRLib(() => {
+    new QRCode(canvas, { text: result.totpUri, width: 200, height: 200,
+      colorDark: '#2d4a36', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  });
+
+  _showTotpStep1();
+}
+
+async function _verifyTotpSetup() {
+  const code = document.getElementById('_tm_totp_code').value.replace(/\D/g, '');
+  const err  = document.getElementById('_tm_totp_err');
+  const ok   = document.getElementById('_tm_totp_ok');
+  const btn  = document.getElementById('_tm_totp_verify_btn');
+  err.style.display = 'none';
+  if (code.length !== 6) { err.textContent = '6桁のコードを入力してください'; err.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = '確認中…';
+  const result = await verifyTotpEnrollment(_totpFactorId, code);
+  btn.disabled = false; btn.textContent = '設定を完了する';
+  if (result.ok) {
+    ok.textContent = '✅ 二段階認証の設定が完了しました！次回ログインからコード入力が必要になります。';
+    ok.style.display = 'block';
+    _showTotpStep0();
+    document.getElementById('_tm_totp_status').textContent = '✅ 二段階認証は有効です。認証アプリが設定されています。';
+    document.getElementById('_tm_totp_start_btn').style.display = 'none';
+    document.getElementById('_tm_totp_disable_btn').style.display = 'block';
+  } else {
+    err.textContent = result.error; err.style.display = 'block';
+  }
+}
+
+async function _disableTotp() {
+  const role = sessionStorage.getItem('takao_role');
+  if (isMfaEnforced() && role !== 'super_admin') {
+    alert('組織のポリシーにより二段階認証は解除できません。');
+    return;
+  }
+  if (!confirm('二段階認証を解除しますか？\nログイン時のコード入力が不要になります。')) return;
+  const result = await unenrollTotp(_totpFactorId);
+  const err = document.getElementById('_tm_totp_err');
+  const ok  = document.getElementById('_tm_totp_ok');
+  if (result.ok) {
+    ok.textContent = '二段階認証を解除しました。';
+    ok.style.display = 'block';
+    document.getElementById('_tm_totp_status').textContent = '二段階認証は現在無効です。';
+    document.getElementById('_tm_totp_start_btn').style.display = 'block';
+    document.getElementById('_tm_totp_disable_btn').style.display = 'none';
+  } else {
+    err.textContent = '解除に失敗しました。'; err.style.display = 'block';
+  }
+}
+
+function _loadQRLib(cb) {
+  if (window.QRCode) { cb(); return; }
+  const s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+  s.onload = cb;
+  document.head.appendChild(s);
+}
+
+
+
+
+
+</script>
+<script>
+/* ===== 駐輪場 ページロジック（2026-09-02 八重樫さん） =====
+
+   会社が担保するのは最大1か月契約まで。
+   > ３か月の定期代を担保するほど会社として将来の仕事を確約する理由がありません。
+
+   支払いの決まり（例外なし）
+     その月に実勤務が1日でもある → その月分を払う
+     その月に実勤務が0日          → 払わない（退職後も・夏休みも・急な休みも同じ）
+   実勤務は**日報**から数える。 */
+
+const SUPABASE_URL = 'https://wxdyqkyqtizhtkwtpvru.supabase.co';
+const REST_URL = SUPABASE_URL + '/rest/v1';
+const KINDS = ['1回','1日','1か月'];
+
+let PARKINGS = [], RATES = [], STAFF = [], USES = [];
+let LOAD_ERR = '';           /* ⚠️ 読めなかった理由。空にして「0件」に見せない */
+let TAB = 1;
+
+function getH(){
+  const s = _getSession();
+  const tok = (s && s.access_token) || ANON_KEY;
+  return { 'apikey': ANON_KEY, 'Authorization': 'Bearer ' + tok,
+           'Content-Type': 'application/json', 'Prefer': 'return=representation' };
+}
+function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function status(msg, ok){
+  const el = document.getElementById('status');
+  el.className = ok ? 'ok' : 'err'; el.innerHTML = msg;
+  if(ok) setTimeout(function(){ el.className=''; el.textContent=''; }, 6000);
+}
+function yen(n){ return n == null ? '' : '¥' + Number(n).toLocaleString('ja-JP'); }
+function todayISO(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function setTab(n){
+  TAB = n;
+  [1,2,3].forEach(function(i){
+    document.getElementById('tab'+i).className = 'tab' + (i===n ? ' active' : '');
+    document.getElementById('pane'+i).style.display = (i===n ? '' : 'none');
+  });
+}
+
+/* ---------- 読み込み ---------- */
+async function loadAll(){
+  LOAD_ERR = '';
+  try{
+    const rp = await fetch(`${REST_URL}/bicycle_parkings?select=id,name,address,active&order=name`, { headers:getH() });
+    const rr = await fetch(`${REST_URL}/bicycle_parking_rates?select=id,parking_id,kind,amount,valid_from&order=valid_from.desc`, { headers:getH() });
+    const ru = await fetch(`${REST_URL}/staff_parking_uses?select=id,staff_id,parking_id,kind,valid_from,valid_to,note&order=valid_from.desc`, { headers:getH() });
+    if(!rp.ok || !rr.ok || !ru.ok){
+      /* ⚠️ 読めなかったことを「0件」と同じ見た目にしない */
+      LOAD_ERR = '駐輪場の読み込みに失敗しました（' + rp.status + ' / ' + rr.status + ' / ' + ru.status + '）';
+      render(); return;
+    }
+    PARKINGS = (await rp.json()) || [];
+    RATES    = (await rr.json()) || [];
+    USES     = (await ru.json()) || [];
+    /* ⚠️ 在籍者は staff_now（退職日が過ぎたら退職扱い）。読めなければ古い読み方に落とし、落ちたことを画面に出す */
+    const rs = await fetch(`${REST_URL}/staff_now?select=id,name,name_kana&is_active_now=eq.true&order=name_kana.asc.nullslast,name.asc`, { headers:getH() });
+    if(rs.ok){ STAFF = (await rs.json()) || []; }
+    else {
+      const r2 = await fetch(`${REST_URL}/staff?select=id,name,name_kana&active=eq.true&order=name_kana.asc.nullslast,name.asc`, { headers:getH() });
+      if(r2.ok){ STAFF = (await r2.json()) || []; status('⚠️ 在籍者の一覧が読めなかったため、古い読み方に切り替えました。', false); }
+      else { LOAD_ERR = '従業員の一覧を読み取れませんでした'; }
+    }
+  }catch(e){ LOAD_ERR = '読み込みに失敗しました：' + e.message; }
+  fillStaff();
+  render();
+}
+function fillStaff(){
+  const el = document.getElementById('spStaff');
+  const cur = el.value;
+  el.innerHTML = '<option value="">— 選択してください —</option>'
+    + STAFF.map(function(s){ return `<option value="${s.id}">${escHtml(s.name)}</option>`; }).join('');
+  if(cur) el.value = cur;
+}
+
+/* ---------- ① 駐輪場と料金 ---------- */
+/** その日に効いている料金（「◯月◯日より」のいちばん新しいもの） */
+function rateNow(pid, kind, on){
+  const d = on || todayISO();
+  const a = RATES.filter(function(r){
+      return String(r.parking_id)===String(pid) && r.kind===kind && r.valid_from <= d;
+    }).sort(function(x,y){ return x.valid_from < y.valid_from ? 1 : -1; });
+  return a.length ? a[0] : null;
+}
+function render(){
+  if(LOAD_ERR){
+    const w = '<div class="panel" style="background:#fdeceb;border-color:#f3c3bf;color:#b5453a;line-height:1.8;">'
+      + '⚠️ ' + escHtml(LOAD_ERR) + '<br><b>「登録がありません」という意味ではありません。</b>画面を読み直してください。</div>';
+    document.getElementById('parkArea').innerHTML = w;
+    document.getElementById('useArea').innerHTML  = w;
+    return;
+  }
+  renderParkings();
+  renderUses();
+}
+function renderParkings(){
+  const el = document.getElementById('parkArea');
+  if(!PARKINGS.length){
+    el.innerHTML = '<div class="panel"><p class="muted" style="margin:0;">まだ駐輪場が登録されていません。上の欄から追加してください。</p></div>';
+    return;
+  }
+  el.innerHTML = PARKINGS.map(function(p){
+    const rows = KINDS.map(function(k){
+      const r = rateNow(p.id, k);
+      const hist = RATES.filter(function(x){ return String(x.parking_id)===String(p.id) && x.kind===k; });
+      return '<tr>'
+        + '<td style="padding:4px;white-space:nowrap;">' + k + '</td>'
+        + '<td style="padding:4px;">' + (r ? escHtml(yen(r.amount)) : '<span class="muted">未登録</span>') + '</td>'
+        + '<td style="padding:4px;" class="muted">' + (r ? escHtml(r.valid_from) + ' より' : '') + '</td>'
+        + '<td style="padding:4px;">'
+        + `<input type="number" id="amt_${p.id}_${k}" placeholder="金額" style="width:100px;">`
+        + `<input type="date" id="frm_${p.id}_${k}" value="${todayISO()}" style="width:auto;margin-left:4px;">`
+        + `<button class="mini" style="margin-left:4px;" onclick="setRate(${p.id},'${k}')">この日から</button>`
+        + (hist.length>1 ? `<button class="link" onclick="showHist(${p.id},'${k}')">履歴 ${hist.length}件</button>` : '')
+        + '</td></tr>';
+    }).join('');
+    return '<div class="panel">'
+      + '<div class="row" style="justify-content:space-between;">'
+      + '<div><b style="font-size:15px;color:var(--g2);">' + escHtml(p.name) + '</b>'
+      + (p.address ? '<span class="muted" style="margin-left:8px;">' + escHtml(p.address) + '</span>' : '')
+      + (p.active === false ? '<span class="muted" style="margin-left:8px;">（使っていません）</span>' : '')
+      + '</div>'
+      + `<button class="link" onclick="toggleParking(${p.id}, ${p.active === false})">`
+      + (p.active === false ? '使う' : '使わない') + '</button></div>'
+      + '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:13px;">'
+      + '<thead><tr style="color:#6b7d72;font-size:12px;text-align:left;">'
+      + '<th style="padding:4px;">払い方</th><th style="padding:4px;">いまの金額</th>'
+      + '<th style="padding:4px;">適用</th><th style="padding:4px;">金額を変える</th></tr></thead>'
+      + '<tbody>' + rows + '</tbody></table>'
+      + '<p class="muted" style="margin:8px 0 0;">⚠️ 金額を変えても<b>過去は書き換えません</b>。「この日から」の行が足されます。</p>'
+      + '</div>';
+  }).join('');
+}
+function showHist(pid, kind){
+  const a = RATES.filter(function(x){ return String(x.parking_id)===String(pid) && x.kind===kind; })
+                 .sort(function(x,y){ return x.valid_from < y.valid_from ? 1 : -1; });
+  alert(kind + ' の金額の移りかわり\n\n' + a.map(function(r){ return r.valid_from + ' より　' + yen(r.amount); }).join('\n'));
+}
+async function addParking(){
+  const name = (document.getElementById('npName').value||'').trim();
+  const addr = (document.getElementById('npAddr').value||'').trim();
+  if(!name){ status('名称を入れてください。', false); return; }
+  const r = await fetch(`${REST_URL}/bicycle_parkings`, { method:'POST', headers:getH(),
+    body: JSON.stringify([{ name: name, address: addr }]) });
+  if(!r.ok){ status('追加できませんでした：' + escHtml(permMsg((await r.text()).slice(0,150))), false); return; }
+  document.getElementById('npName').value = ''; document.getElementById('npAddr').value = '';
+  await loadAll(); status('駐輪場を追加しました。続けて料金を入れてください。', true);
+}
+async function toggleParking(id, toActive){
+  const r = await fetch(`${REST_URL}/bicycle_parkings?id=eq.${id}`, { method:'PATCH', headers:getH(),
+    body: JSON.stringify({ active: toActive }) });
+  if(!r.ok){ status('変えられませんでした：' + escHtml(permMsg((await r.text()).slice(0,150))), false); return; }
+  await loadAll(); status(toActive ? '使う状態に戻しました。' : '使わない状態にしました。', true);
+}
+async function setRate(pid, kind){
+  const amt = document.getElementById('amt_' + pid + '_' + kind).value;
+  const frm = document.getElementById('frm_' + pid + '_' + kind).value;
+  if(amt === '' || Number(amt) < 0){ status('金額を入れてください。', false); return; }
+  if(!frm){ status('いつから適用するかを入れてください。', false); return; }
+  const r = await fetch(`${REST_URL}/bicycle_parking_rates`, { method:'POST', headers:getH(),
+    body: JSON.stringify([{ parking_id: pid, kind: kind, amount: Number(amt), valid_from: frm }]) });
+  if(!r.ok){
+    const t = await r.text();
+    status(t.indexOf('duplicate') >= 0
+      ? 'その日から始まる金額は、すでに登録されています。日付を変えてください。'
+      : '登録できませんでした：' + escHtml(permMsg(t.slice(0,150))), false);
+    return;
+  }
+  await loadAll(); status(kind + ' の金額を ' + frm + ' から ' + yen(Number(amt)) + ' にしました。', true);
+}
+
+/* ---------- ② 人ごとの取り決め ---------- */
+function renderUses(){
+  const el = document.getElementById('useArea');
+  const sid = document.getElementById('spStaff').value;
+  if(!sid){ el.innerHTML = '<div class="panel"><p class="muted" style="margin:0;">添乗員を選んでください。</p></div>'; return; }
+  const mine = USES.filter(function(u){ return String(u.staff_id) === String(sid); });
+  const opts = PARKINGS.filter(function(p){ return p.active !== false; })
+    .map(function(p){ return `<option value="${p.id}">${escHtml(p.name)}</option>`; }).join('');
+  const rows = mine.map(function(u){
+    const p = PARKINGS.find(function(x){ return String(x.id)===String(u.parking_id); });
+    const r = rateNow(u.parking_id, u.kind);
+    return '<tr style="border-top:1px solid var(--line);">'
+      + '<td style="padding:5px;">' + escHtml(p ? p.name : '（不明）') + '</td>'
+      + '<td style="padding:5px;white-space:nowrap;">' + escHtml(u.kind) + '</td>'
+      + '<td style="padding:5px;white-space:nowrap;">' + (r ? escHtml(yen(r.amount)) : '<span class="muted">料金未登録</span>') + '</td>'
+      + '<td style="padding:5px;white-space:nowrap;">' + escHtml(u.valid_from) + ' より</td>'
+      + '<td style="padding:5px;white-space:nowrap;">' + (u.valid_to ? escHtml(u.valid_to) + ' まで' : '<b>継続中</b>') + '</td>'
+      + '<td style="padding:5px;">' + (u.valid_to ? '' :
+          `<input type="date" id="end_${u.id}" value="${todayISO()}" style="width:auto;">`
+          + `<button class="mini" style="margin-left:4px;" onclick="endUse(${u.id})">この日で解約</button>`) + '</td>'
+      + '</tr>';
+  }).join('');
+  el.innerHTML = '<div class="panel">'
+    + '<label class="fld">使っている駐輪場</label>'
+    + (mine.length
+        ? '<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+          + '<thead><tr style="color:#6b7d72;font-size:12px;text-align:left;">'
+          + '<th style="padding:5px;">駐輪場</th><th style="padding:5px;">払い方</th><th style="padding:5px;">いまの金額</th>'
+          + '<th style="padding:5px;">いつから</th><th style="padding:5px;">解約</th><th style="padding:5px;"></th></tr></thead>'
+          + '<tbody>' + rows + '</tbody></table>'
+        : '<p class="muted" style="margin:0 0 8px;">まだ登録がありません。</p>')
+    + '<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;">'
+    + '<label class="fld">追加する</label>'
+    + '<div class="row">'
+    + '<select id="nuPark" style="flex:2;min-width:180px;"><option value="">駐輪場を選ぶ…</option>' + opts + '</select>'
+    + '<select id="nuKind" style="width:auto;">'
+    + KINDS.map(function(k){ return `<option value="${k}">${k}</option>`; }).join('') + '</select>'
+    + `<input type="date" id="nuFrom" value="${todayISO()}" style="width:auto;">`
+    + '<button class="primary" onclick="addUse()">この日から</button>'
+    + '</div>'
+    + '<p class="muted" style="margin:8px 0 0;line-height:1.7;">'
+    + '⚠️ <b>会社が払うのは1か月契約までです。</b>3か月などの契約をされる場合も、ここは「1か月」を選んでください。<br>'
+    + '⚠️ 解約しても<b>行は消えません</b>。過去の給与計算の根拠が消えてしまうためです。'
+    + '</p></div></div>';
+}
+async function addUse(){
+  const sid  = document.getElementById('spStaff').value;
+  const pid  = document.getElementById('nuPark').value;
+  const kind = document.getElementById('nuKind').value;
+  const frm  = document.getElementById('nuFrom').value;
+  if(!sid || !pid){ status('添乗員と駐輪場を選んでください。', false); return; }
+  if(!frm){ status('いつからかを入れてください。', false); return; }
+  if(!rateNow(pid, kind, frm)){
+    if(!confirm('この駐輪場の「' + kind + '」の金額が、その日にはまだ登録されていません。\n\n'
+      + 'このまま登録すると、金額が出せません。よろしいですか。')) return;
+  }
+  const r = await fetch(`${REST_URL}/staff_parking_uses`, { method:'POST', headers:getH(),
+    body: JSON.stringify([{ staff_id: Number(sid), parking_id: Number(pid), kind: kind, valid_from: frm }]) });
+  if(!r.ok){ status('登録できませんでした：' + escHtml(permMsg((await r.text()).slice(0,150))), false); return; }
+  await loadAll(); status('登録しました。', true);
+}
+async function endUse(id){
+  const d = document.getElementById('end_' + id).value;
+  if(!d){ status('解約日を入れてください。', false); return; }
+  if(!confirm(d + ' で解約にします。\n\nこの日までは、その月に実勤務があれば支払いの対象になります。\nよろしいですか。')) return;
+  const r = await fetch(`${REST_URL}/staff_parking_uses?id=eq.${id}`, { method:'PATCH', headers:getH(),
+    body: JSON.stringify({ valid_to: d }) });
+  if(!r.ok){ status('解約にできませんでした：' + escHtml(permMsg((await r.text()).slice(0,150))), false); return; }
+  await loadAll(); status('解約にしました。', true);
+}
+
+/* ---------- ③ 月ごとの金額 ---------- */
+async function loadMonth(){
+  const ym = document.getElementById('pmMonth').value;
+  const el = document.getElementById('monthArea');
+  if(!ym){ status('対象月を選んでください。', false); return; }
+  el.innerHTML = '<div class="panel"><p class="muted" style="margin:0;">計算しています…</p></div>';
+  const r = await fetch(`${REST_URL}/rpc/parking_month_list`, { method:'POST', headers:getH(),
+    body: JSON.stringify({ p_ym: ym }) });
+  if(!r.ok){
+    /* ⚠️ 読めなかったことを「0件」と同じ見た目にしない */
+    el.innerHTML = '<div class="panel" style="background:#fdeceb;border-color:#f3c3bf;color:#b5453a;line-height:1.8;">'
+      + '⚠️ 計算できませんでした（' + escHtml((await r.text()).slice(0,120)) + '）<br>'
+      + '<b>「対象者がいない」という意味ではありません。</b></div>';
+    return;
+  }
+  const rows = (await r.json()) || [];
+  if(!rows.length){
+    el.innerHTML = '<div class="panel"><p class="muted" style="margin:0;">この月に取り決めのある方はいません。</p></div>';
+    return;
+  }
+  const ng  = rows.filter(function(x){ return x['金額'] == null; });
+  const sum = rows.reduce(function(a,x){ return a + (Number(x['金額'])||0); }, 0);
+  el.innerHTML = '<div class="panel">'
+    + (ng.length
+        ? '<div style="background:#fdf6e3;border:1px solid #e6c88a;border-radius:8px;padding:8px 10px;margin:0 0 10px;font-size:12.5px;line-height:1.8;color:#8a6d1f;">'
+          + '⚠️ <b>金額を出せない行が ' + ng.length + '件</b> あります。<b>0円ではありません。</b>下の「状態」をご確認ください。</div>'
+        : '')
+    + '<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+    + '<thead><tr style="color:#6b7d72;font-size:12px;text-align:left;">'
+    + '<th style="padding:5px;">氏名</th><th style="padding:5px;">駐輪場</th><th style="padding:5px;">払い方</th>'
+    + '<th style="padding:5px;text-align:right;">単価</th><th style="padding:5px;text-align:right;">回数</th>'
+    + '<th style="padding:5px;text-align:right;">金額</th><th style="padding:5px;">状態</th></tr></thead>'
+    + '<tbody>' + rows.map(function(x){
+        return '<tr style="border-top:1px solid var(--line);">'
+          + '<td style="padding:5px;white-space:nowrap;">' + escHtml(x['氏名']) + '</td>'
+          + '<td style="padding:5px;">' + escHtml(x['駐輪場']) + '</td>'
+          + '<td style="padding:5px;white-space:nowrap;">' + escHtml(x['払い方']) + '</td>'
+          + '<td style="padding:5px;text-align:right;">' + escHtml(yen(x['単価'])) + '</td>'
+          + '<td style="padding:5px;text-align:right;">' + (x['回数']==null?'':escHtml(String(x['回数']))) + '</td>'
+          + '<td style="padding:5px;text-align:right;' + (x['金額']==null?'color:#b5453a;':'font-weight:700;') + '">'
+          + (x['金額']==null?'—':escHtml(yen(x['金額']))) + '</td>'
+          + '<td style="padding:5px;font-size:12px;color:'
+          + (String(x['状態']).indexOf('⚠️')>=0?'#8a6d1f':'#6b7d72') + ';">' + escHtml(x['状態']) + '</td>'
+          + '</tr>';
+      }).join('') + '</tbody>'
+    + '<tfoot><tr style="border-top:2px solid var(--line);">'
+    + '<td colspan="5" style="padding:6px;text-align:right;font-weight:700;">合計（出せた分のみ）</td>'
+    + '<td style="padding:6px;text-align:right;font-weight:700;font-size:15px;">' + escHtml(yen(sum)) + '</td><td></td></tr></tfoot>'
+    + '</table></div>';
+}
+
+/* ---------- 起動 ---------- */
+window.addEventListener('DOMContentLoaded', async function(){
+  const d = new Date();
+  document.getElementById('pmMonth').value = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+  await loadAll();
+});
+
+</script>
+</body>
+</html>

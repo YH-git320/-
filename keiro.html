@@ -52,6 +52,7 @@ button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
     <a href="yotei.html">月間予定</a>
     <a href="haichi.html">配置管理</a>
     <a href="daicho.html">車両台帳</a>
+    <a href="chuurin.html">駐輪場</a>
   </nav>
 </header>
 <main>
@@ -136,6 +137,8 @@ async function permGuard(){
 }
 /** サーバーから返る英語のエラーを、何の権限が足りないかに言い換える */
 const _PERM_TBL = {
+  bicycle_parkings:'駐輪場', bicycle_parking_rates:'駐輪場の料金',
+  staff_parking_uses:'駐輪場の取り決め',
   course_schedule_calendar:'月間予定', permits:'営業許可', vehicles:'車両台帳',
   vehicle_assignments:'車両の割り当て', commute_routes:'通勤経路', courses:'コース',
   job_types:'業務マスタ', employee_job_types:'業務マスタ', offices:'営業所',
@@ -899,9 +902,12 @@ function normRoutes(routes){
         r[l][d]['手段'] = s['手段'] || '';
         r[l][d]['交通費'] = Number(s['交通費']) || 0;
         r[l][d]['移動時間'] = s['移動時間'] || '';
-        r[l][d]['区間'] = Array.isArray(s['区間']) ? s['区間'].map(x => ({
-          '手段': x['手段'] || '電車', '乗車': x['乗車'] || '', '下車': x['下車'] || '', '運賃': Number(x['運賃']) || 0
-        })) : [];
+        /* ⚠️ ここに書き足さないと、読み直しのたびに黙って消える（2026-09-01 場所id で踏んだ） */
+        r[l][d]['区間'] = Array.isArray(s['区間']) ? s['区間'].map(function(x){
+          const o = { '手段': x['手段'] || '電車', '乗車': x['乗車'] || '', '下車': x['下車'] || '', '運賃': Number(x['運賃']) || 0 };
+          if (x['駐輪場id'] != null && x['駐輪場id'] !== '') o['駐輪場id'] = Number(x['駐輪場id']);
+          return o;
+        }) : [];
       }
     }));
   }
@@ -1319,10 +1325,13 @@ function _arrForSlot(c, r, leg, dir){
 
 /** 行程（区間）を反対にする */
 function _revSegs(segs){
-  return (segs || []).slice().reverse().map(x => ({
-    '手段': x['手段'] || '', '乗車': x['下車'] || '', '下車': x['乗車'] || '',
-    '運賃': Number(x['運賃']) || 0
-  }));
+  return (segs || []).slice().reverse().map(function(x){
+    const o = { '手段': x['手段'] || '', '乗車': x['下車'] || '', '下車': x['乗車'] || '',
+                '運賃': Number(x['運賃']) || 0 };
+    /* ⚠️ 駐輪場は行程を反対にしても同じ場所。持っていく */
+    if (x['駐輪場id'] != null) o['駐輪場id'] = Number(x['駐輪場id']);
+    return o;
+  });
 }
 
 /* 🔴 場面から場面へ写す（2026-09-02 八重樫さん）
@@ -1621,6 +1630,63 @@ function courseCardHtml(c, ci){
   </div>`;
 }
 
+/* 🔴 自転車の区間に「どの駐輪場を使うか」を足す（2026-09-02 八重樫さん）
+
+   > 人によっては最寄り駅まで自転車で通っている人がいます。
+   > またはバスポイントまで自転車で通っている人もいます。
+
+   ⚠️ ここで選ぶのは**場所だけ**。いくら払うかは「駐輪場」の画面で決める。
+      1回・1日・1か月のどれで払うかは、人ごとの取り決め（駐輪場の画面）に持つ。
+      ここに金額を書くと、値上げのときに全員ぶんを直すことになり、必ず直し漏れる。
+   ⚠️ 駐輪場を読めなかったときは、選択肢を空にせず「読み取れませんでした」と出す。
+      空の選択肢のまま保存すると、いま入っている駐輪場が消える。 */
+let PARKS = [];              // [{id,name}]
+let PARKS_ERR = '';          // 読めなかった理由。⚠️ 空にして「0件」に見せない
+async function loadParkings(){
+  try{
+    const r = await fetch(`${REST_URL}/bicycle_parkings?select=id,name&active=eq.true&order=name`, { headers: getH() });
+    if(!r.ok){ PARKS_ERR = '駐輪場を読み取れませんでした（' + r.status + '）'; return; }
+    PARKS = (await r.json()) || [];
+    PARKS_ERR = '';
+  }catch(e){ PARKS_ERR = '駐輪場を読み取れませんでした（' + e.message + '）'; }
+}
+
+/** 自転車の区間だけに出す、駐輪場の欄 */
+function parkingRowHtml(ci, leg, dir, seg, si){
+  if((seg['手段'] || '') !== '自転車') return '';
+  const cur = (seg['駐輪場id'] == null) ? '' : String(seg['駐輪場id']);
+  if(PARKS_ERR){
+    /* ⚠️ 読めていないのに空の選択肢を出すと、保存でいまの駐輪場が消える */
+    return '<div class="line" style="color:#94402f;font-size:12px;line-height:1.7;">'
+      + '🅿 ⚠️ ' + escHtml(PARKS_ERR) + '<br>'
+      + '<span style="color:#6f8078;">画面を読み直してください。<b>「登録がない」という意味ではありません。</b></span></div>';
+  }
+  const known = PARKS.some(function(p){ return String(p.id) === cur; });
+  const opts = '<option value="">駐輪場を使わない</option>'
+    + PARKS.map(function(p){
+        return '<option value="' + p.id + '"' + (cur === String(p.id) ? ' selected' : '') + '>'
+             + escHtml(p.name) + '</option>';
+      }).join('');
+  return '<div class="line">'
+    + '<span style="font-size:13px;color:#6b7d72;white-space:nowrap;">🅿 駐輪場</span>'
+    + `<select style="flex:1;min-width:180px;" onchange="pickParking(${ci},'${leg}','${dir}',${si},this.value)">${opts}</select>`
+    + '<a class="mini" style="text-decoration:none;padding:6px 10px;border:1px solid var(--g);border-radius:8px;color:var(--g);"'
+    + ' href="chuurin.html" target="_blank" rel="noopener">🅿 駐輪場を登録</a>'
+    + (cur && !known
+        ? '<div style="width:100%;font-size:12px;color:#94402f;line-height:1.7;margin-top:4px;">'
+          + '⚠️ いま入っている駐輪場が一覧にありません（使わない状態にされたか、消されています）。選び直してください。</div>'
+        : '')
+    + '<div style="width:100%;font-size:12px;color:#9bb0a3;line-height:1.7;margin-top:2px;">'
+    + '料金は「駐輪場」の画面で決めます。ここでは場所だけ選びます。</div>'
+    + '</div>';
+}
+function pickParking(ci, leg, dir, si, val){
+  const s = model.courses[ci].routes[leg][dir]['区間'][si];
+  if(!val) delete s['駐輪場id'];
+  else s['駐輪場id'] = Number(val);
+  render();
+}
+
 function segHtml(ci, leg, dir, seg, si){
   const opts = MODES.map(m => `<option ${seg['手段']===m?'selected':''}>${m}</option>`).join('');
   return `<div class="seg">
@@ -1635,6 +1701,7 @@ function segHtml(ci, leg, dir, seg, si){
       <button class="mini" onclick="yahoo(${ci},'${leg}','${dir}',${si})">乗換案内で調べる</button>
       <button class="link" onclick="delSeg(${ci},'${leg}','${dir}',${si})">× 削除</button>
     </div>
+    ${parkingRowHtml(ci, leg, dir, seg, si)}
   </div>`;
 }
 
@@ -1748,6 +1815,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadCourseLocations();
     await loadPlaces();
     await loadCourseGarages();   // ⚠️ PLACES を使うので loadPlaces のあと
+    await loadParkings();
     await loadStaffAddr();
     status('準備ができました。添乗員をえらんでください。', true);
   } catch(e){ status('データ読み込みエラー：' + e.message, false); }
