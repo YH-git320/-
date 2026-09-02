@@ -52,6 +52,7 @@ button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
     <a href="yotei.html">月間予定</a>
     <a href="haichi.html">配置管理</a>
     <a href="daicho.html">車両台帳</a>
+    <a href="chuurin.html">駐輪場</a>
     <a href="keiro.html">通勤経路</a>
   </nav>
 </header>
@@ -128,6 +129,8 @@ async function permGuard(){
 }
 /** サーバーから返る英語のエラーを、何の権限が足りないかに言い換える */
 const _PERM_TBL = {
+  bicycle_parkings:'駐輪場', bicycle_parking_rates:'駐輪場の料金',
+  staff_parking_uses:'駐輪場の取り決め',
   course_schedule_calendar:'月間予定', permits:'営業許可', vehicles:'車両台帳',
   vehicle_assignments:'車両の割り当て', commute_routes:'通勤経路', courses:'コース',
   job_types:'業務マスタ', employee_job_types:'業務マスタ', offices:'営業所',
@@ -2033,7 +2036,7 @@ function _saveMsg(msg, ok){ const el=document.getElementById('editSaveMsg'); if(
 
 /* ===== ④ 経路（Googleマップのナビ用の地点） ===== */
 
-// 「35°32'39.2"N 139°42'15.8"E」→ 10進の緯度経度。停留所の座標欄がこの形なので変換して取り込む
+// 「35°32'39.2"N 139°42'15.8"E」→ 10進の緯度経度。バス停の座標欄がこの形なので変換して取り込む
 function dmsToDecimal(s){
   const t=String(s||'').trim();
   const m = t.match(/(\d+)°(\d+)'([\d.]+)"([NS])\s*[, ]\s*(\d+)°(\d+)'([\d.]+)"([EW])/);
@@ -3221,7 +3224,7 @@ function renderRoutePoints(){
       <b>その座標がどこか確かめる</b>：各行の経度のとなりの <b>🗺</b> で、その地点だけをGoogleマップで開きます。コピーする前に場所を確かめられます。<hr style="border:none;border-top:1px solid #e2ede6;margin:7px 0;">
       <b>コピーと貼り付け</b>：「コピー」列で選んだ地点だけをコピーします。<b>何も選ばなければ、中（2番目〜最後から2番目）をまとめて</b>コピーします（「全部」でも同じです）。<br>
       貼り付けは、<b>行を選んでいればその上に差し込み</b>、<b>選んでいなければ中を入れ替えます</b>。どちらでも<b>出発地と到着地は変わりません</b>。別のコースへも貼り付けられます。貼り付けただけでは保存されません。<hr style="border:none;border-top:1px solid #e2ede6;margin:7px 0;">
-      <b>Googleマップで確かめる</b>：<b>有料道路・高速道路は使わない</b>設定で開きます。「通し」は全体を1本で、「バス停ごと」は停留所で分けて開きます（運転手がバス停ごとに開く想定）。<br>
+      <b>Googleマップで確かめる</b>：<b>有料道路・高速道路は使わない</b>設定で開きます。「通し」は全体を1本で、「バス停ごと」はバス停で分けて開きます（運転手がバス停ごとに開く想定）。<br>
       <b>「区切」は、Uターンなどナビが通してくれない場所で使います。</b>その地点で案内を終え、<b>次の地点から</b>新しい案内が始まります（間の動きは運転手が行います）。どちらの開き方でも区切は必ず効きます。<br>
       <b>狙った道を通らないときは、その手前に地点を足してください。</b>地点は<b>曲がった直後の道の上（曲がり角から50〜100m先）</b>に置くとよく効きます。交差点そのものに置くと、どの道に付くかGoogleが決めてしまい、手前で曲がることがあります。まっすぐな道には置かなくて構いません。${
       _isKaisou(selRSeg)?`<hr style="border:none;border-top:1px solid #e2ede6;margin:7px 0;">
@@ -3687,7 +3690,7 @@ async function saveCourse(){
       if(!rtp.ok){ const t=await rtp.text(); _saveMsg('「③添乗員送迎」（乗降場所・局面）の保存に失敗（元のデータは残っています）：'+t.slice(0,100), false); return; }
     }
     // 保存後の読み直しは**このコースだけ**にする。
-    // 以前は毎回64コース分（停留所331行・日課238行）を取り直しており、
+    // 以前は毎回64コース分（バス停331行・日課238行）を取り直しており、
     // 1回の保存に数秒かかって「押しても反応がない」状態になっていた（2026-08-19）
     await Promise.all([ loadVersionInto(c.id, selVerId), loadScenarios() ]);
     renderCourseList(); renderEditor();

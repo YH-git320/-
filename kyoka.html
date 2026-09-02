@@ -64,6 +64,7 @@ button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
     <a href="yotei.html">月間予定</a>
     <a href="haichi.html">配置管理</a>
     <a href="daicho.html">車両台帳</a>
+    <a href="chuurin.html">駐輪場</a>
   </nav>
 </header>
 <main>
@@ -169,6 +170,8 @@ async function permGuard(){
 }
 /** サーバーから返る英語のエラーを、何の権限が足りないかに言い換える */
 const _PERM_TBL = {
+  bicycle_parkings:'駐輪場', bicycle_parking_rates:'駐輪場の料金',
+  staff_parking_uses:'駐輪場の取り決め',
   course_schedule_calendar:'月間予定', permits:'営業許可', vehicles:'車両台帳',
   vehicle_assignments:'車両の割り当て', commute_routes:'通勤経路', courses:'コース',
   job_types:'業務マスタ', employee_job_types:'業務マスタ', offices:'営業所',

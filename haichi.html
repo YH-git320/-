@@ -70,6 +70,7 @@ button.mini{font-size:12px;padding:6px 10px;}
     <a href="index.html">ホーム</a>
     <a href="yotei.html">月間予定</a>
     <a href="daicho.html">車両台帳</a>
+    <a href="chuurin.html">駐輪場</a>
     <a href="master.html">マスタ</a>
     <a href="unkou.html">運行時程</a>
     <a href="jisseki.html">運行実績</a>
@@ -268,6 +269,8 @@ async function permGuard(){
 }
 /** サーバーから返る英語のエラーを、何の権限が足りないかに言い換える */
 const _PERM_TBL = {
+  bicycle_parkings:'駐輪場', bicycle_parking_rates:'駐輪場の料金',
+  staff_parking_uses:'駐輪場の取り決め',
   course_schedule_calendar:'月間予定', permits:'営業許可', vehicles:'車両台帳',
   vehicle_assignments:'車両の割り当て', commute_routes:'通勤経路', courses:'コース',
   job_types:'業務マスタ', employee_job_types:'業務マスタ', offices:'営業所',
@@ -3070,7 +3073,7 @@ const COLS = [
   ['driver',    'ドライバー',     124],
   ['start',     '出社時間',       198],
   ['depart_am', '登校便出庫時間', 253],
-  ['pm_run',    null,             319],   // 下校便運行／始発停留所（頁で見出しが違う）
+  ['pm_run',    null,             319],   // 下校便運行／始発バス停（頁で見出しが違う）
   ['depart_pm', '下校便出庫時間', 357],
   ['attendant', '添乗員',         443],
   ['place_am',  '登校便出勤場所', 520],
