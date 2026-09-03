@@ -1589,7 +1589,12 @@ function courseCardHtml(c, ci){
      ⚠️ 足す口は③添乗員送迎。ここではない。消すだけだと行き先が分からなくなるので案内に変える。 */
   const locMgr = c._editLocs ? `
     <div style="border:1px solid #e6c88a;background:#fdf6e3;border-radius:8px;padding:10px 12px;margin:0 0 12px;line-height:1.85;">
-      <div style="font-size:13px;color:#7a5f18;font-weight:700;margin-bottom:4px;">場所を足すのは、運行時程マスタの「③添乗員送迎」です</div>
+      <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:4px;">
+        <div style="font-size:13px;color:#7a5f18;font-weight:700;flex:1;">場所を足すのは、運行時程マスタの「③添乗員送迎」です</div>
+        <button onclick="toggleLocMgr(${ci})" title="閉じる"
+          style="flex:none;border:1px solid #e0cfa0;background:#fff;color:#7a5f18;border-radius:6px;
+                 width:26px;height:26px;line-height:1;font-size:14px;cursor:pointer;padding:0;">✕</button>
+      </div>
       <div style="font-size:12.5px;color:#7a5f18;">
         上の一覧に出るのは、この4つです。<br>
         　<b>🏢 このコースの車庫</b>　… 車両台帳から自動で出ます<br>
@@ -1599,9 +1604,8 @@ function courseCardHtml(c, ci){
         <span style="color:#8a7a52;">第1ポイントから少し離れた所で乗り降りする、といった場合は③に足してください。</span>
       </div>
       <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-        <a class="mini" style="text-decoration:none;padding:7px 12px;border:1px solid var(--g);border-radius:8px;color:var(--g);background:#fff;"
-           href="unkou.html?course=${c.course_id}" target="_blank" rel="noopener">🚌 運行時程マスタを開く（③添乗員送迎）</a>
-        <button class="link" onclick="toggleLocMgr(${ci})">閉じる</button>
+        <button class="mini" style="padding:7px 12px;"
+           onclick="gotoUnkou(${c.course_id})">🚌 運行時程マスタの③添乗員送迎を開く</button>
       </div>
       <div style="font-size:11.5px;color:#8a7a52;margin-top:6px;">
         ⚠️ ③に足したあと、この画面を読み直すと選べるようになります。
@@ -1683,8 +1687,8 @@ function parkingRowHtml(ci, leg, dir, seg, si){
   return '<div class="line">'
     + '<span style="font-size:13px;color:#6b7d72;white-space:nowrap;">🅿 駐輪場</span>'
     + `<select style="flex:1;min-width:180px;" onchange="pickParking(${ci},'${leg}','${dir}',${si},this.value)">${opts}</select>`
-    + '<a class="mini" style="text-decoration:none;padding:6px 10px;border:1px solid var(--g);border-radius:8px;color:var(--g);"'
-    + ' href="chuurin.html" target="_blank" rel="noopener">🅿 駐輪場を登録</a>'
+    + '<button class="mini" style="padding:6px 10px;"'
+    + ' onclick="gotoChuurin()">🅿 駐輪場を登録</button>'
     + (cur && !known
         ? '<div style="width:100%;font-size:12px;color:#94402f;line-height:1.7;margin-top:4px;">'
           + '⚠️ いま入っている駐輪場が一覧にありません（使わない状態にされたか、消されています）。選び直してください。</div>'
@@ -1773,7 +1777,7 @@ function saveStatus(msg, ok){
   if (ok) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 5000);
 }
 async function saveAll(){
-  if (!model.staffId) return;
+  if (!model.staffId) return false;
   const rows = model.courses.map(c => {
     const routes = JSON.parse(JSON.stringify(c.routes));
     LEGS.forEach(l => DIRS.forEach(d => {
@@ -1786,7 +1790,7 @@ async function saveAll(){
     if (c.id) row.id = c.id;
     return row;
   });
-  if (!rows.length){ status('保存する経路がありません', false); saveStatus('保存する経路がありません', false); return; }
+  if (!rows.length){ status('保存する経路がありません', false); saveStatus('保存する経路がありません', false); return false; }
   try {
     const url = `${REST_URL}/commute_routes?on_conflict=staff_id,course_id`;
     const doPost = () => fetch(url, {
@@ -1809,12 +1813,47 @@ async function saveAll(){
         status('保存に失敗しました：' + t.slice(0,140), false);
         saveStatus('保存に失敗しました', false);
       }
-      return;
+      return false;
     }
     status('保存しました', true);
     saveStatus('✅ 保存しました', true);
     onStaffChange();
-  } catch(e){ status('保存エラー：' + e.message, false); saveStatus('保存エラー：' + e.message, false); }
+    return true;
+  } catch(e){ status('保存エラー：' + e.message, false); saveStatus('保存エラー：' + e.message, false); return false; }
+}
+
+/* 🔴 運行時程マスタへ移る（2026-09-04 八重樫さん）。
+
+   > 保存してから移りますか　という問いに変えるのはどうですか。
+   > 選択肢は保存して移る、保存せずに移る　二つを用意する
+
+   ⚠️ 新しいタブで開くとログインを求められる（ログイン情報はタブごとに持っているため）。
+      同じタブで移れば聞かれないが、保存前の入力が消える。だから先に聞く。
+   ⚠️ 保存に失敗したときは移らない。保存できたつもりで移ると入力が消える。 */
+async function gotoUnkou(courseId){
+  return goElsewhere('unkou.html#course=' + courseId + '&tab=tensou', '運行時程マスタの「③添乗員送迎」');
+}
+async function gotoChuurin(){
+  return goElsewhere('chuurin.html', '駐輪場の画面');
+}
+async function goElsewhere(url, label){
+  const ans = confirm(
+      label + 'へ移ります。\n\n'
+    + '【OK】　いまの入力を保存してから移ります\n'
+    + '【キャンセル】保存せずに移るか、やめるかを次に選びます');
+  if(ans){
+    const ok = await saveAll();
+    if(!ok){
+      alert('保存できませんでしたので、移りません。\n入力はこのまま残っています。\n\n画面の知らせをご確認ください。');
+      return;
+    }
+    location.href = url;
+    return;
+  }
+  /* ⚠️ 保存せずに移ると、入力しかけたものは消える。もう一度はっきり聞く */
+  if(confirm('保存せずに移ります。\n\n⚠️ 保存していない入力は消えます。\n\nよろしいですか。（キャンセルすると、このまま残ります）')){
+    location.href = url;
+  }
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
