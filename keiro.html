@@ -1831,29 +1831,28 @@ async function saveAll(){
       同じタブで移れば聞かれないが、保存前の入力が消える。だから先に聞く。
    ⚠️ 保存に失敗したときは移らない。保存できたつもりで移ると入力が消える。 */
 async function gotoUnkou(courseId){
-  return goElsewhere('unkou.html#course=' + courseId + '&tab=tensou', '運行時程マスタの「③添乗員送迎」');
+  return goElsewhere('unkou.html#course=' + courseId + '&tab=tensou&from=keiro', '運行時程マスタの「③添乗員送迎」');
 }
 async function gotoChuurin(){
   return goElsewhere('chuurin.html', '駐輪場の画面');
 }
 async function goElsewhere(url, label){
+  /* 🔴 問いは1回だけ。移るのは保存できたときだけ（2026-09-04 八重樫さん）。
+     > 保存せずに移るの選択をなくして、
+     > 【OK】保存して移ります　【キャンセル】この画面での作業を続けます　にしませんか
+     ⚠️ この形なら、押し間違えても移らない（Esc も【キャンセル】＝このまま残る）。
+        入力が消えるのは「移ってから気づく」形だけなので、その道をなくした。 */
   const ans = confirm(
       label + 'へ移ります。\n\n'
-    + '【OK】　いまの入力を保存してから移ります\n'
-    + '【キャンセル】保存せずに移るか、やめるかを次に選びます');
-  if(ans){
-    const ok = await saveAll();
-    if(!ok){
-      alert('保存できませんでしたので、移りません。\n入力はこのまま残っています。\n\n画面の知らせをご確認ください。');
-      return;
-    }
-    location.href = url;
+    + '【OK】　　　保存して移ります\n'
+    + '【キャンセル】この画面での作業を続けます');
+  if(!ans) return;
+  const ok = await saveAll();
+  if(!ok){
+    alert('保存できませんでしたので、移りません。\n入力はこのまま残っています。\n\n画面の知らせをご確認ください。');
     return;
   }
-  /* ⚠️ 保存せずに移ると、入力しかけたものは消える。もう一度はっきり聞く */
-  if(confirm('保存せずに移ります。\n\n⚠️ 保存していない入力は消えます。\n\nよろしいですか。（キャンセルすると、このまま残ります）')){
-    location.href = url;
-  }
+  location.href = url;
 }
 
 document.addEventListener('DOMContentLoaded', async () => {

@@ -4103,7 +4103,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if(_hp.course && !isNaN(Number(_hp.course))){
       await selectCourse(Number(_hp.course));
       if(_hp.tab) setTab(_hp.tab);
-      status('配置管理から開きました。食い違いの元をご確認ください。', true);
+      /* 🔴 来た元によって知らせを変える（2026-09-04）。
+         ⚠️ 通勤経路から来ても「配置管理から開きました」と出ていた。事実と違う知らせは信用を落とす。 */
+      status(_hp.from === 'keiro'
+        ? '通勤経路から開きました。添乗員が乗り降りする場所を、ここに足してください。'
+        : '配置管理から開きました。食い違いの元をご確認ください。', true);
     } else {
       renderCourseList();
       status('準備ができました。コースを選んでください。', true);
