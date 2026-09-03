@@ -1786,7 +1786,12 @@ function renderEditor(){
   const refD = _refDeparture();
   const firstFormName = (forms.find(f=>(f.gekou_departures||[]).some(t=>t))||{}).form_name || '';
   area.innerHTML = `<div class="courseCard">
-    <div id="stickyHead" style="position:${selTab==='keiro'?'static':'sticky'};top:0;z-index:6;background:#fff;padding:8px 0 0;border-bottom:1px solid #e2ede6;margin-bottom:12px;">
+    <!-- 🔴 見出しはどのタブでも固定する（2026-09-03 八重樫さん）。
+         > どの画面でも学校名コース名はスクロールしても表示されるようにしてもらいたい
+         ⚠️ ④だけ固定を外していたが、戻すボタンも一緒に消えてしまう。
+         🔴 下の線は ④の固定帯と同じもの（緑2px）。ここから下がスクロールする、と分かるように。
+         ⚠️ ④では、この線のすぐ下に④の固定帯が続く（線が2本並ばないよう④側は下だけに引く）。 -->
+    <div id="stickyHead" style="position:sticky;top:0;z-index:6;background:#fff;padding:8px 0 6px;border-bottom:${selTab==='keiro' ? '1px solid #e2ede6' : '2px solid #4d7a5e'};box-shadow:${selTab==='keiro' ? 'none' : '0 4px 6px -4px rgba(0,0,0,0.18)'};margin-bottom:10px;">
       <div class="courseHead" style="margin-bottom:8px;">
         <div class="courseTitle">${escHtml(courseLabel(c))}</div>
         <button class="${c.active?'':'primary'}" onclick="toggleActive()">${c.active?'✅ 有効（クリックで廃止）':'🚫 廃止中（クリックで有効）'}</button>
