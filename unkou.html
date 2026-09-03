@@ -1227,6 +1227,18 @@ function setTab(t){ selTab=t; ['main','gekou','tensou','keiro'].forEach(k=>{ con
      > スクロールすると戻るボタンが無くなってしまうので固定してください
      ⚠️ 2026-08 に「④は作業する場所を広く取る」として固定を外していたが、
         戻すボタンと学校名を常に見せる方を採る。 */
+  /* 🔴 見出しの下の線も、タブに合わせて切り替える（2026-09-03 八重樫さん）。
+     ⚠️ setTab は画面を作り直さないので、ここで直さないと前のタブの線が残る
+        （④を押しても緑2pxのままで、下の帯の線と二重になっていた）。
+        ④は下に固定帯の緑線が続くので、見出し側は薄い線にする。 */
+  {
+    const hd = document.getElementById('stickyHead');
+    if(hd){
+      const k = (t === 'keiro');
+      hd.style.borderBottom = k ? '1px solid #e2ede6' : '2px solid #4d7a5e';
+      hd.style.boxShadow    = k ? 'none' : '0 4px 6px -4px rgba(0,0,0,0.18)';
+    }
+  }
   _fitRptSticky();
 }
 
