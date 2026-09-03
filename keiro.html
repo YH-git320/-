@@ -1576,22 +1576,35 @@ function courseCardHtml(c, ci){
   const _arrLost = (_arrName && !_arrCur) ? arriveLostMsg(c, _arrName) : '';
   const homeLbl   = (slot.dir === '出勤') ? '出発地（自宅）'                : '到着地（自宅）';
   const courseLbl = (slot.dir === '出勤') ? '到着地（バスに乗る場所）' : '出発地（バスを降りる場所）';
+  /* 🔴 「✏️ 編集・追加」を、③添乗員送迎への案内に変えた（2026-09-04 八重樫さん）。
+
+     > 通勤経路マスタの到着地にある編集・追加ボタンがありますが、ここで追加した場合、
+     > 運行経路マスタの添乗員送迎のタグとどのように関係するのですか？
+
+     ⚠️ ここが書き込んでいた先は course_locations ＝ 運行時程マスタ①の「バス停一覧」だった。
+        添乗員の乗車場所のつもりで足すと、**登校便の順路にバス停が1つ増える**。
+     ⚠️ しかも version_id を送っていないため、**どの版にも属さない行**ができていた。
+        2026-09-02 にバス停の読み方を「いま効いている版だけ」に直したので、
+        できた行は画面にも出ず、消すこともできない状態だった（幸い0件で、誰も使っていなかった）。
+     ⚠️ 足す口は③添乗員送迎。ここではない。消すだけだと行き先が分からなくなるので案内に変える。 */
   const locMgr = c._editLocs ? `
-    <div style="border:1px dashed #cbd8d0;border-radius:8px;padding:10px;margin:0 0 12px;background:#fff;">
-      <div style="font-size:13px;color:#4a5d52;margin-bottom:8px;">乗車場所の編集（このコース）— <b>名称</b>は人が分かる目印、<b>住所</b>は乗換案内の検索に使います</div>
-      ${locs.map(l => `
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;align-items:center;">
-          <input id="locname-${l.id}" value="${escAttr(l.name)}" placeholder="名称（例：みなみ野デニーズ前）" style="flex:1;min-width:150px;">
-          <input id="locaddr-${l.id}" value="${escAttr(l.address)}" placeholder="住所（検索用）" style="flex:2;min-width:190px;">
-          <button class="mini" onclick="mapSearch('locname-${l.id}')">🗺 地図</button>
-          <button class="mini" onclick="saveLoc(${ci},${l.id})">保存</button>
-          <button class="link" onclick="delLoc(${ci},${l.id})">削除</button>
-        </div>`).join('') || '<p class="muted" style="margin:0 0 6px;">まだ登録がありません。下の欄から追加してください。</p>'}
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;border-top:1px solid #eee;padding-top:8px;align-items:center;">
-        <input id="newlocname-${ci}" placeholder="＋ 名称" style="flex:1;min-width:150px;">
-        <input id="newlocaddr-${ci}" placeholder="＋ 住所（検索用）" style="flex:2;min-width:190px;">
-        <button class="mini" onclick="mapSearch('newlocname-${ci}')">🗺 地図</button>
-        <button class="mini" onclick="addLocInline(${ci})">追加</button>
+    <div style="border:1px solid #e6c88a;background:#fdf6e3;border-radius:8px;padding:10px 12px;margin:0 0 12px;line-height:1.85;">
+      <div style="font-size:13px;color:#7a5f18;font-weight:700;margin-bottom:4px;">場所を足すのは、運行時程マスタの「③添乗員送迎」です</div>
+      <div style="font-size:12.5px;color:#7a5f18;">
+        上の一覧に出るのは、この4つです。<br>
+        　<b>🏢 このコースの車庫</b>　… 車両台帳から自動で出ます<br>
+        　<b>🚏 登校便の第1ポイント／下校便の最終ポイント</b>　… ①バス停一覧から自動で出ます<br>
+        　<b>🏫 学校</b>　… ①バス停一覧から自動で出ます<br>
+        　<b>📍 ③添乗員送迎の場所</b>　… <b>ここに足した場所が出ます</b><br>
+        <span style="color:#8a7a52;">第1ポイントから少し離れた所で乗り降りする、といった場合は③に足してください。</span>
+      </div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <a class="mini" style="text-decoration:none;padding:7px 12px;border:1px solid var(--g);border-radius:8px;color:var(--g);background:#fff;"
+           href="unkou.html?course=${c.course_id}" target="_blank" rel="noopener">🚌 運行時程マスタを開く（③添乗員送迎）</a>
+        <button class="link" onclick="toggleLocMgr(${ci})">閉じる</button>
+      </div>
+      <div style="font-size:11.5px;color:#8a7a52;margin-top:6px;">
+        ⚠️ ③に足したあと、この画面を読み直すと選べるようになります。
       </div>
     </div>` : '';
   return `<div class="courseCard">
@@ -1612,7 +1625,7 @@ function courseCardHtml(c, ci){
           <div class="fld" style="margin:0 0 4px;">📍 ${courseLbl}</div>
           <div style="display:flex;gap:6px;">
             <select onchange="pickArrive(${ci},this.value)" style="flex:1;">${locOpts}</select>
-            <button class="mini" onclick="toggleLocMgr(${ci})">✏️ 編集・追加</button>
+            <button class="mini" onclick="toggleLocMgr(${ci})" title="ここに無い場所を足すには">? 場所を足すには</button>
           </div>
           ${_arrLost}
         </div>
