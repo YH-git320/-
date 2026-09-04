@@ -3221,6 +3221,20 @@ function _endPtsHere(){
     .filter(p=>String(p.lat).trim()!=='' && String(p.lng).trim()!=='');
   const firstStop = raw.length ? num(raw.find(p=>p.is_stop) || raw[0]) : null;
   const lastPt    = raw.length ? num(raw[raw.length-1]) : null;
+  /* 🔴 便間回送は「前の便の最終バス停 → 学校」（2026-09-04 八重樫さん）。
+     ⚠️ ここが**画面の行そのものを毎回書き換えている**場所（rptLockEnds が呼ぶ）。
+        _kaiEnds（見出しの文）だけ直しても、行は車庫のままだった。同じ直しを2か所に要る。
+     ⚠️ 端点は①バス停一覧（下校の並び・その日課で通らない指定を除く）から取る。
+        ④の並びから取ると、基準と日課で形が違うときに端点がずれる。 */
+  if(selRSeg === '便間回送①' || selRSeg === '便間回送②'){
+    const b = _binkanEnds(selRSeg === '便間回送②' ? '下校②' : '下校①');
+    if(b){
+      const mk2 = nm => { const s = _stopByName(nm), d = s && dmsToDecimal(s.coord);
+                          return d ? { name:nm, lat:d.lat, lng:d.lng } : null; };
+      return { from: mk2(b.last) || lastPt, to: mk2(b.school) || null };
+    }
+    return { from: lastPt, to: null };   // ①が空なら縛らない（作り始められなくなるため）
+  }
   switch(selRSeg){
     case '出庫回送登校': return { from:gar,    to:firstStop };
     case '帰庫回送登校': return { from:lastPt, to:hub       };
