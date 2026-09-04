@@ -1532,7 +1532,17 @@ async function onStaffChange(){
   const res = await fetch(`${REST_URL}/commute_routes?staff_id=eq.${id}&select=*`, { headers: getH() });
   if (!res.ok){ status('経路の読み込みに失敗しました', false); render(); return; }
   const rows = await res.json();
-  model.courses = rows.map(r => ({ id: r.id, course_id: r.course_id, active: r.active, routes: normRoutes(r.routes), _slot: { leg:'登校', dir:'出勤' } }));
+  /* 🔴 開いたときの姿を控える（2026-09-04 八重樫さん）。
+     ⚠️ 保存は staff_id ごとに全コースを送っていたので、
+        別の人が同じ添乗員の別コースを直していると、それを巻き添えで古い内容に戻していた。
+     ⚠️ _base   … 触ったかどうかを見る（送るのは触ったコースだけにする）
+        _loaded … 別の人が変えていないかを見る（保存の直前にDBと突き合わせる） */
+  model.courses = rows.map(r => {
+    const c = { id: r.id, course_id: r.course_id, active: r.active, routes: normRoutes(r.routes), _slot: { leg:'登校', dir:'出勤' } };
+    c._loaded = JSON.stringify(c.routes);
+    c._base   = JSON.stringify(mkRow(c).routes);
+    return c;
+  });
   render();
 }
 
@@ -1776,21 +1786,62 @@ function saveStatus(msg, ok){
   el.style.color = ok ? '#2e7d46' : '#c0392b';
   if (ok) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 5000);
 }
+/* 送る中身の組み立て。読み込みのときと保存のときで同じ形にするため、1か所にまとめている */
+function mkRow(c){
+  const routes = JSON.parse(JSON.stringify(c.routes));
+  LEGS.forEach(l => DIRS.forEach(d => {
+    const s = routes[l][d];
+    delete s._init;
+    s['交通費'] = s['区間'].reduce((a, x) => a + (Number(x['運賃'])||0), 0);
+    s['手段'] = [...new Set(s['区間'].map(x => x['手段']).filter(Boolean))].join('・');
+  }));
+  const row = { staff_id: model.staffId, course_id: c.course_id, routes };
+  if (c.id) row.id = c.id;
+  return row;
+}
+
+/* 🔴 別の人が同じところを変えていないか、保存の直前に確かめる（2026-09-04 八重樫さん）。
+   > 今後作業するスタッフが増えれば増えるほどこのシステムの脆弱性が問われそうですね
+   ⚠️ 錠も版の突き合わせも無いので、最後に押した人が勝つ。せめて気づけるようにする。
+   ⚠️ 確かめられなかったとき（通信の失敗など）は止めない。動かなくなるほうが困る。 */
+async function _othersChanged(sending){
+  const withId = sending.filter(r => r.id);
+  if (!withId.length) return null;
+  let cur;
+  try {
+    const r = await fetch(`${REST_URL}/commute_routes?staff_id=eq.${model.staffId}&select=id,course_id,routes`, { headers: getH() });
+    if (!r.ok) return null;
+    cur = await r.json();
+  } catch(e){ return null; }
+  if (!Array.isArray(cur)) return null;
+  const byId = new Map(cur.map(x => [x.id, x]));
+  const ng = [];
+  for (const row of withId){
+    const c  = model.courses.find(x => x.id === row.id);
+    const db = byId.get(row.id);
+    if (!c || !db) continue;                       // 消えている場合はここでは扱わない
+    if (JSON.stringify(normRoutes(db.routes)) !== c._loaded) ng.push(courseLabel(c.course_id));
+  }
+  return ng.length ? ng : null;
+}
+
 async function saveAll(){
   if (!model.staffId) return false;
-  const rows = model.courses.map(c => {
-    const routes = JSON.parse(JSON.stringify(c.routes));
-    LEGS.forEach(l => DIRS.forEach(d => {
-      const s = routes[l][d];
-      delete s._init;
-      s['交通費'] = s['区間'].reduce((a, x) => a + (Number(x['運賃'])||0), 0);
-      s['手段'] = [...new Set(s['区間'].map(x => x['手段']).filter(Boolean))].join('・');
-    }));
-    const row = { staff_id: model.staffId, course_id: c.course_id, routes };
-    if (c.id) row.id = c.id;
-    return row;
-  });
-  if (!rows.length){ status('保存する経路がありません', false); saveStatus('保存する経路がありません', false); return false; }
+  /* ⚠️ 触ったコースだけ送る。触っていないコースまで送ると、
+        その間に別の人が直した内容を古い姿に戻してしまう。 */
+  const rows = model.courses.filter(c => !c.id || JSON.stringify(mkRow(c).routes) !== c._base).map(mkRow);
+  if (!model.courses.length){ status('保存する経路がありません', false); saveStatus('保存する経路がありません', false); return false; }
+  if (!rows.length){ status('変わったところがありません', true); saveStatus('変わったところがありません', true); return true; }
+  {
+    const ng = await _othersChanged(rows);
+    if (ng){
+      alert('ほかの方が、同じところを変えています。' + '\n\n' + ng.join('、')
+          + '\n\nこのまま保存すると、その方の入力が消えます。\n画面を読み直してから、入れ直してください。');
+      status('ほかの方が変えています。読み直してください（Ctrl+Shift+R）', false);
+      saveStatus('保存していません', false);
+      return false;
+    }
+  }
   try {
     const url = `${REST_URL}/commute_routes?on_conflict=staff_id,course_id`;
     const doPost = () => fetch(url, {

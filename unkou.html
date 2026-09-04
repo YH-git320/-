@@ -1139,15 +1139,17 @@ async function loadVersionInto(cid, verId){
   // 読み込みに失敗したときは**前の内容をそのまま残す**。
   // 空で上書きすると、その状態で保存されたときに消えてしまう（2026-08-19 の事故）
   const rf = await fetch(`${REST_URL}/course_schedule_forms?version_id=eq.${verId}&select=id,form_name,gekou_departures,after_toukou,after_toukou_place,after_toukou_addr,after_toukou_coord,dep_overrides&order=form_name`, { headers: getH() });
-  if(rf.ok){ FORMS[k] = (await rf.json()).map(_mapForm); FORMS[k].sort(_cmpForm); }
+  if(rf.ok){ const _tx = await rf.text(); FRESH_SET(k, 'forms', _tx);
+             FORMS[k] = JSON.parse(_tx).map(_mapForm); FORMS[k].sort(_cmpForm); }
   else { _saveMsg('「②下校便」（日課）の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   const rs = await fetch(`${REST_URL}/course_locations?version_id=eq.${verId}&select=id,name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_seq,gekou_overrides&order=seq.nullslast,name`, { headers: getH() });
-  if(rs.ok){ STOPS[k] = (await rs.json()).map(_mapStop); }
+  if(rs.ok){ const _tx = await rs.text(); FRESH_SET(k, 'stops', _tx); STOPS[k] = JSON.parse(_tx).map(_mapStop); }
   else { _saveMsg('バス停・登校ルートの読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   const rr = await fetch(`${REST_URL}/course_route_points?version_id=eq.${verId}&select=id,form_name,segment,scenario_id,route_name,seq,name,lat,lng,is_stop,split_here,note&order=segment,seq`, { headers: getH() });
   if(!rr.ok){ _saveMsg('「④ルート詳細」の読み込みに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
   const box = _emptyRpts();
-  (await rr.json()).forEach(r=>{
+  { const _tx = await rr.text(); FRESH_SET(k, 'rpts', _tx); rr._rows = JSON.parse(_tx); }
+  rr._rows.forEach(r=>{
     if(R_SEGS.indexOf(r.segment) < 0) return;
     const kk = _rkey(r.segment, r.scenario_id, r.route_name, r.form_name);
     /* 🔴 番号を持ち帰る（2026-09-02 八重樫さん）
@@ -1159,6 +1161,73 @@ async function loadVersionInto(cid, verId){
   // ②の並びを、このあと保存時に「変わったか」比べるための目印（2026-08-24）
   STOPS_ORIG_SIG[k] = _stopsOrderSig(STOPS[k]);
 }
+/* 🔴 いっしょに作業しても、相手の入力を消さないための見張り（2026-09-04 八重樫さん）。
+
+   > 今後作業するスタッフが増えれば増えるほどこのシステムの脆弱性が問われそうですね
+
+   ⚠️ この画面の「保存」は1つで、①主要情報・②日課・①バス停・④ルート点・③添乗員送迎を
+      **まとめて送る**。③だけ触ったつもりでも、開いた時点の①②④がそのまま送られるので、
+      その間に別の人が直した分は古い姿に戻ってしまう。
+   ⚠️ ①②には「消えます」の警告があるが、④と③には無い。黙って戻るのがいちばん怖い。
+   ⚠️ 錠も版のつき合わせもDBに無いので、せめて**保存の直前に見比べて止める**。
+   ⚠️ 見比べられなかったとき（通信の失敗など）は止めない。動かなくなるほうが困る。 */
+let FRESH = {};    // course_id -> { forms, stops, rpts, scen, tps, ps } 開いたときの姿（文字そのまま）
+function FRESH_SET(k, part, text){ (FRESH[k] = FRESH[k] || {})[part] = text; }
+
+function _freshUrls(cid, verId){
+  return {
+    forms: `${REST_URL}/course_schedule_forms?version_id=eq.${verId}&select=id,form_name,gekou_departures,after_toukou,after_toukou_place,after_toukou_addr,after_toukou_coord,dep_overrides&order=form_name`,
+    stops: `${REST_URL}/course_locations?version_id=eq.${verId}&select=id,name,address,seq,toukou_time,gekou_offset,gekou_only,coord,gekou_seq,gekou_overrides&order=seq.nullslast,name`,
+    rpts:  `${REST_URL}/course_route_points?version_id=eq.${verId}&select=id,form_name,segment,scenario_id,route_name,seq,name,lat,lng,is_stop,split_here,note&order=segment,seq`,
+    scen:  `${REST_URL}/course_scenarios?course_id=eq.${cid}&select=id,course_id,segment,label,seq&order=segment,seq.nullslast,id`,
+    tps:   `${REST_URL}/course_transfer_points?course_id=eq.${cid}&select=id,scenario_id,phase,kind,seq,name,address,coord,bus_time,time_lead&order=seq.nullslast,id`
+  };
+}
+
+/* そのコースの③だけ読み直す。
+   ⚠️ loadScenarios() は全コースぶんを入れ替えるので使えない。
+      ほかのコースで入力しかけの③が消えてしまう。 */
+async function loadScenariosFor(cid){
+  const k = String(cid), u = _freshUrls(cid, selVerId);
+  try{
+    const [rs, rp] = await Promise.all([ fetch(u.scen, { headers:getH() }), fetch(u.tps, { headers:getH() }) ]);
+    if(!rs.ok || !rp.ok){ _saveMsg('「③添乗員送迎」の読み直しに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
+    const tScen = await rs.text(), tTps = await rp.text();
+    const scen = JSON.parse(tScen), tps = JSON.parse(tTps);
+    const ids = scen.map(x=>x.id);
+    const uPs = `${REST_URL}/course_phase_settings?select=scenario_id,phase,shussha,shukko,shukko_lead&order=scenario_id,phase` + (ids.length ? `&scenario_id=in.(${ids.join(',')})` : '&scenario_id=is.null');
+    const rq = await fetch(uPs, { headers:getH() });
+    if(!rq.ok){ _saveMsg('「③添乗員送迎」の読み直しに失敗しました。画面を再読み込みしてください（前の内容を保っています）。', false); return; }
+    const tPs = await rq.text();
+    const byId = {}; const list = [];
+    scen.forEach(r=>{ const o={dbId:r.id, segment:r.segment, label:r.label||'', pts:[], ps:{}}; list.push(o); byId[r.id]=o; });
+    tps.forEach(r=>{ const o=byId[r.scenario_id]; if(o) o.pts.push({ id:r.id, phase:r.phase, kind:r.kind||'乗車', name:r.name||'', address:r.address||'', coord:r.coord||'', bus_time:r.bus_time||'', time_lead:(r.time_lead==null?null:r.time_lead) }); });
+    JSON.parse(tPs).forEach(r=>{ const o=byId[r.scenario_id]; if(o) o.ps[r.phase]={ shussha:r.shussha||'', shukko:r.shukko||'', shukko_lead:(r.shukko_lead==null?null:r.shukko_lead) }; });
+    SCEN[k] = list;
+    FRESH_SET(k,'scen',tScen); FRESH_SET(k,'tps',tTps); FRESH_SET(k,'ps',tPs);
+  }catch(err){ _saveMsg('「③添乗員送迎」の読み直しに失敗しました：'+err.message, false); }
+}
+
+/* 開いたときと変わっているところを返す。変わっていなければ null。
+   ⚠️ 確かめられないときも null（止めない）。止めた結果 保存できなくなるほうが困る。 */
+async function _changedByOthers(cid, verId){
+  const k = String(cid), base = FRESH[k];
+  if(!base) return null;
+  const u = _freshUrls(cid, verId);
+  const 名 = { forms:'②下校便（日課）', stops:'①バス停', rpts:'④ルート詳細', scen:'③添乗員送迎', tps:'③添乗員送迎の場所', ps:'③添乗員送迎の時刻' };
+  const ng = [];
+  try{
+    const keys = ['forms','stops','rpts','scen','tps'];
+    const res = await Promise.all(keys.map(x=>fetch(u[x], { headers:getH() })));
+    for(let i=0;i<keys.length;i++){
+      if(!res[i].ok) return null;                       // 確かめられない → 止めない
+      const txt = await res[i].text();
+      if(base[keys[i]] != null && txt !== base[keys[i]]) ng.push(名[keys[i]]);
+    }
+  }catch(err){ return null; }
+  return ng.length ? [...new Set(ng)] : null;
+}
+
 async function loadScenarios(){
   const buf = {}, byId = {};     // 読み終えるまで SCEN には触らない
   const res = await fetch(`${REST_URL}/course_scenarios?select=id,course_id,segment,label,seq&order=segment,seq.nullslast,id`, { headers: getH() });
@@ -1217,7 +1286,7 @@ function _refDeparture(){
   for(const f of forms){ for(const t of (f.gekou_departures||[])){ if(t) return t; } }
   return '';
 }
-async function selectCourse(id){ undoClear(); _editOpen=false; selCourseId = id; loadFormUsage(id); selVerId = currentVerId(id); _nvOpen=false; rptSelIdx=null; rptPick={}; _editMode=null; _fixReason=''; _impact=null; _loadImpact().then(_renderEditBar); if(selVerId) await loadVersionInto(id, selVerId); selRefD = _refDeparture() || '14:00'; renderCourseList(); renderEditor(); }
+async function selectCourse(id){ undoClear(); _editOpen=false; selCourseId = id; loadFormUsage(id); selVerId = currentVerId(id); _nvOpen=false; rptSelIdx=null; rptPick={}; _editMode=null; _fixReason=''; _impact=null; _loadImpact().then(_renderEditBar); if(selVerId) await loadVersionInto(id, selVerId); await loadScenariosFor(id); selRefD = _refDeparture() || '14:00'; renderCourseList(); renderEditor(); }
 async function changeVersion(verId){ undoClear(); _editOpen=false; selVerId = Number(verId); _editMode=null; _fixReason=''; _impact=null; await loadVersionInto(selCourseId, selVerId); selRefD = _refDeparture() || '14:00'; renderEditor(); _loadImpact().then(_renderEditBar); }
 function _nextApril(){ const d=new Date(); const y=d.getFullYear(); const ny=(d.getMonth()+1>=4)?y+1:y; return ny+'-04-01'; }
 // 編集タブ（主要・登校便／下校便／添乗員送迎）。再描画せず表示切替＝入力途中も保持・軽快
@@ -3810,6 +3879,17 @@ async function saveCourse(){
   let _flagOn = [], _flagOff = [];   // ②に合わせて④のバス停の印を付けた／外したバス停
   let _calRenamed = [];              // 予定表の日課名を付け替えたもの
   // 押している間ずっと分かるようにする（無反応に見えて何度も押されるのを防ぐ）
+  /* 🔴 保存の前に、開いたときと変わっていないかを見る（2026-09-04）。
+     ⚠️ ここで止めないと、別の人の入力を古い姿に戻したまま気づけない。 */
+  {
+    const ng = await _changedByOthers(c.id, selVerId);
+    if(ng){
+      alert('ほかの方が、このコースを変えています。' + '\n\n' + ng.join('、')
+          + '\n\nこのまま保存すると、その方の入力が消えます。\n画面を読み直して（Ctrl+Shift+R）、入れ直してください。');
+      _saveMsg('ほかの方がこのコースを変えています（' + ng.join('、') + '）。保存していません。画面を読み直してください（Ctrl+Shift+R）。', false);
+      return;
+    }
+  }
   _saving = true;
   const _btn = document.getElementById('saveBtn');
   const _btnLabel = _btn ? _btn.textContent : '';
@@ -4051,7 +4131,9 @@ async function saveCourse(){
     // 1回の保存に数秒かかって「押しても反応がない」状態になっていた（2026-08-19）
     /* 🔴 保存したら、それより前には戻さない（2026-09-02 岩﨑さん・八重樫さん） */
     undoClear();
-    await Promise.all([ loadVersionInto(c.id, selVerId), loadScenarios() ]);
+    /* ⚠️ 保存したら控えも取り直す。取り直さないと、2回目の保存が「ほかの方が変えています」で止まる。
+       loadScenariosFor は そのコースの③だけを読み直し、控えも一緒に更新する。 */
+    await Promise.all([ loadVersionInto(c.id, selVerId), loadScenariosFor(c.id) ]);
     renderCourseList(); renderEditor();
     // ⚠️ 「保存しました」は**画面を作り直したあと**に出す。
     //    renderEditor() は編集欄をまるごと作り直すので、先に出すとメッセージごと消える。
