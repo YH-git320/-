@@ -2414,7 +2414,7 @@ function renderScenPhase(si, s, ph){
       <input type="text" value="${escAttr(r.name)}" placeholder="場所名" oninput="scenPtUpd(${si},${pi},'name',this.value)" style="flex:1;min-width:100px;">
       <input type="text" value="${escAttr(r.address)}" placeholder="住所" oninput="scenPtUpd(${si},${pi},'address',this.value)" style="flex:1;min-width:100px;">
       <input type="text" value="${escAttr(r.coord||'')}" placeholder="座標(任意)" oninput="scenPtUpd(${si},${pi},'coord',this.value)" style="flex:0 0 100px;">
-      ${placePickHtml(`pickPlaceScen(${si},${pi},this)`)}
+      ${placePickHtml(`pickPlaceScen(${si},${pi},this)`, s.segment)}
       <button class="mini" onclick="scenMap(${si},${pi})" title="グーグルマップで開く">🗺</button>
       ${timeCell}
       <button class="link" onclick="scenPtDel(${si},${pi})">削除</button>
@@ -2962,6 +2962,29 @@ function rptFillFromStops(){
  *  あとは曲がり角の目印を間に差し込むだけにする（バス停一覧から作る下書きと同じ考え方） */
 /** いま見ている回送の「どこから → どこまで」。画面の見出しに出す。
  *  登校の後・下校の前は、コース設定（帰庫／他所移動／学校留置き）で行き先が変わる */
+/* 🔴 便間回送は「前の便の最終バス停 → 学校」（2026-09-04 八重樫さん）
+
+   > 下校なので１に表記されるのは1回目の最終バスポイントのはずです。
+   > そして戻る最終目的地は学校でなければなりません。各ボタンで場所もちがいます。
+
+   ⚠️ これまでは端点を④の並びから取っていた（line[0] と line[最後]）。
+      ④の並びは基準と日課で形が違うことがあり（基準の下校①は学校へ戻る形だった）、
+      同じ回送なのに基準と日課で端点が変わっていた。
+   ⚠️ しかも 便間回送 が 帰庫回送下校 と同じ枝（default）に落ちていたので、
+      終点が車庫になっていた。便間回送は車庫へは戻らない。
+   ⚠️ 直し方：端点は②が言うバス停（①バス停一覧の下校の並び・その日課で通らない指定を除く）
+      から取る。マスタが正。 */
+function _binkanEnds(seg){
+  const nm = _expectedStops(_curForm(), seg);   // [学校, …, 最終バス停]
+  if(nm.length < 2) return null;
+  return { school: nm[0], last: nm[nm.length - 1] };
+}
+/** ①バス停一覧から、名前でバス停を1つ引く（座標つき） */
+function _stopByName(name){
+  const n = String(name||"").trim();
+  return n ? (_stops().find(s => String(s.name||"").trim() === n) || null) : null;
+}
+
 function _kaiEnds(){
   const c   = COURSES.find(x=>x.id===selCourseId) || {};
   const off = OFFICES[c.office_id] || {};
@@ -2983,6 +3006,13 @@ function _kaiEnds(){
     }
   }
   if(!off.coord) warn = warn || '⚠️ 車庫の座標が営業所マスタで空です。';
+  /* 便間回送だけは、車庫ではなく学校へ戻る */
+  if(selRSeg === '便間回送①' || selRSeg === '便間回送②'){
+    const b = _binkanEnds(selRSeg === '便間回送②' ? '下校②' : '下校①');
+    if(!b) return { from: lastName, to: '学校',
+      warn: '⚠️ 「①主要情報・登校便」タブのバス停一覧に、下校の並びが入っていません。先にそちらを入れてください。' };
+    return { from: b.last, to: b.school, warn };
+  }
   switch(selRSeg){
     case '出庫回送登校': return { from: garName,  to: firstName, warn };
     case '帰庫回送登校': return { from: lastName, to: hub,       warn };
@@ -3030,9 +3060,22 @@ function rptSeedKaisou(){
   if(!away && (selRSeg==='帰庫回送登校' || selRSeg==='出庫回送下校') && c.after_toukou==='他所移動'){
     _saveMsg('登校の後は「他所移動」ですが、行き先の座標が空です。「①主要情報・登校便」タブで入れてください。いまは車庫で下書きを作ります。', false);
   }
-  const pts = (_kaiWhich()==='出庫')
-    ? [hub].concat(tps, [mk(firstStop.name||'最初のバス停', firstStop.lat, firstStop.lng)])
-    : [mk(lastPt.name||'最後の地点', lastPt.lat, lastPt.lng)].concat(tps, [hub]);
+  /* 便間回送は「前の便の最終バス停 → 学校」。車庫は通らない（2026-09-04 八重樫さん） */
+  let pts;
+  if(selRSeg === '便間回送①' || selRSeg === '便間回送②'){
+    const b = _binkanEnds(selRSeg === '便間回送②' ? '下校②' : '下校①');
+    if(!b){ _saveMsg('「①主要情報・登校便」タブのバス停一覧に、下校の並びが入っていません。先にそちらを入れてください。', false); return; }
+    const sL = _stopByName(b.last), sS = _stopByName(b.school);
+    const cL = sL && dmsToDecimal(sL.coord), cS = sS && dmsToDecimal(sS.coord);
+    if(!cL || !cS){
+      _saveMsg('「' + (!cL ? b.last : b.school) + '」の座標が「①主要情報・登校便」タブで空です。入れてから下書きを作ってください。', false); return;
+    }
+    pts = [mk(b.last, cL.lat, cL.lng)].concat(tps, [mk(b.school, cS.lat, cS.lng)]);
+  } else {
+    pts = (_kaiWhich()==='出庫')
+      ? [hub].concat(tps, [mk(firstStop.name||'最初のバス停', firstStop.lat, firstStop.lng)])
+      : [mk(lastPt.name||'最後の地点', lastPt.lat, lastPt.lng)].concat(tps, [hub]);
+  }
 
   rptSyncFromInputs();
   const cur = _rpts();
@@ -3279,32 +3322,55 @@ function rptPickNone(){ rptPick = {}; renderEditor(); }
 let PLACEBOOK = [];
 function placeBook(){
   const map = {};
-  const add = (name, addr, coord, where) => {
+  /* 🔴 登校便の場所か下校便の場所かを持つ（2026-09-04 八重樫さん）
+
+     > 登校便として登録された場所と、下校便として登録された場所があります。
+     > 同じ名前がでるとどちらのポイントか分からなくなります。
+
+     ⚠️ 同じ場所を登校便でも下校便でも使うことはある（場所そのものは1つ）。
+        だから分けて持つのではなく、**どちらで使われているか**を並べて持つ。 */
+  const add = (name, addr, coord, where, seg) => {
     name = String(name||'').trim(); coord = String(coord||'').trim();
     if(!name || !coord || !dmsToDecimal(coord)) return;   // 座標が読めないものは出さない
     const k = name + '|' + coord;
-    if(!map[k]) map[k] = { name, addr:String(addr||'').trim(), coord, uses:[] };
+    if(!map[k]) map[k] = { name, addr:String(addr||'').trim(), coord, uses:[], segs:[] };
     if(!map[k].addr && addr) map[k].addr = String(addr).trim();
     if(where && map[k].uses.indexOf(where) < 0) map[k].uses.push(where);
+    if(seg   && map[k].segs.indexOf(seg)   < 0) map[k].segs.push(seg);
   };
   COURSES.forEach(c=>{
     if(c.after_toukou === '他所移動')
-      add(c.after_toukou_place, c.after_toukou_addr, c.after_toukou_coord, courseLabel(c)+'（登校後）');
+      add(c.after_toukou_place, c.after_toukou_addr, c.after_toukou_coord, courseLabel(c)+'（登校後）', '登校');
   });
   Object.keys(SCEN).forEach(cid=>{
     const c = COURSES.find(x=>String(x.id)===String(cid));
     (SCEN[cid]||[]).forEach(s=>(s.pts||[]).forEach(p=>
-      add(p.name, p.address, p.coord, (c?courseLabel(c):'コース'+cid)+'（'+(s.label||'送迎')+'）')));
+      add(p.name, p.address, p.coord,
+          (c?courseLabel(c):'コース'+cid)+'（'+(s.segment||'')+'便：'+(s.label||'送迎')+'）',
+          s.segment)));
   });
   return Object.keys(map).map(k=>map[k]).sort((a,b)=>String(a.name).localeCompare(String(b.name),'ja'));
 }
 /** 場所を選ぶ小さな選択欄。onchange に呼び出し先を渡す */
-function placePickHtml(call){
+/* 🔴 いま開いている便（登校／下校）で使われている場所を、上にまとめて出す（2026-09-04 八重樫さん）。
+   ⚠️ 同じ名前が登校便にも下校便にもあると、どちらの地点か分からなくなっていた。
+      名前のうしろに「登校便」「下校便」を出し、さらに枠で分ける。 */
+function placePickHtml(call, seg){
   if(!PLACEBOOK.length) return '';
-  const opts = PLACEBOOK.map((p,i)=>{
+  const one = (p,i)=>{
     const n = p.uses.length;
-    return `<option value="${i}">${escHtml(p.name)}${n?`（${escHtml(p.uses[0])}${n>1?' ほか'+(n-1)+'件':''}）`:''}</option>`;
-  }).join('');
+    const tag = (p.segs||[]).length ? '［'+p.segs.join('・')+'便］' : '';
+    return `<option value="${i}">${escHtml(tag)}${escHtml(p.name)}${n?`（${escHtml(p.uses[0])}${n>1?' ほか'+(n-1)+'件':''}）`:''}</option>`;
+  };
+  let opts;
+  if(seg === '登校' || seg === '下校'){
+    const mine = [], other = [];
+    PLACEBOOK.forEach((p,i)=>{ ((p.segs||[]).indexOf(seg) >= 0 ? mine : other).push(one(p,i)); });
+    opts = (mine.length  ? `<optgroup label="${seg}便で使っている場所">` + mine.join('')  + '</optgroup>' : '')
+         + (other.length ? '<optgroup label="そのほかの場所">' + other.join('') + '</optgroup>' : '');
+  } else {
+    opts = PLACEBOOK.map(one).join('');
+  }
   return `<select onchange="${call}" title="すでにこのシステムに入っている場所から選ぶと、名前・住所・座標がまとめて入ります"
     style="flex:0 0 auto;max-width:200px;font-size:12px;padding:4px 6px;">
     <option value="">📍 登録済みの場所…</option>${opts}</select>`;
