@@ -2974,10 +2974,31 @@ function rptFillFromStops(){
       終点が車庫になっていた。便間回送は車庫へは戻らない。
    ⚠️ 直し方：端点は②が言うバス停（①バス停一覧の下校の並び・その日課で通らない指定を除く）
       から取る。マスタが正。 */
+/* 🔴 回送の端点は、④の並びではなく①バス停一覧（マスタ）から取る（2026-09-08 岩﨑さん報告）。
+
+   > 回送ルート下校便前のルートを入れようとするとこのような画面表示になりました
+     （「この道：都筑営業所車庫 → 最初のバス停」／表が空／「1回目にまだ地点がありません」）
+
+   ⚠️ 原因：端点を④の本線から拾っていた。回送ルート（基準）タブには日課がないので
+      基準の本線（form_name is null）を見るが、**本線が日課にしか無いコースでは空**になる。
+      端点が決まらないので表が空のまま何も入れられない。64コース中48コースが該当した。
+   ⚠️ 2026-09-04 に便間回送だけ同じ直しをしたが、ほかの回送は④のままだった。
+      同じ判断が散っていたのを、今回まとめて1か所にする。 → [[one-place-decides]]
+
+   端点（すべて①バス停一覧から）
+     出庫回送登校  車庫 → 登校便の第1バス停
+     帰庫回送登校  登校便の最後（学校）→ 車庫／他所
+     出庫回送下校  車庫／他所 → 下校便の最初（学校）
+     便間回送①②  前の便の最終バス停 → 学校
+     帰庫回送下校  その日課の最後の便の最終バス停 → 車庫 */
+function _masterEnds(seg){
+  const nm = _expectedStops(_curForm(), seg);
+  if(!nm.length) return null;
+  return { first: nm[0], last: nm[nm.length - 1] };
+}
 function _binkanEnds(seg){
-  const nm = _expectedStops(_curForm(), seg);   // [学校, …, 最終バス停]
-  if(nm.length < 2) return null;
-  return { school: nm[0], last: nm[nm.length - 1] };
+  const m = _masterEnds(seg);
+  return (m && m.first !== m.last) ? { school: m.first, last: m.last } : null;
 }
 /** ①バス停一覧から、名前でバス停を1つ引く（座標つき） */
 function _stopByName(name){
@@ -2991,10 +3012,15 @@ function _kaiEnds(){
   const garName = off.name || '車庫';
   const _mseg = (_kaiGroup()==='登校') ? '登校'
     : (selRSeg==='便間回送②' ? '下校②' : (selRSeg==='帰庫回送下校' ? _lastGekouSeg() : '下校①'));
+  /* ⚠️ ①バス停一覧から取る。④の本線が空でも端点は決まる。
+        ①も空のときだけ、④を見る（新しいコースを作り始められるように）。 */
+  const _me = _masterEnds(_mseg);
   const line = ((RPTS[String(selCourseId)]||{})[_rkey(_mseg,null,null)]||[])
     .filter(p=>String(p.lat).trim()!=='' && String(p.lng).trim()!=='');
-  const firstName = line.length ? ((line.find(p=>p.is_stop)||line[0]).name || '最初のバス停') : '最初のバス停';
-  const lastName  = line.length ? (line[line.length-1].name || '最後の地点') : '最後の地点';
+  const firstName = _me ? _me.first
+    : (line.length ? ((line.find(p=>p.is_stop)||line[0]).name || '最初のバス停') : '最初のバス停');
+  const lastName  = _me ? _me.last
+    : (line.length ? (line[line.length-1].name || '最後の地点') : '最後の地点');
   let hub = garName, warn = '';
   if(selRSeg==='帰庫回送登校' || selRSeg==='出庫回送下校'){
     if(c.after_toukou === '他所移動'){
@@ -3034,11 +3060,19 @@ function rptSeedKaisou(){
   const mainSeg = (_kaiGroup() === '登校') ? '登校'
     : (selRSeg === '便間回送②' ? '下校②'
        : (selRSeg === '帰庫回送下校' ? _lastGekouSeg() : '下校①'));
+  /* ⚠️ 端点は①バス停一覧から。④の本線がまだ無くても回送は作り始められる。
+        （2026-09-08 岩﨑さん：④の本線が日課にしかないコースで、下書きが作れなかった） */
   const line = ((RPTS[String(selCourseId)]||{})[_rkey(mainSeg, null, null)]||[])
     .filter(p=>String(p.lat).trim()!=='' && String(p.lng).trim()!=='');
-  if(!line.length){ _saveMsg(`${R_SEG_LABEL[mainSeg]}にまだ地点がありません。先にそちらを作ってください。`, false); return; }
-  const firstStop = line.find(p=>p.is_stop) || line[0];
-  const lastPt    = line[line.length-1];
+  const _meS = _masterEnds(mainSeg);
+  const _mpS = nm => { const s = _stopByName(nm), d = s && dmsToDecimal(s.coord);
+                       return d ? { name:nm, lat:String(d.lat), lng:String(d.lng) } : null; };
+  const firstStop = (_meS && _mpS(_meS.first)) || (line.length ? (line.find(p=>p.is_stop) || line[0]) : null);
+  const lastPt    = (_meS && _mpS(_meS.last))  || (line.length ? line[line.length-1] : null);
+  if(!firstStop || !lastPt){
+    _saveMsg('「①主要情報・登校便」タブのバス停一覧に、'
+      + (_kaiGroup()==='登校' ? '登校便の並び' : '下校便の並び')
+      + 'と座標が入っていません。先にそちらを入れてください。', false); return; }
 
   // その送迎の乗降地点（「登校前」「登校後」のように前後で分かれている）
   const sc   = _scenList().find(s=>String(s.dbId)===String(selRScen));
@@ -3063,14 +3097,8 @@ function rptSeedKaisou(){
   /* 便間回送は「前の便の最終バス停 → 学校」。車庫は通らない（2026-09-04 八重樫さん） */
   let pts;
   if(selRSeg === '便間回送①' || selRSeg === '便間回送②'){
-    const b = _binkanEnds(selRSeg === '便間回送②' ? '下校②' : '下校①');
-    if(!b){ _saveMsg('「①主要情報・登校便」タブのバス停一覧に、下校の並びが入っていません。先にそちらを入れてください。', false); return; }
-    const sL = _stopByName(b.last), sS = _stopByName(b.school);
-    const cL = sL && dmsToDecimal(sL.coord), cS = sS && dmsToDecimal(sS.coord);
-    if(!cL || !cS){
-      _saveMsg('「' + (!cL ? b.last : b.school) + '」の座標が「①主要情報・登校便」タブで空です。入れてから下書きを作ってください。', false); return;
-    }
-    pts = [mk(b.last, cL.lat, cL.lng)].concat(tps, [mk(b.school, cS.lat, cS.lng)]);
+    /* 便間回送は「前の便の最終バス停 → 学校」。車庫は通らない（2026-09-04 八重樫さん） */
+    pts = [mk(lastPt.name, lastPt.lat, lastPt.lng)].concat(tps, [mk(firstStop.name, firstStop.lat, firstStop.lng)]);
   } else {
     pts = (_kaiWhich()==='出庫')
       ? [hub].concat(tps, [mk(firstStop.name||'最初のバス停', firstStop.lat, firstStop.lng)])
@@ -3217,10 +3245,14 @@ function _endPtsHere(){
   // 本線から拾う（_kaiEnds と同じ拾い方にそろえる）
   const _mseg2 = (_kaiGroup()==='登校') ? '登校'
     : (selRSeg==='便間回送②' ? '下校②' : (selRSeg==='帰庫回送下校' ? _lastGekouSeg() : '下校①'));
+  /* ⚠️ ①バス停一覧から取る（④の本線が空でも端点が決まる）。①も引けないときだけ④を見る。 */
   const raw = ((RPTS[String(selCourseId)]||{})[_rkey(_mseg2,null,null)]||[])
     .filter(p=>String(p.lat).trim()!=='' && String(p.lng).trim()!=='');
-  const firstStop = raw.length ? num(raw.find(p=>p.is_stop) || raw[0]) : null;
-  const lastPt    = raw.length ? num(raw[raw.length-1]) : null;
+  const _me2 = _masterEnds(_mseg2);
+  const _mp  = nm => { const s = _stopByName(nm), d = s && dmsToDecimal(s.coord);
+                       return d ? { name:nm, lat:d.lat, lng:d.lng } : null; };
+  const firstStop = (_me2 && _mp(_me2.first)) || (raw.length ? num(raw.find(p=>p.is_stop) || raw[0]) : null);
+  const lastPt    = (_me2 && _mp(_me2.last))  || (raw.length ? num(raw[raw.length-1]) : null);
   /* 🔴 便間回送は「前の便の最終バス停 → 学校」（2026-09-04 八重樫さん）。
      ⚠️ ここが**画面の行そのものを毎回書き換えている**場所（rptLockEnds が呼ぶ）。
         _kaiEnds（見出しの文）だけ直しても、行は車庫のままだった。同じ直しを2か所に要る。
