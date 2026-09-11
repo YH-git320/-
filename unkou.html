@@ -2547,6 +2547,9 @@ async function loadFormUsage(cid){
 }
 function _usageOf(nm){
   const list = FORM_USAGE[String(selCourseId)] || [];
+  // 保存する前に名前を変えていたら、変える前の名前で数える（月間予定はまだ前の名前のため。2026-09-11）
+  const ren = (FORM_RENAMES[String(selCourseId)] || []).find(r => r[1] === nm);
+  if(ren) nm = ren[0];
   const u = list.find(x => x.form_name === nm);
   return u ? u.days : 0;
 }
@@ -4055,8 +4058,11 @@ async function saveCourse(){
     const formsCount = (FORMS[key]||[]).filter(f=>(f.form_name||'').trim()).length;
     {
       const _fk = (FORMS[key]||[]).filter(f=>(f.form_name||'').trim()).map(f=>f.form_name.trim());
-      if(!(await _confirmDrop(`course_schedule_forms?version_id=eq.${selVerId}`, 'form_name', _fk, '日課',
-            x=>(x.form_name||''), x=>(x.form_name||'（名前なし）')))){
+      /* 🔴 2026-09-11：消える日課は番号（id）で数える。名前で数えると、名前を変えただけで「Aが消えます」と出ていた。
+         保存の関数（save_course_schedule_forms）も「送られてこなかった id を消す」ので、同じ数え方にそろえる */
+      const _fid = (FORMS[key]||[]).filter(f=>(f.form_name||'').trim() && f.id != null).map(f=>String(f.id));
+      if(!(await _confirmDrop(`course_schedule_forms?version_id=eq.${selVerId}`, 'id,form_name', _fid, '日課',
+            x=>String(x.id), x=>(x.form_name||'（名前なし）')))){
         _saveMsg('保存を中止しました。', false); return; }
     }
     const forms = (FORMS[key]||[]).filter(f=>(f.form_name||'').trim()).map(f=>({ id:(f.id==null?null:f.id), course_id:c.id, version_id:selVerId, form_name:f.form_name.trim(), gekou_departures:(f.gekou_departures||[]).filter(t=>t), after_toukou:(f.after_toukou||'')||null, after_toukou_place:(f.after_toukou==='他所移動'?(f.after_toukou_place||null):null), after_toukou_addr:(f.after_toukou==='他所移動'?(f.after_toukou_addr||null):null), after_toukou_coord:(f.after_toukou==='他所移動'?(f.after_toukou_coord||null):null), dep_overrides:(f.dep_overrides&&Object.keys(f.dep_overrides).length)?f.dep_overrides:{} }));
