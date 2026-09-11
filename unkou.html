@@ -2586,7 +2586,8 @@ function _orphanFormBox(){
   return `<div style="background:#fdf6e8;border:1px solid #e0c6a2;border-radius:10px;padding:10px 12px;margin:0 0 10px;">
     <div style="font-weight:700;color:#8a6d1f;font-size:13px;">⚠️ 月間予定に、いまは無い日課が使われています</div>
     <div style="font-size:12px;color:#5b6b63;margin:4px 0 6px;line-height:1.7;">
-      日課の名前を変えるとふつうは月間予定も一緒に変わりますが、これは<b>その仕組みができる前に変えられたもの</b>です。<br>
+      日課を消したか、月間予定に入っている名前（学校の書類の A・B など）が、ここの日課名と合っていない日です。<b>この日の便は取り消さずに残しています。</b><br>
+      （日課の名前を変えただけなら、月間予定は自動で一緒に変わるので、ここには出ません）<br>
       置き換え先を選んで「置き換える」を押すと直ります。<b>その日に走る便の数と時刻は、置き換え先の内容になります。</b>
     </div>
     ${orphans.map(o=>`<div class="line" style="gap:6px;flex-wrap:wrap;align-items:center;margin:3px 0;font-size:12.5px;">
@@ -3904,7 +3905,8 @@ function _pendingForms(){
   const key = String(selCourseId);
   return (FORMS[key] || [])
     .filter(f => (f.form_name||'').trim())
-    .map(f => ({ form_name: (f.form_name||'').trim(),
+    .map(f => ({ id: (f.id == null ? null : f.id),   // 🔴 日課は番号で結び付く。名前を変えても同じ日課と分かるように（2026-09-11）
+                 form_name: (f.form_name||'').trim(),
                  gekou_departures: (f.gekou_departures||[]).filter(t => (t||'').trim()) }));
 }
 /** 画面がいま持っているバス停から、登校便の最初の時刻（＝便の時刻になる） */
@@ -3946,6 +3948,14 @@ function _confirmSync(p){
   if(!n) return true;                               // 便に影響が無ければ黙って保存
   const kept = (p.kept||[]).slice(0,10)
     .map(x => `　${String(x.work_date).slice(5).replace('-','/')} ${x.segment}　${x.why}`);
+  /* 🔴 日課が決まらない日（名前が合わない・日課を消した）は、便を取り消さずに残す（2026-09-11） */
+  const unres = p.unresolved || [];
+  const unresTxt = unres.length
+    ? `\n【日課が決まらない日】${unres.length}日　この日の便は取り消さずに残します\n`
+      + unres.slice(0,10).map(x => `　${String(x.work_date).slice(5).replace('-','/')}　日課「${x.form_name||''}」`).join('\n')
+      + (unres.length > 10 ? `\n　ほか ${unres.length-10}日` : '')
+      + `\n　月間予定の日課か、「②下校便」の日課名をご確認ください。\n`
+    : '';
   const msg =
     `保存すると、この変更が便にも反映されます。\n`
   + `　${p.course}　${p.from} 以降（今日より前の便は触りません）\n\n`
@@ -3955,6 +3965,7 @@ function _confirmSync(p){
   + (p.fixed_count   ? `【車両・必要人数を直す】${p.fixed_count}件\n` : '')
   + '\n' + _syncLines(p).join('\n') + '\n'
   + (kept.length ? `\n【触らないもの】\n${kept.join('\n')}\n` : '')
+  + unresTxt
   + `\n保存して反映しますか。\n`
   + `　「キャンセル」を押すと、マスタも保存しません。`;
   return confirm(msg);
@@ -3971,13 +3982,19 @@ async function _applySync(){
       return `　⚠️ 便への反映ができませんでした：${((j&&j.message)||t).slice(0,120)}`; }
     const p = JSON.parse(t);
     const n = (p.retimed_count|0) + (p.added_count|0) + (p.removed_count|0) + (p.fixed_count|0);
-    if(!n) return '';
+    // 🔴 日課が決まらない日は便を触っていない。黙らずに知らせる（2026-09-11）
+    const unresMsg = (p.unresolved_count|0)
+      ? `（⚠️ 日課が決まらない日が ${p.unresolved_count}日あります。その日の便は取り消さずに残しています：`
+        + (p.unresolved||[]).slice(0,5).map(x => `${String(x.work_date).slice(5).replace('-','/')}「${x.form_name||''}」`).join('・')
+        + ((p.unresolved||[]).length > 5 ? ' ほか' : '') + '）'
+      : '';
+    if(!n) return unresMsg;
     if(p.removed_count){
       alert(`便を取り消しました（${p.removed_count}件）。配置されていた乗務員も外れています。\n`
         + `（従業員の登録は変わりません。外した記録は変更履歴に残ります）\n\n`
         + (p.removed||[]).map(x => `　${x.work_date} ${x.segment} ${x.start_time||''}　外れた配置：${x.crew||'なし'}`).join('\n'));
     }
-    return `（便へ反映：時刻${p.retimed_count}件／作成${p.added_count}件／取り消し${p.removed_count}件／車両・人数${p.fixed_count}件）`;
+    return `（便へ反映：時刻${p.retimed_count}件／作成${p.added_count}件／取り消し${p.removed_count}件／車両・人数${p.fixed_count}件）` + unresMsg;
   }catch(e){ return `　⚠️ 便への反映ができませんでした：${e.message}`; }
 }
 
@@ -4047,16 +4064,11 @@ async function saveCourse(){
     { const r2=await fetch(`${REST_URL}/rpc/save_course_schedule_forms`, { method:'POST', headers:getH(),
         body:JSON.stringify({ p_course_id:c.id, p_version_id:selVerId, p_rows:forms }) });
       if(!r2.ok){ const t=await r2.text(); _saveMsg('「②下校便」（日課）の保存に失敗（元のデータは残っています）：'+t.slice(0,100), false); return; } }
-    // 2.5) 日課名を変えていたら、予定表（月間予定）の日課名も付け替える
+    /* 2.5) 🔴 2026-09-11：月間予定と「④ルート詳細」は、日課の名前ではなく番号で日課を指すようになった。
+       名前を変えても結び付きは切れず、表示の名前はデータベースが自動でそろえる（_form_follow）。
+       ⚠️ ここで名前での付け替え（rename_course_form）をしない。名前で付け替えると、また名前に頼る形に戻る。 */
     {
-      const ren = (FORM_RENAMES[key] || []).filter(r => r[0] && r[1] && r[0] !== r[1]);
-      for(const [from, to] of ren){
-        const rr = await fetch(`${REST_URL}/rpc/rename_course_form`, { method:'POST', headers:getH(),
-          body:JSON.stringify({ p_course_id:c.id, p_from:from, p_to:to }) });
-        if(rr.ok){ const n = await rr.json(); if(n) _calRenamed.push(`${from}→${to}（${n}日）`); }
-        else { const t=await rr.text(); _saveMsg('予定表の日課名の付け替えに失敗：'+t.slice(0,100), false); return; }
-      }
-      if(ren.length) FORM_RENAMES[key] = [];
+      FORM_RENAMES[key] = [];
       await loadFormUsage(c.id);   // 名前を変えたあとの使用状況を読み直す
     }
     // 3) バス停・ルート（このコースを置き換え）
