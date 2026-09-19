@@ -1818,7 +1818,7 @@ function renderEditor(){
         <input type="text" value="${escAttr(f.form_name)}" placeholder="例：A" onchange="updFormName(${fi},this.value)" style="width:80px;">
         ${carSel}
         ${(function(){ const n=_usageOf((f.form_name||'').trim());
-          return n ? `<span class="muted" style="font-size:11.5px;">月間予定で <b>${n}日</b> 使用中</span>` : ''; })()}
+          return n ? `<span class="muted" style="font-size:11.5px;">今日以降の月間予定で <b>${n}日</b> 使用中</span>` : ''; })()}
         <button class="link" onclick="delForm(${fi})" style="margin-left:auto;">この日課を削除</button></div>
       ${carPlace}
       ${bins}
@@ -2103,7 +2103,7 @@ function delForm(fi){
   const n = nm ? _routePtsOfForm(nm) : 0;
   const days = nm ? _usageOf(nm) : 0;
   if((n || days) && !confirm(`日課「${nm}」を消します。`
-    + (days ? `\n\n⚠️ 月間予定で ${days}日分 使われています。消すと、その日の日課が行き先を失います。\n　　（保存したあと、この画面の上に「置き換える」が出ます）` : '')
+    + (days ? `\n\n⚠️ 今日以降の月間予定で ${days}日分 使われています。消すと、その日の日課が行き先を失います。\n　　（保存したあと、この画面の上に「置き換える」が出ます）` : '')
     + (n ? `\n\n「④ルート詳細」に入っている ${n}地点の道は、どの日課にも属さなくなります（消えはしません）。\n　　「④ルート詳細」に「使われていない日課」として残るので、あとで他の日課へコピーできます。` : '')
     + `\n\nよろしいですか。`)) return;
   arr.splice(fi, 1);
@@ -2563,7 +2563,10 @@ async function fixOrphanForm(from, sel){
   if(!to){ _saveMsg('置き換え先の日課を選んでください。', false); return; }
   const u = (FORM_USAGE[String(selCourseId)] || []).find(x => x.form_name === from);
   const n = u ? u.days : 0;
-  if(!confirm(`月間予定の「${from}」（${n}日分）を「${to}」に置き換えます。\n\n`
+  /* 🔴 2026-09-19：置き換えるのは今日以降の日だけ（過去の月間予定は1件も触らない）。
+     置き換え先は、初めは空。選ばないと押せない（最初の日課が黙って選ばれていて、選び違いが起きた） */
+  if(!confirm(`今日以降の月間予定の「${from}」（${n}日分）を「${to}」に置き換えます。\n\n`
+    + `※ 今日より前の日は変えません。\n`
     + `※ その日に走る便の数と時刻は「${to}」の内容になります。\n`
     + `※ 月間予定の画面（yotei.html）からも直せます。\n\nよろしいですか。`)) return;
   await ensureFreshToken();
@@ -2587,17 +2590,17 @@ function _orphanFormBox(){
     }).join('');
   if(!opts) return '';
   return `<div style="background:#fdf6e8;border:1px solid #e0c6a2;border-radius:10px;padding:10px 12px;margin:0 0 10px;">
-    <div style="font-weight:700;color:#8a6d1f;font-size:13px;">⚠️ 月間予定に、いまは無い日課が使われています</div>
+    <div style="font-weight:700;color:#8a6d1f;font-size:13px;">⚠️ 今日以降の月間予定に、いまは無い日課が使われています</div>
     <div style="font-size:12px;color:#5b6b63;margin:4px 0 6px;line-height:1.7;">
       日課を消したか、月間予定に入っている名前（学校の書類の A・B など）が、ここの日課名と合っていない日です。<b>この日の便は取り消さずに残しています。</b><br>
       （日課の名前を変えただけなら、月間予定は自動で一緒に変わるので、ここには出ません）<br>
-      置き換え先を選んで「置き換える」を押すと直ります。<b>その日に走る便の数と時刻は、置き換え先の内容になります。</b>
+      置き換え先を選んで「置き換える」を押すと直ります（<b>今日以降の日だけ</b>。今日より前の日は変えません）。<b>その日に走る便の数と時刻は、置き換え先の内容になります。</b>
     </div>
     ${orphans.map(o=>`<div class="line" style="gap:6px;flex-wrap:wrap;align-items:center;margin:3px 0;font-size:12.5px;">
       <span style="font-weight:700;color:#b0451f;">${escHtml(o.form_name)}</span>
       <span class="muted">${o.days}日分（${escHtml(String(o.first_date||''))} 〜 ${escHtml(String(o.last_date||''))}）</span>
       <span class="muted">→</span>
-      <select id="orph-${escAttr(o.form_name)}" style="font-size:12px;padding:3px 6px;">${opts}</select>
+      <select id="orph-${escAttr(o.form_name)}" style="font-size:12px;padding:3px 6px;"><option value="" selected>（置き換え先を選んでください）</option>${opts}</select>
       <button class="mini" onclick="fixOrphanForm('${escAttr(o.form_name)}', document.getElementById('orph-${escAttr(o.form_name)}'))">置き換える</button>
     </div>`).join('')}
   </div>`;
