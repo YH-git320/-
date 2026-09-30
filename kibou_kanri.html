@@ -105,6 +105,9 @@ table.grid tr.none td.nm{background:#fafafa;}
         <label class="muted">〆切</label><input type="date" id="nDead">
         <button type="button" class="primary" onclick="pCreate()">この内容でつくる</button>
       </div>
+      <label style="font-size:13px;display:flex;align-items:center;gap:6px;margin-top:8px;">
+        <input type="checkbox" id="nTest" style="width:auto;"> テスト用の期間にする（対象は事務員の3名だけ。添乗員にはメールも届きません）
+      </label>
       <div class="muted" style="margin-top:6px;">ふだんは「21日〜翌月20日」です。〆切は、はじまりの6日前を入れてあります。つくっただけでは、メールは送られません。</div>
     </div>
   </div>
@@ -897,11 +900,11 @@ async function pLoad(selectId){
     sel.innerHTML = '<option value="">（まだ期間がありません。右の「新しい期間をつくる」から）</option>';
     CUR = null; TARGETS = []; GRID = null; renderAll(); pNewToggle(true); return;
   }
-  sel.innerHTML = PERIODS.map(p => `<option value="${p.id}">${jp(p.start)}〜${jp(p.end)}（〆切 ${md(p.deadline)}）　提出 ${p.submitted}名</option>`).join('');
+  sel.innerHTML = PERIODS.map(p => `<option value="${p.id}">${p.is_test ? '【テスト】' : ''}${jp(p.start)}〜${jp(p.end)}（〆切 ${md(p.deadline)}）　提出 ${p.submitted}名</option>`).join('');
   let pick = selectId;
   if(!pick){
     const today = ymd(new Date());
-    const open = PERIODS.filter(p => p.deadline >= today).sort((a,b) => a.start < b.start ? -1 : 1)[0];
+    const open = PERIODS.filter(p => !p.is_test && p.deadline >= today).sort((a,b) => a.start < b.start ? -1 : 1)[0];
     pick = (open || PERIODS[0]).id;
   }
   sel.value = String(pick);
@@ -912,6 +915,8 @@ async function pChange(){
   CUR = PERIODS.find(p => p.id === id) || null;
   if(!CUR){ renderAll(); return; }
   document.getElementById('dlInput').value = String(CUR.deadline).slice(0,10);
+  // テスト用の期間は、事務員の本人宛に送る（自分宛に集める「テスト送信」は外しておく）
+  document.getElementById('tMode').checked = !CUR.is_test;
   document.getElementById('tList').innerHTML = '<div class="muted" style="padding:12px;">読み込んでいます…</div>';
   try{
     [TARGETS, GRID] = await Promise.all([ rpc('shift_admin_targets', {p_period: CUR.id}), rpc('shift_admin_grid', {p_period: CUR.id}) ]);
@@ -939,9 +944,10 @@ function pNewSync(){
 async function pCreate(){
   const s = document.getElementById('nStart').value, e = document.getElementById('nEnd').value, d = document.getElementById('nDead').value;
   if(!s || !e || !d){ say('はじまり・おわり・〆切の3つを入れてください。'); return; }
-  if(!confirm(`${jp(s)}〜${jp(e)}（〆切 ${jp(d)}）の期間をつくります。\nメールは、まだ送られません。よろしいですか？`)) return;
+  const isTest = document.getElementById('nTest').checked;
+  if(!confirm(`${isTest ? '【テスト用】' : ''}${jp(s)}〜${jp(e)}（〆切 ${jp(d)}）の期間をつくります。\nメールは、まだ送られません。よろしいですか？`)) return;
   try{
-    const r = await rpc('shift_create_period', {p_start: s, p_end: e, p_deadline: d});
+    const r = await rpc('shift_create_period', {p_start: s, p_end: e, p_deadline: d, p_test: isTest});
     document.getElementById('pNew').style.display = 'none';
     await pLoad(r.id);
     say(`${jp(s)}〜${jp(e)}の期間をつくりました。次に「未送信の方に、案内メールを送る」を押してください。`, true);
@@ -1014,12 +1020,14 @@ async function copyLink(id){
 /* ---------- メール ---------- */
 function mailSubject(kind){
   const r = `${md(CUR.start)}〜${md(CUR.end)}`;
-  return kind === 'remind' ? `【再送】シフト希望のご提出のお願い（${r}）` : `【高尾輸送】シフト希望のご提出のお願い（${r}）`;
+  const t = CUR.is_test ? '【テスト】' : '';
+  return kind === 'remind' ? `${t}【再送】シフト希望のご提出のお願い（${r}）` : `${t}【高尾輸送】シフト希望のご提出のお願い（${r}）`;
 }
 function mailHtml(name, link, kind){
   const dl = jp(CUR.deadline);
   return `<div style="font-family:'Hiragino Kaku Gothic ProN','Meiryo',sans-serif;font-size:14px;line-height:1.75;color:#222;">
 <p>${esc(name)} 様</p>
+${CUR.is_test ? '<p style="background:#fff8e8;border:1px solid #e8d9b0;padding:8px 12px;border-radius:6px;color:#8a6d1a;"><b>これは動作確認のためのテストです。</b>実際に○をつけて送信してみてください。入力した内容は、シフトの希望としては使いません。</p>' : ''}
 <p>お疲れさまです。高尾輸送サービスです。</p>
 ${kind === 'remind' ? '<p>シフト希望を、まだご提出いただいていないようです。お手数ですが、下のボタンから入力をお願いします。</p>'
                     : `<p>${esc(jp(CUR.start))}〜${esc(jp(CUR.end))}のシフト希望を、下のボタンから入力してください。</p>`}
@@ -1105,7 +1113,7 @@ function renderGrid(){
   if(!CUR || !GRID){ A.innerHTML = ''; N.innerHTML = ''; T.textContent = ''; return; }
   const days = GRID.days, staff = GRID.staff;
   const done = staff.filter(s => s.submitted_at), undone = staff.filter(s => !s.submitted_at);
-  T.textContent = `シフト希望一覧表　${jp(GRID.period.start)}〜${jp(GRID.period.end)}　（提出 ${done.length}名／対象 ${staff.length}名）`;
+  T.textContent = `${GRID.period.is_test ? '【テスト】' : ''}シフト希望一覧表${jp(GRID.period.start)}〜${jp(GRID.period.end)}　（提出 ${done.length}名／対象 ${staff.length}名）`;
 
   let h = `<div class="gwrap"><table class="grid"><thead><tr><th class="nm" rowspan="3">氏名</th>`;
   for(const d of days) h += `<th colspan="2" class="${dayCls(d)}" title="${esc(d.hol||'')}">${md(d.d)}</th>`;
