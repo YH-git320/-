@@ -140,7 +140,7 @@ table.grid tr.none td.nm{background:#fafafa;}
       </div>
       <div class="row" style="align-items:center;margin-top:10px;">
         <label style="font-size:13px;display:flex;align-items:center;gap:5px;white-space:nowrap;">
-          <input type="checkbox" id="tMode" style="width:auto;" checked> テスト送信にする（右の欄に入れた、自分のメールアドレスにだけ届きます。添乗員本人には届きません。見本が3通届きます）
+          <input type="checkbox" id="tMode" style="width:auto;" checked> テスト送信にする（右の欄のアドレスにだけ届きます。添乗員本人には届きません。「送らない」を外した方のうち最初の3名ぶんを、最大3通送ります）
         </label>
         <select id="tPick" onchange="tPickSet()" style="width:auto;max-width:320px;"><option value="">管理者マスタから選ぶ</option></select>
         <input id="tAddr" type="text" oninput="tAddrTyped()" placeholder="または、メールアドレスを直接入力" style="flex:1;min-width:200px;">
