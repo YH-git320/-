@@ -79,6 +79,44 @@
   .tokerr h2{font-size:22px;color:var(--danger);margin:0 0 10px;}
   .tokerr p{font-size:16px;color:var(--ink-soft);}
   .pv{background:#fff8e8;border-bottom:1px solid #e8d9b0;color:#8a6d1a;font-size:13px;padding:6px 12px;text-align:center;}
+  .linkbtn{margin-top:8px;font-family:inherit;font-size:15px;font-weight:700;padding:9px 14px;border-radius:10px;
+    border:2px solid var(--brand);background:#fff;color:var(--brand-dark);cursor:pointer;}
+  /* 提出内容のカレンダー（今の紙の書式に合わせる） */
+  .calbox{background:#fff;margin:10px 8px;padding:12px 10px;border:1px solid var(--line);border-radius:12px;}
+  .calttl{font-size:16px;font-weight:800;color:var(--ink);margin:0 0 8px;line-height:1.5;}
+  .calttl small{display:block;font-size:13px;font-weight:400;color:var(--ink-soft);}
+  table.cal{width:100%;border-collapse:collapse;table-layout:fixed;}
+  table.cal th{border:1px solid #444;padding:3px 0;font-size:14px;font-weight:700;background:#f3f6f3;}
+  table.cal th.s6{color:var(--sat-ink);} table.cal th.s0{color:var(--sun-ink);}
+  table.cal td{border:1px solid #444;padding:0;vertical-align:top;}
+  table.cal td.out{background:#eee;}
+  table.cal .dn{font-size:11px;font-weight:700;text-align:center;line-height:1.5;border-bottom:1px solid #444;background:#fff;}
+  table.cal td.sat .dn{background:var(--sat);} table.cal td.sun .dn{background:var(--sun);}
+  table.cal .dbox{padding:2px 3px 3px;}
+  table.cal td.sat .dbox{background-color:#f4f9fd;} table.cal td.sun .dbox{background-color:#fef6f6;}
+  table.cal .ln{display:flex;justify-content:space-between;align-items:center;height:24px;}
+  table.cal .ln + .ln{border-top:1px dotted #b9c6bd;}
+  table.cal .lb{font-size:10px;color:var(--ink-soft);letter-spacing:-.3px;}
+  table.cal .mk{font-size:18px;font-weight:800;line-height:1;color:#c3cdc7;}
+  table.cal .mk.on{color:var(--on);}
+  .calleg{font-size:12px;color:var(--ink-soft);margin:8px 0 0;line-height:1.6;}
+  .calnote{font-size:13px;margin:8px 0 0;line-height:1.6;white-space:pre-wrap;}
+  .calbtns{display:flex;gap:10px;padding:0 14px;margin-top:4px;}
+  .calbtns button{flex:1;font-family:inherit;font-size:16px;font-weight:800;padding:13px 6px;border-radius:12px;cursor:pointer;
+    border:none;background:var(--brand-dark);color:#fff;}
+  .calbtns button.sub{background:#fff;color:var(--brand-dark);border:2px solid var(--brand);}
+  @page{size:A4 landscape;margin:8mm;}
+  @media print{
+    body{background:#fff;}
+    .no-print,.pv,.top,.foot,.intro,.status,.list,.note{display:none !important;}
+    .calbox{margin:0;padding:0;border:none;}
+    .calttl{font-size:15px;}
+    table.cal .ln{height:9mm;}
+    table.cal .lb{font-size:11px;}
+    table.cal .mk{font-size:22px;}
+    table.cal .dn,table.cal th,table.cal .dbox{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    table.cal td.sat .dbox,table.cal td.sun .dbox,table.cal td.out{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  }
 </style>
 </head>
 <body>
@@ -152,7 +190,8 @@ function render(){
   if(CLOSED){
     h += `<div class="status warn">〆切を過ぎたため、内容は変えられません。${INFO.submitted?'送信済みの内容が表示されています。':'変更が必要な場合は、事務所へご連絡ください。'}</div>`;
   } else if(INFO.submitted){
-    h += `<div class="status ok">${esc(fmtDT(INFO.last_submitted_at))} に送信済みです。直すときは、直してからもう一度送信してください。</div>`;
+    h += `<div class="status ok">${esc(fmtDT(INFO.last_submitted_at))} に送信済みです。直すときは、直してからもう一度送信してください。<br>
+      <button type="button" class="linkbtn" id="bCal">提出した内容をカレンダーで見る・PDFで保存</button></div>`;
   }
 
   h += `<div class="list"><div class="gh" id="gh"><div>日付</div><div>登校</div><div>下校</div></div>`;
@@ -178,6 +217,8 @@ function render(){
   const note = document.getElementById('note');
   note.value = INFO._note || '';
   note.addEventListener('input', draftSave);
+  const bCal = document.getElementById('bCal');
+  if(bCal) bCal.addEventListener('click', () => { const c = counts(); showDone(c.g, c.b, 'view'); });
   syncTop();
 
   root.querySelectorAll('.c').forEach(b => b.addEventListener('click', () => {
@@ -231,8 +272,8 @@ function confirmSend(){
 async function doSend(){
   const ov = document.getElementById('ov'), dlg = document.getElementById('dlg');
   if(previewMode){
-    dlg.innerHTML = `<h2>見本です</h2><p>管理者用の見本のため、送信はされません。</p><div class="btns"><button type="button" class="b-ok" id="dOk">閉じる</button></div>`;
-    document.getElementById('dOk').onclick = () => ov.classList.remove('show');
+    const c = counts(); INFO._note = document.getElementById('note').value;
+    ov.classList.remove('show'); showDone(c.g, c.b, 'preview');
     return;
   }
   const yes = document.getElementById('dYes'); yes.disabled = true; yes.textContent = '送信中…';
@@ -255,20 +296,125 @@ async function doSend(){
     draftClear();
     ov.classList.remove('show');
     INFO.submitted = true; INFO.last_submitted_at = new Date().toISOString(); INFO._note = note;
-    showDone(r.go, r.back);
+    showDone(r.go, r.back, 'sent');
   }catch(e){
     dlg.innerHTML = `<h2 style="color:var(--danger)">通信エラー</h2><p>送信できませんでした。電波の良いところで、もう一度お試しください。（入力した内容はこの端末に残っています）</p><div class="btns"><button type="button" class="b-ok" id="dOk">閉じる</button></div>`;
     document.getElementById('dOk').onclick = () => ov.classList.remove('show');
   }
 }
 
-function showDone(g,b){
+/* ---- 提出内容のカレンダー（今の紙の書式：日〜土の7列・斜線の左上が登校／右下が下校） ---- */
+function reiwa(d){ const p=d.split('-'); return 'R'+(Number(p[0])-2018)+'年'+Number(p[1])+'月'+Number(p[2])+'日'; }
+function calTitle(){
+  const P = INFO.period;
+  return `シフト希望表（${reiwa(P.start)}〜${md(P.end).replace('/','月')}日）　名前：${INFO.staff_name}`;
+}
+function calMeta(){
+  return INFO.last_submitted_at ? '提出日時　' + fmtDT(INFO.last_submitted_at) : '';
+}
+function calGrid(){
+  // 開始日の週の日曜日から、終了日の週の土曜日まで
+  const P = INFO.period, byDate = {};
+  INFO.days.forEach(d => byDate[d.d] = d);
+  const f = t => t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');
+  const s = new Date(P.start+'T00:00:00'), e = new Date(P.end+'T00:00:00');
+  const from = new Date(s); from.setDate(from.getDate() - from.getDay());
+  const to = new Date(e); to.setDate(to.getDate() + (6 - to.getDay()));
+  const weeks = [];
+  for(let t = new Date(from); t <= to; ){
+    const w = [];
+    for(let i = 0; i < 7; i++){ const key = f(t); w.push(byDate[key] || { d:key, out:true, dow:t.getDay() }); t.setDate(t.getDate()+1); }
+    weeks.push(w);
+  }
+  return weeks;
+}
+function calHtml(){
+  const wk = calGrid();
+  let h = `<div class="calttl">${esc(calTitle())}<small>${esc(calMeta())}</small></div><table class="cal"><thead><tr>`;
+  DOW.forEach((n,i) => h += `<th class="s${i}">${n}</th>`);
+  h += `</tr></thead><tbody>`;
+  for(const w of wk){
+    h += `<tr>`;
+    for(const d of w){
+      if(d.out){ h += `<td class="out"></td>`; continue; }
+      const cls = (d.dow===0 || d.hol) ? 'sun' : (d.dow===6 ? 'sat' : '');
+      h += `<td class="${cls}"><div class="dn">${md(d.d)}${d.hol ? ' 祝' : ''}</div><div class="dbox">${['g','b'].map(s => `<div class="ln"><span class="lb">${s==='g'?'登校':'下校'}</span><span class="mk${ON[d.d+'|'+s]?' on':''}">${ON[d.d+'|'+s]?'○':'－'}</span></div>`).join('')}</div></td>`;
+    }
+    h += `</tr>`;
+  }
+  h += `</tbody></table><div class="calleg">※ ○は出勤できる便、－は出勤できない便です。</div>`;
+  const nt = (INFO._note || '').trim();
+  if(nt) h += `<div class="calnote">連絡事項：${esc(nt)}</div>`;
+  return h;
+}
+
+function saveImage(){
+  const wk = calGrid(), W = 1400, M = 40, cw = (W - M*2) / 7, hh = 60, dh = 30, bh = 100;
+  const H = M + 90 + 40 + wk.length * (dh + bh) + 110;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const c = cv.getContext('2d');
+  const FONT = '"Noto Sans JP","Hiragino Kaku Gothic ProN","Yu Gothic","Meiryo",sans-serif';
+  c.fillStyle = '#fff'; c.fillRect(0, 0, W, H);
+  c.fillStyle = '#222'; c.font = '700 30px ' + FONT; c.textBaseline = 'top';
+  c.fillText(calTitle(), M, M);
+  c.font = '400 22px ' + FONT; c.fillStyle = '#555'; c.fillText(calMeta(), M, M + 42);
+  const top0 = M + 90;
+  c.strokeStyle = '#444'; c.lineWidth = 2; c.textAlign = 'center';
+  DOW.forEach((n, i) => {
+    const x = M + i * cw;
+    c.fillStyle = '#f3f6f3'; c.fillRect(x, top0, cw, 40); c.strokeRect(x, top0, cw, 40);
+    c.fillStyle = i === 6 ? '#0c447c' : i === 0 ? '#8f2222' : '#222'; c.font = '700 24px ' + FONT; c.fillText(n, x + cw/2, top0 + 7);
+  });
+  wk.forEach((w, r) => {
+    const y = top0 + 40 + r * (dh + bh);
+    w.forEach((d, i) => {
+      const x = M + i * cw;
+      if(d.out){ c.fillStyle = '#eee'; c.fillRect(x, y, cw, dh + bh); c.strokeRect(x, y, cw, dh + bh); return; }
+      const sun = d.dow === 0 || d.hol, sat = d.dow === 6;
+      c.fillStyle = sun ? '#fceaea' : sat ? '#e6f1fb' : '#fff'; c.fillRect(x, y, cw, dh);
+      c.fillStyle = sun ? '#fef6f6' : sat ? '#f4f9fd' : '#fff'; c.fillRect(x, y + dh, cw, bh);
+      c.strokeRect(x, y, cw, dh + bh);
+      c.beginPath(); c.moveTo(x, y + dh); c.lineTo(x + cw, y + dh); c.stroke();
+      c.fillStyle = '#222'; c.font = '700 20px ' + FONT; c.textAlign = 'center'; c.fillText(md(d.d) + (d.hol ? ' 祝' : ''), x + cw/2, y + 4);
+      ['g','b'].forEach((s, k) => {
+        const ly = y + dh + k * (bh / 2), cy = ly + bh / 4;
+        if(k === 1){ c.strokeStyle = '#b9c6bd'; c.lineWidth = 1; c.beginPath(); c.moveTo(x + 6, ly); c.lineTo(x + cw - 6, ly); c.stroke(); c.lineWidth = 2; }
+        c.textAlign = 'left'; c.fillStyle = '#5c7066'; c.font = '400 18px ' + FONT; c.textBaseline = 'middle';
+        c.fillText(s === 'g' ? '登校' : '下校', x + 10, cy);
+        if(ON[d.d+'|'+s]){ c.strokeStyle = '#1f6fb5'; c.lineWidth = 4; c.beginPath(); c.arc(x + cw - 32, cy, 14, 0, Math.PI*2); c.stroke(); }
+        else { c.textAlign = 'right'; c.fillStyle = '#b3beb8'; c.font = '700 26px ' + FONT; c.fillText('－', x + cw - 16, cy); }
+        c.textBaseline = 'top'; c.strokeStyle = '#444'; c.lineWidth = 2;
+      });
+    });
+  });
+  let y = top0 + 40 + wk.length * (dh + bh) + 16;
+  c.textAlign = 'left'; c.fillStyle = '#555'; c.font = '400 20px ' + FONT;
+  c.fillText('※ ○は出勤できる便、－は出勤できない便です。', M, y);
+  const nt = (INFO._note || '').trim();
+  if(nt){ y += 32; c.fillStyle = '#222'; c.fillText('連絡事項：' + nt.replace(/\s+/g, ' ').slice(0, 60), M, y); }
+  const a = document.createElement('a');
+  a.download = 'シフト希望_' + INFO.period.start + '_' + INFO.staff_name.replace(/\s|　/g, '') + '.png';
+  a.href = cv.toDataURL('image/png');
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+function showDone(g, b, mode){
   window.scrollTo(0,0);
-  root.innerHTML = `<div class="done"><div class="big">✅</div><h2>送信しました</h2>
-    <p>${esc(INFO.staff_name)} さん<br>登校 ○ ${g}日　／　下校 ○ ${b}日</p>
-    <p>直したいときは、下のボタンを押して直し、もう一度送信してください。<br>〆切（${jpDate(INFO.period.deadline)}）まで、何度でも送り直せます。</p>
-    <button type="button" id="bBack">内容を見る・直す</button></div>`;
+  const head = mode === 'sent'
+    ? `<div class="big">✅</div><h2>送信しました</h2>
+       <p>${esc(INFO.staff_name)} さん<br>登校 ○ ${g}日　／　下校 ○ ${b}日</p>
+       <p>下のカレンダーが、提出した内容です。PDFや画像で保存しておけます。</p>`
+    : mode === 'preview'
+    ? `<h2>見本です</h2><p>管理者用の見本のため、送信はされていません。<br>実際は、送信後にこのカレンダーが出ます。</p>`
+    : `<h2>提出した内容</h2><p>登校 ○ ${g}日　／　下校 ○ ${b}日</p>`;
+  root.innerHTML = `<div class="done no-print" style="padding-bottom:6px;">${head}</div>
+    <div class="calbox">${calHtml()}</div>
+    <div class="calbtns no-print"><button type="button" id="bPdf">PDFで保存・印刷</button><button type="button" class="sub" id="bImg">画像で保存</button></div>
+    <div class="done no-print" style="padding-top:14px;"><p>直したいときは、下のボタンを押して直し、もう一度送信してください。<br>〆切（${jpDate(INFO.period.deadline)}）まで、何度でも送り直せます。</p>
+    <button type="button" id="bBack">内容を直す</button></div>`;
   document.getElementById('bBack').onclick = () => render();
+  document.getElementById('bPdf').onclick = () => window.print();
+  document.getElementById('bImg').onclick = saveImage;
 }
 
 /* ---- 起動 ---- */
