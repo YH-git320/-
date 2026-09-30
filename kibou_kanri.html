@@ -142,7 +142,8 @@ table.grid tr.none td.nm{background:#fafafa;}
         <label style="font-size:13px;display:flex;align-items:center;gap:5px;white-space:nowrap;">
           <input type="checkbox" id="tMode" style="width:auto;" checked> テスト送信にする（右の欄に入れた、自分のメールアドレスにだけ届きます。添乗員本人には届きません。見本が3通届きます）
         </label>
-        <input id="tAddr" type="text" placeholder="自分のメールアドレス（テスト送信の宛先）" style="flex:1;min-width:200px;">
+        <select id="tPick" onchange="tPickSet()" style="width:auto;max-width:320px;"><option value="">管理者マスタから選ぶ</option></select>
+        <input id="tAddr" type="text" oninput="tAddrTyped()" placeholder="または、メールアドレスを直接入力" style="flex:1;min-width:200px;">
       </div>
       <div class="warnbox">
         リンクは<b>ひとりにつき、この期間で1本</b>です。案内も催促も<b>同じリンク</b>を送るので、前のメールのリンクも使えます。<br>
@@ -1211,10 +1212,38 @@ function csvSave(){
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
+/* ---------- テスト送信の宛先（管理者マスタから選ぶ／直接入力） ---------- */
+let MAIL_USERS = [];
+async function loadMailUsers(){
+  const sel = document.getElementById('tPick');
+  try{
+    MAIL_USERS = await rpc('shift_admin_mail_users');
+  }catch(e){ MAIL_USERS = []; sel.innerHTML = '<option value="">（一覧を読み込めませんでした。直接入力してください）</option>'; return; }
+  sel.innerHTML = '<option value="">管理者マスタから選ぶ</option>' +
+    MAIL_USERS.map(u => `<option value="${esc(u.email)}">${esc(u.name)}（${esc(u.email)}）</option>`).join('');
+  // 前回使った宛先を思い出す
+  let last = ''; try{ last = localStorage.getItem('kibou_test_addr') || ''; }catch(e){}
+  if(last && !document.getElementById('tAddr').value){
+    document.getElementById('tAddr').value = last;
+    if(MAIL_USERS.some(u => u.email === last)) sel.value = last;
+  }
+}
+function tPickSet(){
+  const v = document.getElementById('tPick').value;
+  if(v){ document.getElementById('tAddr').value = v; try{ localStorage.setItem('kibou_test_addr', v); }catch(e){} }
+}
+function tAddrTyped(){
+  const v = document.getElementById('tAddr').value.trim();
+  const sel = document.getElementById('tPick');
+  sel.value = MAIL_USERS.some(u => u.email === v) ? v : '';
+  try{ localStorage.setItem('kibou_test_addr', v); }catch(e){}
+}
+
 /* ---------- 起動 ---------- */
 window.addEventListener('DOMContentLoaded', async () => {
   const ok = await initAuth(['super_admin','admin','operator','staff']);
   if(!ok) return;
+  loadMailUsers();
   try{ await pLoad(); }catch(e){ fail(e, '読み込み'); }
 });
 </script>
