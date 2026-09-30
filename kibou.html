@@ -183,7 +183,7 @@ function render(){
     <div class="trow"><div class="nm">${esc(INFO.staff_name)} さん</div>
     <div class="dl">${CLOSED ? '〆切を過ぎました' : '〆切 ' + md(P.deadline)}</div></div></div>`;
   if(!CLOSED){
-    h += `<div class="intro"><div class="guide">出勤できる便をタップして <b>○</b> をつけてください。<br>○のない便は、出勤できない日として扱います。</div>
+    h += `<div class="intro"><div class="guide">出勤できる便をタップして <b>○</b> をつけてください。<br>○のない便は、出勤できない日として扱います。<br>どうしても出勤できない日（旅行など）は、いちばん下の<b>「備考」欄</b>にその旨を書いてください。</div>
     <div class="bar"><button type="button" id="bAll">平日をすべて○</button><button type="button" id="bClr">すべて消す</button></div></div>`;
   }
 
@@ -206,8 +206,9 @@ function render(){
     h += `</div>`;
   }
   h += `</div>
-  <div class="note"><label for="note">連絡事項（あれば）</label>
-    <textarea id="note" maxlength="500" placeholder="例：10/28は午前だけなら出勤できます" ${CLOSED?'disabled':''}></textarea></div>`;
+  <div class="note"><label for="note">備考</label>
+    <div style="font-size:13px;color:var(--ink-soft);margin:0 0 6px;line-height:1.6;">どうしても出勤できない日（旅行など）は、その日付と理由を書いてください。</div>
+    <textarea id="note" maxlength="500" placeholder="例：10/28〜10/30は旅行のため出勤できません" ${CLOSED?'disabled':''}></textarea></div>`;
   if(!CLOSED){
     h += `<div class="foot"><button type="button" class="send" id="bSend">この内容で送信する</button>
       <div class="sm">送信したあとも、〆切までは直して送り直せます</div></div>`;
@@ -344,7 +345,7 @@ function calHtml(){
   }
   h += `</tbody></table><div class="calleg">※ ○は出勤できる便、－は出勤できない便です。</div>`;
   const nt = (INFO._note || '').trim();
-  if(nt) h += `<div class="calnote">連絡事項：${esc(nt)}</div>`;
+  if(nt) h += `<div class="calnote">備考：${esc(nt)}</div>`;
   return h;
 }
 
@@ -391,7 +392,7 @@ function saveImage(){
   c.textAlign = 'left'; c.fillStyle = '#555'; c.font = '400 20px ' + FONT;
   c.fillText('※ ○は出勤できる便、－は出勤できない便です。', M, y);
   const nt = (INFO._note || '').trim();
-  if(nt){ y += 32; c.fillStyle = '#222'; c.fillText('連絡事項：' + nt.replace(/\s+/g, ' ').slice(0, 60), M, y); }
+  if(nt){ y += 32; c.fillStyle = '#222'; c.fillText('備考：' +nt.replace(/\s+/g, ' ').slice(0, 60), M, y); }
   const a = document.createElement('a');
   a.download = 'シフト希望_' + INFO.period.start + '_' + INFO.staff_name.replace(/\s|　/g, '') + '.png';
   a.href = cv.toDataURL('image/png');

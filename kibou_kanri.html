@@ -988,15 +988,21 @@ function renderKpi(){
   const noMail = TARGETS.filter(t => !t.email).length;
   const sent = TARGETS.filter(t => t.mail_count > 0).length;
   const box = (l, v, extra) => `<div class="box"><div class="lb">${l}</div><div class="vl">${v}${extra||''}</div></div>`;
-  k.innerHTML = box('対象の添乗員', n + '名') + box('メールを送った', sent + '名') + box('提出済み', sub + '名') +
-    box('未提出', (n - sub) + '名') + box('メール未登録', noMail + '名');
+  const exc = TARGETS.filter(t => t.excluded).length;
+  k.innerHTML = box('対象の添乗員', n + '名') + box('送らない指定', exc + '名') + box('メールを送った', sent + '名') +
+    box('提出済み', sub + '名') + box('未提出', (n - sub) + '名') + box('メール未登録', noMail + '名');
 }
 function renderList(){
   const A = document.getElementById('tList');
   if(!CUR){ A.innerHTML = ''; return; }
   if(!TARGETS.length){ A.innerHTML = '<div class="panel">対象の添乗員がいません。</div>'; return; }
-  let h = `<div class="panel" style="padding:0;overflow:auto;"><table class="list"><thead><tr>
-    <th>氏名</th><th>メール</th><th>案内メール</th><th>提出</th><th></th></tr></thead><tbody>`;
+  let h = `<div class="row" style="margin-bottom:8px;">
+      <button type="button" class="mini" onclick="exclAll(true)">全員を「送らない」にする</button>
+      <button type="button" class="mini" onclick="exclAll(false)">「送らない」をすべて外す</button>
+      <span class="muted">「送らない」にチェックした方には、一斉メール（案内・催促）が届きません。一覧の「メール送信」ボタンで、個別に送ることはできます。</span>
+    </div>
+    <div class="panel" style="padding:0;overflow:auto;"><table class="list"><thead><tr>
+    <th style="text-align:center;">送らない</th><th>氏名</th><th>メール</th><th>案内メール</th><th>提出</th><th></th></tr></thead><tbody>`;
   for(const t of TARGETS){
     const mailTag = t.mail_count > 0
       ? `<span class="tag t-ok">送信済み ${fmtDT(t.mail_sent_at)}${t.mail_count > 1 ? '（'+t.mail_count+'回）' : ''}</span>`
@@ -1004,13 +1010,37 @@ function renderList(){
     const subTag = t.submitted_at
       ? `<span class="tag t-ok">提出済み ${fmtDT(t.submitted_at)}${t.submit_count > 1 ? '（'+t.submit_count+'回）' : ''}</span>`
       : `<span class="tag t-no">未提出</span>`;
-    h += `<tr id="tr${t.staff_id}"><td style="white-space:nowrap;">${esc(t.name)}</td>
+    h += `<tr id="tr${t.staff_id}"${t.excluded ? ' style="opacity:.62;"' : ''}>
+      <td style="text-align:center;"><input type="checkbox" style="width:20px;height:20px;" ${t.excluded ? 'checked' : ''} onchange="exclOne(${t.staff_id}, this)" aria-label="${esc(t.name)} さんに一斉メールを送らない"></td>
+      <td style="white-space:nowrap;">${esc(t.name)}</td>
       <td style="font-size:12px;">${t.email ? esc(t.email) : '<span class="tag t-warn">未登録</span>'}</td>
       <td>${mailTag}</td><td>${subTag}</td>
       <td style="white-space:nowrap;">${t.email ? `<button type="button" class="mini" onclick="sendOne(${t.staff_id})">メール送信</button> ` : ''}
         <button type="button" class="mini" onclick="copyLink(${t.staff_id})">リンクをコピー</button></td></tr>`;
   }
   A.innerHTML = h + '</tbody></table></div>';
+}
+/* ---------- 「送らない」の指定 ---------- */
+async function exclSave(ids, on){
+  await rpc('shift_set_excluded', {p_period: CUR.id, p_staff: ids, p_excluded: on});
+  const set = new Set(ids);
+  TARGETS.forEach(t => { if(set.has(t.staff_id)) t.excluded = on; });
+}
+async function exclOne(id, box){
+  const on = box.checked;
+  try{ await exclSave([id], on); }
+  catch(e){ box.checked = !on; fail(e, '「送らない」の指定を変えること'); return; }
+  const tr = document.getElementById('tr' + id); if(tr) tr.style.opacity = on ? '.62' : '';
+  renderKpi();
+}
+async function exclAll(on){
+  if(!CUR || !TARGETS.length) return;
+  if(!confirm(on ? `${TARGETS.length}名の全員を「送らない」にします。よろしいですか？（あとで、送りたい方だけチェックを外せます）`
+                 : `「送らない」の指定をすべて外します。この状態で一斉メールを送ると、全員に届きます。よろしいですか？`)) return;
+  try{ await exclSave(TARGETS.map(t => t.staff_id), on); }
+  catch(e){ fail(e, '「送らない」の指定を変えること'); return; }
+  renderKpi(); renderList();
+  say(on ? '全員を「送らない」にしました。' : '「送らない」の指定をすべて外しました。', true);
 }
 async function copyLink(id){
   const t = TARGETS.find(x => x.staff_id === id); if(!t) return;
@@ -1041,6 +1071,7 @@ ${kind === 'remind' ? '<p>シフト希望を、まだご提出いただいてい
 ・スマートフォンで開き、出勤できる日の「登校」「下校」をタップして ○ をつけます<br>
 ・○のない便は、出勤できない日として扱います<br>
 ・土日祝も、出勤できる場合は ○ をつけてください<br>
+・どうしても出勤できない日（旅行など）は、いちばん下の「備考」欄にその旨を書いてください<br>
 ・入力が終わったら、いちばん下の「この内容で送信する」を押します<br>
 ・送信したあとも、〆切までは直して送り直せます</p>
 <p><b>〆切：${esc(dl)}</b></p>
@@ -1075,7 +1106,7 @@ async function sendOne(id){
   if(ti.on && !ti.addr){ say('テスト送信の宛先メールを入力してください。'); return; }
   const kind = (t.mail_count > 0 && !t.submitted_at) ? 'remind' : 'first';
   const msg = ti.on ? `テスト送信：${t.name} さん宛の内容を、${ti.addr} に送ります。よろしいですか？`
-                    : `${t.name} さん（${t.email}）に、シフト希望のメールを送ります。よろしいですか？`;
+                    : `${t.excluded ? `【注意】${t.name} さんは「送らない」に指定されています。個別に送る場合のみ、送れます。\n` : ''}${t.name} さん（${t.email}）に、シフト希望のメールを送ります。よろしいですか？`;
   if(!confirm(msg)) return;
   const r = await mailTo(t, kind, ti.on, ti.addr);
   if(r.ok){ say(`${esc(t.name)} さんへ送りました${ti.on ? '（テスト）' : ''}。`, true); if(!ti.on) await pChange(); }
@@ -1086,15 +1117,23 @@ async function sendBulk(kind){
   const ti = testInfo();
   if(ti.on && !ti.addr){ say('テスト送信の宛先メールを入力してください。'); return; }
   // 案内＝まだ案内を送っていない方／催促＝案内を送ったのに未提出の方
+  // 「送らない」に指定された方は、一斉メールの対象から外す
   const want = t => kind === 'first' ? t.mail_count === 0 : (t.mail_count > 0 && !t.submitted_at);
-  let targets = TARGETS.filter(t => t.email && want(t));
-  const skipNoMail = TARGETS.filter(t => !t.email && (kind === 'first' ? t.mail_count === 0 : !t.submitted_at)).length;
-  if(ti.on) targets = (targets.length ? targets : TARGETS.filter(t => t.email)).slice(0, 3);
-  if(!targets.length){ say(kind === 'first' ? '案内メールを送っていない方はいません。' : '催促が必要な方（案内メールを送ったのに未提出の方）はいません。', true); return; }
+  const wantNoMail = t => kind === 'first' ? t.mail_count === 0 : !t.submitted_at;
+  let targets = TARGETS.filter(t => t.email && !t.excluded && want(t));
+  const skipNoMail = TARGETS.filter(t => !t.email && !t.excluded && wantNoMail(t)).length;
+  const skipExcl = TARGETS.filter(t => t.excluded && (t.email ? want(t) : wantNoMail(t))).length;
+  if(ti.on) targets = (targets.length ? targets : TARGETS.filter(t => t.email && !t.excluded)).slice(0, 3);
+  if(!targets.length){
+    say(skipExcl ? `送る対象の方がいません（「送らない」に指定されている方が ${skipExcl}名 います）。`
+                 : (kind === 'first' ? '案内メールを送っていない方はいません。' : '催促が必要な方（案内メールを送ったのに未提出の方）はいません。'), !skipExcl);
+    return;
+  }
   const what = kind === 'first' ? '案内メール' : '催促メール';
+  const notes = [skipNoMail ? `メール未登録の${skipNoMail}名` : '', skipExcl ? `「送らない」指定の${skipExcl}名` : ''].filter(Boolean).join('、');
   const msg = ti.on
     ? `テスト送信：${targets.length}名ぶんの「${what}」を ${ti.addr} に送ります。添乗員には届きません。よろしいですか？`
-    : `本番送信：${targets.length}名の添乗員へ「${what}」を送ります。${skipNoMail ? `（メール未登録の${skipNoMail}名は除きます）` : ''}\nよろしいですか？`;
+    : `本番送信：次の${targets.length}名の添乗員へ「${what}」を送ります。${notes ? `（${notes}は除きます）` : ''}\n\n${targets.map(t => t.name).join('、')}\n\nよろしいですか？`;
   if(!confirm(msg)) return;
 
   const box = document.getElementById('sendResult');
@@ -1106,7 +1145,7 @@ async function sendBulk(kind){
     await sleep(700);
   }
   box.innerHTML = `<div style="padding:10px 12px;border-radius:8px;font-size:13px;line-height:1.7;background:${fails.length ? '#fdf2f2' : '#eef7ef'};border:1px solid ${fails.length ? '#eeaaa4' : '#bfe3c0'};">
-    ✅ ${sent}件 送信${skipNoMail && !ti.on ? `／⏭ メール未登録 ${skipNoMail}件 は送っていません` : ''}${fails.length ? `／⚠ 失敗 ${fails.length}件` : ''}
+    ✅ ${sent}件 送信${skipExcl && !ti.on ? `／⏭ 「送らない」指定 ${skipExcl}件 は送っていません` : ''}${skipNoMail && !ti.on ? `／⏭ メール未登録 ${skipNoMail}件 は送っていません` : ''}${fails.length ? `／⚠ 失敗 ${fails.length}件` : ''}
     ${fails.length ? `<div style="margin-top:6px;color:#b5453a;">${fails.map(esc).join('<br>')}</div>` : ''}
     ${ti.on ? '<div style="margin-top:6px;color:#666;">※テスト送信でした。本番は「テスト送信」のチェックを外してください。</div>' : ''}</div>`;
   if(!ti.on) await pChange();
@@ -1152,14 +1191,14 @@ function renderGrid(){
 
   const notes = done.filter(s => s.note);
   N.innerHTML = notes.length
-    ? `<div class="notes"><b>連絡事項（※の方）</b><ul>${notes.map(s => `<li>${esc(s.name)}：${esc(s.note)}</li>`).join('')}</ul></div>` : '';
+    ? `<div class="notes"><b>備考（※の方）</b><ul>${notes.map(s => `<li>${esc(s.name)}：${esc(s.note)}</li>`).join('')}</ul></div>` : '';
 }
 function csvSave(){
   if(!CUR || !GRID) return;
   const days = GRID.days, q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
   const head = ['氏名', '状態'];
   for(const d of days){ head.push(md(d.d) + '(' + (d.hol ? '祝' : DOW[d.dow]) + ')登校', md(d.d) + '(' + (d.hol ? '祝' : DOW[d.dow]) + ')下校'); }
-  head.push('連絡事項');
+  head.push('備考');
   const rows = [head];
   for(const s of GRID.staff){
     const r = [s.name, s.submitted_at ? '提出済み' : '未提出'];
