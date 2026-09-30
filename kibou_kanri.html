@@ -47,17 +47,20 @@ table.grid{border-collapse:separate;border-spacing:0;font-size:14px;width:100%;t
 table.grid th,table.grid td{border-right:1px solid #e2ede6;border-bottom:1px solid #e2ede6;padding:0;text-align:center;}
 table.grid th{background:#eef4ef;position:sticky;top:0;z-index:3;font-weight:700;color:#2d4a38;}
 table.grid thead th{height:30px;line-height:1.2;}
-table.grid tr.h3 th{font-size:11px;font-weight:500;letter-spacing:-0.5px;color:#4a6357;white-space:nowrap;}
-table.grid tr.h2 th{top:30px;}
-table.grid tr.h3 th{top:60px;}
-table.grid td.nm,table.grid th.nm{position:sticky;left:0;z-index:4;background:#fff;text-align:left;padding:4px 14px;width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-right:2px solid #c9d3cc;}
+table.grid th.lab,table.grid td.lab{position:sticky;left:140px;z-index:4;background:#fff;width:42px;font-size:12px;font-weight:500;color:#4a6357;white-space:nowrap;border-right:2px solid #c9d3cc;}
+table.grid th.lab{background:#eef4ef;z-index:5;}
+table.grid tr.h1 th{height:40px;}
+table.grid tr.h2 th{top:40px;}
+table.grid .mo{display:block;font-size:10px;font-weight:500;line-height:12px;height:12px;color:#6b7d72;}
+
+table.grid td.nm,table.grid th.nm{position:sticky;left:0;z-index:4;background:#fff;text-align:left;padding:4px 10px;width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-right:1px solid #e2ede6;}
 table.grid th.nm{background:#eef4ef;z-index:5;}
 table.grid th.dsat,table.grid td.dsat{background:#e6f1fb;}
 table.grid th.dsun,table.grid td.dsun{background:#fceaea;}
-table.grid td.c{height:40px;font-size:18px;font-weight:700;color:#1f6fb5;}
-table.grid td.c.b{border-right:2px solid #c9d3cc;}
+table.grid td.c{height:32px;font-size:17px;font-weight:700;color:#1f6fb5;}
+table.grid tr.s2 td,table.grid tr.s2 th{border-bottom:2px solid #c9d3cc;}
 table.grid tr.tot td{background:#fbf6e6;font-weight:700;color:#5a4a10;}
-table.grid tr.tot td.nm{background:#fbf6e6;}
+table.grid tr.tot td.nm,table.grid tr.tot td.lab{background:#fbf6e6;}
 table.grid tr.none td{color:#9aa8a0;background:#fafafa;}
 table.grid tr.none td.nm{background:#fafafa;}
 .notes{margin-top:12px;font-size:13px;line-height:1.7;}
@@ -71,9 +74,9 @@ table.grid tr.none td.nm{background:#fafafa;}
   .gwrap{max-height:none;overflow:visible;border:none;}
   table.grid{font-size:9px;}
   table.grid th,table.grid td.nm{position:static;}
-  table.grid td.c{height:19px;font-size:10px;}
+  table.grid td.c{height:15px;font-size:10px;}
   table.grid{min-width:0 !important;}
-  table.grid tr.h3 th{font-size:8px;}
+  table.grid th.lab,table.grid td.lab{position:static;width:28px;font-size:8px;}
   main.wide{padding:0;}
   table.grid td.nm,table.grid th.nm{width:90px;padding:1px 4px;}
   #tab1{display:none !important;}
@@ -1160,31 +1163,27 @@ function renderGrid(){
   const done = staff.filter(s => s.submitted_at), undone = staff.filter(s => !s.submitted_at);
   T.textContent = `${GRID.period.is_test ? '【テスト】' : ''}シフト希望一覧表　${jp(GRID.period.start)}〜${jp(GRID.period.end)}　（提出 ${done.length}名／対象 ${staff.length}名）`;
 
-  let h = `<div class="gwrap"><table class="grid" style="min-width:${160 + days.length * 2 * 26}px"><thead><tr><th class="nm" rowspan="3">氏名</th>`;
-  for(const d of days) h += `<th colspan="2" class="${dayCls(d)}" title="${esc(d.hol||'')}">${md(d.d)}</th>`;
+  // 1日＝1列。ひとりにつき「登校」「下校」の2行にして、ノートパソコンの幅でも横に動かさずに見えるようにする
+  let h = `<div class="gwrap"><table class="grid" style="min-width:${182 + days.length * 30}px"><thead><tr class="h1"><th class="nm" rowspan="2">氏名</th><th class="lab" rowspan="2">便</th>`;
+  days.forEach((d, i) => {
+    const day = Number(d.d.slice(8, 10)), mon = Number(d.d.slice(5, 7));
+    h += `<th class="${dayCls(d)}" title="${esc(md(d.d) + (d.hol ? ' ' + d.hol : ''))}"><span class="mo">${(i === 0 || day === 1) ? mon + '月' : ''}</span>${day}</th>`;
+  });
   h += `</tr><tr class="h2">`;
-  for(const d of days) h += `<th colspan="2" class="${dayCls(d)}">${d.hol ? '祝' : DOW[d.dow]}</th>`;
-  h += `</tr><tr class="h3">`;
-  for(const d of days) h += `<th class="${dayCls(d)}">登校</th><th class="${dayCls(d)}">下校</th>`;
+  for(const d of days) h += `<th class="${dayCls(d)}">${d.hol ? '祝' : DOW[d.dow]}</th>`;
   h += `</tr></thead><tbody>`;
   // 日ごとの合計
-  h += `<tr class="tot"><td class="nm">出勤できる人数</td>`;
-  for(const d of days){
-    let g = 0, b = 0;
-    for(const s of done){ const a = s.answers[d.d]; if(a && a[0]) g++; if(a && a[1]) b++; }
-    h += `<td class="c">${g}</td><td class="c b">${b}</td>`;
-  }
-  h += `</tr>`;
+  const cnt = (k) => days.map(d => done.filter(s => { const a = s.answers[d.d]; return a && a[k]; }).length);
+  const g = cnt(0), b = cnt(1);
+  h += `<tr class="tot"><td class="nm" rowspan="2">出勤できる人数</td><td class="lab">登校</td>${g.map(n => `<td class="c">${n}</td>`).join('')}</tr>`;
+  h += `<tr class="tot s2"><td class="lab">下校</td>${b.map(n => `<td class="c">${n}</td>`).join('')}</tr>`;
   for(const s of done){
-    h += `<tr><td class="nm" title="${esc(s.note||'')}">${esc(s.name)}${s.note ? ' ※' : ''}</td>`;
-    for(const d of days){
-      const a = s.answers[d.d] || [false, false], cl = dayCls(d);
-      h += `<td class="c ${cl}">${a[0] ? '○' : ''}</td><td class="c b ${cl}">${a[1] ? '○' : ''}</td>`;
-    }
-    h += `</tr>`;
+    const cell = (k) => days.map(d => { const a = s.answers[d.d] || [false, false]; return `<td class="c ${dayCls(d)}">${a[k] ? '○' : ''}</td>`; }).join('');
+    h += `<tr class="s1"><td class="nm" rowspan="2" title="${esc(s.note||'')}">${esc(s.name)}${s.note ? ' ※' : ''}</td><td class="lab">登校</td>${cell(0)}</tr>`;
+    h += `<tr class="s2"><td class="lab">下校</td>${cell(1)}</tr>`;
   }
   for(const s of undone){
-    h += `<tr class="none"><td class="nm">${esc(s.name)}</td><td colspan="${days.length * 2}" style="text-align:left;padding:2px 8px;">未提出</td></tr>`;
+    h += `<tr class="none s2"><td class="nm">${esc(s.name)}</td><td colspan="${days.length + 1}" style="text-align:left;padding:2px 12px;">未提出</td></tr>`;
   }
   h += `</tbody></table></div>`;
   A.innerHTML = h;
