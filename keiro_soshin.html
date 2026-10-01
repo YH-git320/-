@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ルート図をメールで送る — 高尾輸送サービス</title>
+<style>
+:root{--g:#4d7a5e;--g2:#2d4a38;--bg:#f5f8f4;--line:#e0e6e0;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:'Noto Sans JP','Hiragino Kaku Gothic Pro','Meiryo',sans-serif;background:var(--bg);color:#2d3b35;}
+header{background:#fff;border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+header .brand{font-size:16px;font-weight:700;color:var(--g2);}
+header nav a{color:var(--g);text-decoration:none;font-size:13px;margin-right:12px;}
+main{max-width:1400px;margin:0 auto;padding:16px;}
+h1{font-size:19px;color:var(--g2);margin:0 0 4px;}
+.sub{font-size:13px;color:#6b7d72;margin:0 0 14px;line-height:1.7;}
+.panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px;}
+select,input,textarea{font-family:inherit;font-size:15px;padding:9px 10px;border:1px solid #c9d3cc;border-radius:8px;background:#fff;color:#2d3b35;}
+input[type=text]{width:100%;}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+button{font-family:inherit;font-size:14px;padding:9px 14px;border:1px solid var(--g);background:#fff;color:var(--g);border-radius:8px;cursor:pointer;}
+button.primary{background:var(--g);color:#fff;}
+button.mini{font-size:12px;padding:5px 9px;}
+button:disabled{opacity:.5;cursor:default;}
+.muted{color:#7d9186;font-size:12px;}
+#status{font-size:13px;padding:9px 12px;border-radius:8px;margin-bottom:12px;display:none;line-height:1.7;}
+#status.ok{display:block;background:#eef7ef;color:#2f7d32;border:1px solid #bfe3c0;}
+#status.err{display:block;background:#fdeceb;color:#b5453a;border:1px solid #f3c3bf;}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:16px;align-items:start;}
+@media(max-width:1000px){.grid2{grid-template-columns:1fr;}}
+.side{position:sticky;top:8px;max-height:calc(100vh - 16px);overflow:auto;}
+@media(max-width:1000px){.side{position:static;max-height:none;}}
+/* コース一覧 */
+details.course{background:#fff;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;}
+details.course > summary{cursor:pointer;padding:10px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;list-style:none;}
+details.course > summary::-webkit-details-marker{display:none;}
+details.course > summary::before{content:'▸';color:#7d9186;font-size:12px;}
+details.course[open] > summary::before{content:'▾';}
+details.course .cn{font-weight:700;color:var(--g2);}
+details.course .sc{font-size:12px;color:#6b7d72;}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:5px;white-space:nowrap;}
+.t-on{background:#e3f3e8;color:#1f7a43;} .t-off{background:#eceff0;color:#8a9a92;} .t-sel{background:#e6f1fb;color:#0c447c;}
+.t-kai{background:#e7f6ec;color:#16803c;}
+.cbody{padding:4px 14px 12px;border-top:1px dashed var(--line);display:grid;grid-template-columns:1fr 1fr;gap:6px 22px;}
+@media(max-width:800px){.cbody{grid-template-columns:1fr;}}
+.cbody h4{margin:10px 0 4px;font-size:12px;color:#6b7d72;}
+.item{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.5;padding:3px 0;cursor:pointer;}
+.item input{width:18px;height:18px;margin-top:1px;flex:0 0 auto;}
+.item .pt{color:#8a9a92;font-size:11px;}
+.cfoot{grid-column:1 / -1;display:flex;gap:8px;padding-top:6px;border-top:1px dashed var(--line);}
+/* 送り先 */
+.rl{max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:8px;}
+.rl .grp{background:#eef4ef;font-size:12px;font-weight:700;color:var(--g2);padding:4px 10px;position:sticky;top:0;}
+.rl label{display:flex;align-items:center;gap:8px;padding:5px 10px;font-size:13px;border-bottom:1px solid #f0f3f0;cursor:pointer;}
+.rl label.na{color:#a6b3ab;cursor:default;}
+.rl input{width:17px;height:17px;}
+.rl .em{font-size:11px;color:#8a9a92;}
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
+.chip{background:#e6f1fb;color:#0c447c;border-radius:12px;padding:2px 4px 2px 10px;font-size:12px;display:inline-flex;gap:4px;align-items:center;}
+.chip button{border:none;background:transparent;color:#0c447c;padding:0 6px;font-size:14px;line-height:1;}
+table.log{width:100%;border-collapse:collapse;font-size:12px;}
+table.log th,table.log td{border-bottom:1px solid #eef2ee;padding:4px 6px;text-align:left;vertical-align:top;}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">🗺 ルート図をメールで送る</div>
+  <nav>
+    <a href="index.html">ホーム</a>
+    <a href="unkou.html">運行時程マスタ</a>
+    <a href="haichi.html">配置管理</a>
+    <a href="yotei.html">月間予定</a>
+    <a href="master.html">マスタ</a>
+  </nav>
+</header>
+<main>
+  <h1>ルート図をメールで送る</h1>
+  <p class="sub">運行時程マスタの「④ルート詳細」に入っている経路を、Googleマップのリンクにして、選んだ人にメールで送ります。<br>
+    ① 送りたいルート（登校・下校の日課・回送）を選び、② 送り先を選んで、③ 送ります。選んだ分は、1通のメールにまとまります。送り先ごとに、別々のメールが届きます。</p>
+  <div id="status"></div>
+
+  <div class="grid2">
+    <div>
+      <div class="panel">
+        <div class="row">
+          <input id="q" type="text" placeholder="学校名・コース名で絞る（例：荏原）" oninput="renderCourses()" style="max-width:340px;">
+          <label style="font-size:13px;display:flex;gap:5px;align-items:center;"><input type="checkbox" id="onlyRoute" checked onchange="renderCourses()" style="width:auto;"> 経路のあるコースだけ</label>
+          <button type="button" class="mini" onclick="clearSel()">選択をすべて解除</button>
+          <span class="muted" id="selInfo"></span>
+        </div>
+      </div>
+      <div id="courses"><div class="muted" style="padding:14px;">読み込んでいます…</div></div>
+    </div>
+
+    <div class="side">
+      <div class="panel">
+        <b style="color:var(--g2);">② 送り先を選ぶ</b>
+        <div class="row" style="margin-top:8px;">
+          <input id="rq" type="text" placeholder="名前で絞る" oninput="renderRecipients()">
+        </div>
+        <div class="row" style="margin:6px 0;font-size:12px;">
+          <label><input type="checkbox" id="gAdm" checked onchange="renderRecipients()" style="width:auto;"> 管理者</label>
+          <label><input type="checkbox" id="gDrv" checked onchange="renderRecipients()" style="width:auto;"> 運転手</label>
+          <label><input type="checkbox" id="gAtt" checked onchange="renderRecipients()" style="width:auto;"> 添乗員</label>
+        </div>
+        <div class="rl" id="rlist"><div class="muted" style="padding:10px;">読み込んでいます…</div></div>
+        <div class="row" style="margin-top:8px;">
+          <input id="xAddr" type="text" placeholder="メールアドレスを直接入力" style="flex:1;min-width:160px;" onkeydown="if(event.key==='Enter'){addExtra();}">
+          <button type="button" class="mini" onclick="addExtra()">追加</button>
+        </div>
+        <div class="chips" id="picked"></div>
+        <div style="margin-top:12px;border-top:1px dashed var(--line);padding-top:10px;">
+          <button type="button" class="primary" id="sendBtn" onclick="sendRoutes()" style="width:100%;font-size:15px;padding:12px;">③ 選んだルートを送る</button>
+          <div class="muted" id="sendInfo" style="margin-top:6px;line-height:1.6;"></div>
+          <div id="sendResult" style="margin-top:8px;"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <b style="color:var(--g2);font-size:13px;">最近の送信</b>
+        <div id="recent" style="margin-top:6px;"><span class="muted">読み込んでいます…</span></div>
+      </div>
+    </div>
+  </div>
+</main>
+<script>
+// ===== 高尾輸送サービス 管理システム 共通認証モジュール =====
+// initAuth(['admin', 'staff'])  → 管理者・事務員どちらも可
+// initAuth(['admin'])           → 管理者のみ
+
+const AUTH_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/auth/v1';
+const REST_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/rest/v1';
+const FUNCTIONS_URL = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/functions/v1';
+const ANON_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4ZHlxa3lxdGl6aHRrd3RwdnJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NzYxODEsImV4cCI6MjA5OTQ1MjE4MX0.yVbClXBk2JVeglevsBLY5sH2_m2ybCf71u4i_YYWyHE';
+
+const ROLE_LABEL = { super_admin: '権限付与者', admin: 'システム管理者', operator: '担当者', staff: '事務員' };
+
+/* ===================== セッション管理 ===================== */
+
+function _saveSession(data) {
+  const session = {
+    access_token:  data.access_token,
+    refresh_token: data.refresh_token,
+    expires_at:    data.expires_at || (Math.floor(Date.now() / 1000) + (data.expires_in || 3600)),
+    user_id:       data.user?.id || data.user_id,
+    email:         data.user?.email || data.email,
+  };
+  sessionStorage.setItem('takao_session', JSON.stringify(session));
+  return session;
+}
+
+function _getSession() {
+  try { return JSON.parse(sessionStorage.getItem('takao_session')); }
+  catch { return null; }
+}
+
+function _clearSession() {
+  sessionStorage.removeItem('takao_session');
+  sessionStorage.removeItem('takao_role');
+  sessionStorage.removeItem('takao_name');
+  sessionStorage.removeItem('takao_permissions');
+  sessionStorage.removeItem('takao_mfa_enforced');
+}
+
+// refresh_token でアクセストークンを更新する（成功=true）。長時間開いても保存が切れないように使う
+async function refreshSession() {
+  const s = _getSession();
+  if (!s || !s.refresh_token) return false;
+  try {
+    const res = await fetch(`${AUTH_URL}/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { 'apikey': ANON_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: s.refresh_token })
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (!data || !data.access_token) return false;
+    _saveSession(data);
+    return true;
+  } catch { return false; }
+}
+// 期限が近い/切れていれば先に更新
+async function ensureFreshToken() {
+  const s = _getSession();
+  if (s && s.expires_at && (s.expires_at - 60) < Math.floor(Date.now() / 1000)) {
+    await refreshSession();
+  }
+}
+
+function getPermissions() {
+  try { return JSON.parse(sessionStorage.getItem('takao_permissions')) || {}; }
+  catch { return {}; }
+}
+
+function isMfaEnforced() {
+  return sessionStorage.getItem('takao_mfa_enforced') === 'true';
+}
+
+function _isExpired(session) {
+  if (!session?.expires_at) return true;
+  return Math.floor(Date.now() / 1000) > session.expires_at - 60;
+}
+
+function _authHeaders(token) {
+  return {
+    'Content-Type': 'application/json',
+    'apikey': ANON_KEY,
+    'Authorization': `Bearer ${token || ANON_KEY}`
+  };
+}
+
+/* ===================== Supabase Auth API ===================== */
+
+async function _refresh(session) {
+  try {
+    const res = await fetch(`${AUTH_URL}/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': ANON_KEY },
+      body: JSON.stringify({ refresh_token: session.refresh_token }),
+    });
+    if (!res.ok) return null;
+    return _saveSession(await res.json());
+  } catch { return null; }
+}
+
+async function _getRole(accessToken) {
+  const cached = sessionStorage.getItem('takao_role');
+  if (cached) return cached;
+  try {
+    const res = await fetch(`${REST_URL}/user_roles?select=role,display_name,permissions,mfa_enforced`, {
+      headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${accessToken}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const row = data[0];
+    if (!row) return null;
+    sessionStorage.setItem('takao_role', row.role);
+    if (row.display_name) sessionStorage.setItem('takao_name', row.display_name);
+    if (row.permissions) sessionStorage.setItem('takao_permissions', JSON.stringify(row.permissions));
+    if (row.mfa_enforced != null) sessionStorage.setItem('takao_mfa_enforced', String(row.mfa_enforced));
+    return row.role;
+  } catch { return null; }
+}
+
+/* ===================== 公開 API ===================== */
+
+/**
+ * ログアウト
+ */
+async function signOut() {
+  const session = _getSession();
+  if (session?.access_token) {
+    fetch(`${AUTH_URL}/logout`, {
+      method: 'POST',
+      headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` },
+    }).catch(() => {});
+  }
+  _clearSession();
+  window.location.href = 'login.html';
+}
+
+/**
+ * パスワード変更（ログイン中のユーザー自身）
+ */
+async function changePassword(newPassword) {
+  const session = _getSession();
+  if (!session?.access_token) return { ok: false, error: 'セッションが無効です' };
+  try {
+    const res = await fetch(`${AUTH_URL}/user`, {
+      method: 'PUT',
+      headers: _authHeaders(session.access_token),
+      body: JSON.stringify({ password: newPassword })
+    });
+    if (res.ok) return { ok: true };
+    const d = await res.json();
+    return { ok: false, error: d.msg || d.message || 'パスワード変更に失敗しました' };
+  } catch (e) {
+    return { ok: false, error: 'ネットワークエラー: ' + e.message };
+  }
+}
+
+/**
+ * TOTP登録開始（QRコードURIを返す）
+ */
+async function enrollTotp() {
+  let session = _getSession();
+  if (!session?.access_token) return { ok: false, error: 'セッションが無効です' };
+
+  // セッションの有効期限が近い場合はリフレッシュ
+  if (_isExpired(session)) {
+    session = await _refresh(session);
+    if (!session) return { ok: false, error: 'セッションの更新に失敗しました。再ログインしてください。' };
+  }
+
+  try {
+    // 未確認（unverified）のTOTPファクターのみ削除（確認済みのものは絶対に削除しない）
+    const listRes = await fetch(`${AUTH_URL}/factors`, {
+      headers: _authHeaders(session.access_token)
+    });
+    if (listRes.ok) {
+      const factors = await listRes.json();
+      if (Array.isArray(factors)) {
+        // 確認済みファクターが既にある場合はエラーを返す
+        const verified = factors.find(f => f.factor_type === 'totp' && f.status === 'verified');
+        if (verified) {
+          return { ok: false, error: '二段階認証はすでに設定済みです。一度「解除する」してから再設定してください。' };
+        }
+        // 未確認ファクターのみ削除
+        for (const f of factors) {
+          if (f.factor_type === 'totp' && f.status === 'unverified') {
+            await fetch(`${AUTH_URL}/factors/${f.id}`, {
+              method: 'DELETE',
+              headers: _authHeaders(session.access_token)
+            });
+          }
+        }
+      }
+    }
+
+    const res = await fetch(`${AUTH_URL}/factors`, {
+      method: 'POST',
+      headers: _authHeaders(session.access_token),
+      body: JSON.stringify({ factor_type: 'totp', friendly_name: '高尾輸送サービス', issuer: '高尾輸送サービス' })
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const msg = errData.msg || errData.message || errData.error_description || errData.code || `エラー(${res.status})`;
+      return { ok: false, error: 'QRコードの生成に失敗しました: ' + msg };
+    }
+    const d = await res.json();
+    return { ok: true, factorId: d.id, totpUri: d.totp?.uri, secret: d.totp?.secret };
+  } catch (e) {
+    return { ok: false, error: 'ネットワークエラー: ' + e.message };
+  }
+}
+
+/**
+ * TOTP登録確認（初回コード検証）
+ */
+async function verifyTotpEnrollment(factorId, code) {
+  const session = _getSession();
+  if (!session?.access_token) return { ok: false, error: 'セッションが無効です' };
+  try {
+    const chRes = await fetch(`${AUTH_URL}/factors/${factorId}/challenge`, {
+      method: 'POST', headers: _authHeaders(session.access_token), body: JSON.stringify({})
+    });
+    if (!chRes.ok) return { ok: false, error: 'チャレンジ作成に失敗しました' };
+    const { id: challengeId } = await chRes.json();
+
+    const vRes = await fetch(`${AUTH_URL}/factors/${factorId}/verify`, {
+      method: 'POST',
+      headers: _authHeaders(session.access_token),
+      body: JSON.stringify({ challenge_id: challengeId, code })
+    });
+    if (!vRes.ok) return { ok: false, error: 'コードが正しくありません。もう一度お試しください。' };
+    _saveSession(await vRes.json());
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: 'ネットワークエラー: ' + e.message };
+  }
+}
+
+/**
+ * 登録済みTOTPファクター一覧
+ */
+async function getEnrolledFactors() {
+  const session = _getSession();
+  if (!session?.access_token) return [];
+  try {
+    const res = await fetch(`${AUTH_URL}/factors`, {
+      headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
+    });
+    if (!res.ok) return [];
+    const factors = await res.json();
+    return Array.isArray(factors) ? factors.filter(f => f.factor_type === 'totp' && f.status === 'verified') : [];
+  } catch { return []; }
+}
+
+/**
+ * TOTP解除
+ */
+async function unenrollTotp(factorId) {
+  const session = _getSession();
+  if (!session?.access_token) return { ok: false };
+  try {
+    const res = await fetch(`${AUTH_URL}/factors/${factorId}`, {
+      method: 'DELETE',
+      headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
+    });
+    return { ok: res.ok };
+  } catch { return { ok: false }; }
+}
+
+/**
+ * 認証チェック（各ページのDOMContentLoaded前に呼ぶ）
+ */
+async function initAuth(allowedRoles) {
+  document.documentElement.style.visibility = 'hidden';
+  try {
+    let session = _getSession();
+    if (!session) { _redirectLogin(); return false; }
+    if (_isExpired(session)) {
+      session = await _refresh(session);
+      if (!session) { _clearSession(); _redirectLogin(); return false; }
+    }
+    const role = await _getRole(session.access_token);
+    if (!role || !allowedRoles.includes(role)) {
+      _showDenied(role);
+      document.documentElement.style.visibility = 'visible';
+      return false;
+    }
+    _injectUserInfo(session.email, role);
+    _injectModals();
+    document.documentElement.style.visibility = 'visible';
+    return true;
+  } catch (err) {
+    console.error('[auth.js] initAuth error:', err);
+    document.documentElement.style.visibility = 'visible';
+    return false;
+  }
+}
+
+/* ===================== 内部ヘルパー ===================== */
+
+function _redirectLogin() {
+  document.documentElement.style.visibility = 'visible';
+  window.location.href = 'login.html?redirect=' + encodeURIComponent(location.href);
+}
+
+function _showDenied(role) {
+  document.body.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;
+      background:#f5f8f4;font-family:'Noto Sans JP','Hiragino Kaku Gothic Pro',sans-serif;">
+      <div style="background:white;border-radius:18px;padding:44px 40px;text-align:center;
+        box-shadow:0 4px 24px rgba(77,122,94,0.13);max-width:400px;">
+        <div style="font-size:52px;margin-bottom:16px;">🔒</div>
+        <h2 style="color:#b5453a;font-size:18px;margin-bottom:10px;">アクセス権限がありません</h2>
+        <p style="color:#5c7066;font-size:13px;line-height:1.7;margin-bottom:28px;">
+          この画面は表示できません。<br>権限については管理者にお問い合わせください。
+        </p>
+        <div style="display:flex;gap:10px;justify-content:center;">
+          <a href="index.html" style="background:#4d7a5e;color:white;padding:10px 22px;
+            border-radius:9px;text-decoration:none;font-size:13px;font-weight:700;">🏠 トップへ</a>
+          <button onclick="signOut()" style="background:#eef7f1;color:#4d7a5e;border:1px solid #b4d4c0;
+            padding:10px 22px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">
+            ログアウト
+          </button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function _injectUserInfo(email, role) {
+  const header = document.querySelector('header');
+  if (!header) return;
+
+  const name = sessionStorage.getItem('takao_name') || email;
+  const label = (function(){var p={};try{p=JSON.parse(sessionStorage.getItem('takao_permissions')||'{}')}catch(e){}if(p.title)return p.title;if(role==='super_admin')return '権限付与者';if(role==='admin')return 'システム管理者';if(role==='staff')return '事務員';if(role==='operator'){if(p.staff_edit&&p.export)return '情報取扱責任者';if(p.staff_edit)return '情報取扱者';return '操作担当者';}return role;})();
+  const badgeColor = role === 'super_admin' ? '#c0392b'
+    : role === 'admin'    ? '#9b7eb8'
+    : role === 'operator' ? '#2980b9'
+    : '#6b9e7e';
+  const badgeBg    = 'transparent';
+  const badgeBorder = 'transparent';
+
+  const menuId = '_takao_usermenu';
+  const html = `
+    <span style="display:inline-block;width:1px;height:18px;background:rgba(77,122,94,0.25);
+      margin:0 4px;vertical-align:middle;"></span>
+    <div style="position:relative;display:inline-block;">
+      <button id="_takao_menubtn" onclick="_toggleUserMenu()" style="background:rgba(77,122,94,0.10);
+        color:#2d4a38;border:1px solid rgba(77,122,94,0.45);padding:5px 12px;border-radius:9px;
+        font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;
+        display:flex;align-items:center;gap:6px;">
+        <span style="background:${badgeColor};color:white;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:700;letter-spacing:0.03em;">${label}</span>
+        ${name} ▾
+      </button>
+      <div id="${menuId}" style="display:none;position:absolute;right:0;top:calc(100% + 6px);
+        background:white;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.15);
+        min-width:160px;z-index:9999;overflow:hidden;">
+        <button onclick="_closeUserMenu();showPasswordChangeModal();" style="${_menuItemStyle()}">
+          🔑 パスワード変更
+        </button>
+        <button onclick="_closeUserMenu();showTotpSetupModal();" style="${_menuItemStyle()}">
+          🛡️ 二段階認証設定
+        </button>
+        <hr style="margin:0;border:none;border-top:1px solid #eee;">
+        <button onclick="signOut()" style="${_menuItemStyle('danger')}">
+          ログアウト
+        </button>
+      </div>
+    </div>`;
+
+  const divs = header.querySelectorAll(':scope > div');
+  if (divs.length >= 2) {
+    const navDiv = divs[divs.length - 1];
+    navDiv.style.display = 'flex';
+    navDiv.style.alignItems = 'center';
+    navDiv.style.gap = '8px';
+    navDiv.insertAdjacentHTML('beforeend', html);
+  } else {
+    header.style.display = 'flex';
+    header.style.alignItems = 'center';
+    header.style.justifyContent = 'space-between';
+    header.style.flexWrap = 'wrap';
+    const div = document.createElement('div');
+    div.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;';
+    div.innerHTML = html;
+    header.appendChild(div);
+  }
+
+  // メニュー外クリックで閉じる
+  document.addEventListener('click', e => {
+    const btn = document.getElementById('_takao_menubtn');
+    const menu = document.getElementById(menuId);
+    if (btn && menu && !btn.contains(e.target) && !menu.contains(e.target)) {
+      menu.style.display = 'none';
+    }
+  });
+}
+
+function _menuItemStyle(type) {
+  const base = 'width:100%;text-align:left;padding:10px 16px;border:none;background:none;font-size:13px;cursor:pointer;font-family:inherit;display:block;';
+  if (type === 'danger') return base + 'color:#b5453a;';
+  return base + 'color:#2d3b35;';
+}
+
+function _toggleUserMenu() {
+  const menu = document.getElementById('_takao_usermenu');
+  if (menu) menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+function _closeUserMenu() {
+  const menu = document.getElementById('_takao_usermenu');
+  if (menu) menu.style.display = 'none';
+}
+
+/* ===================== モーダル注入 ===================== */
+
+function _injectModals() {
+  if (document.getElementById('_takao_modals')) return;
+  const div = document.createElement('div');
+  div.id = '_takao_modals';
+  div.innerHTML = `
+  <style>
+    ._tm-overlay {
+      display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:10000;
+      align-items:center;justify-content:center;
+    }
+    ._tm-overlay.open { display:flex; }
+    ._tm-box {
+      background:white;border-radius:20px;padding:36px 32px;width:100%;max-width:420px;
+      box-shadow:0 8px 40px rgba(0,0,0,0.18);font-family:'Noto Sans JP','Hiragino Kaku Gothic Pro',sans-serif;
+      position:relative;
+    }
+    ._tm-title { font-size:17px;font-weight:700;color:#2d4a36;margin-bottom:6px; }
+    ._tm-sub { font-size:13px;color:#5c7066;margin-bottom:20px;line-height:1.6; }
+    ._tm-label { font-size:12px;font-weight:700;color:#4d7a5e;margin-bottom:5px;display:block; }
+    ._tm-input {
+      width:100%;padding:10px 14px;border:1.5px solid #c8d8cc;border-radius:9px;
+      font-size:14px;font-family:inherit;color:#2d4a36;background:#f9fbfa;outline:none;
+      margin-bottom:14px;
+    }
+    ._tm-input:focus { border-color:#4d7a5e;box-shadow:0 0 0 3px rgba(77,122,94,0.12); }
+    ._tm-btn {
+      width:100%;padding:12px;background:linear-gradient(135deg,#4d7a5e,#3d6a4e);color:white;
+      border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;
+    }
+    ._tm-btn:disabled { opacity:0.6;cursor:default; }
+    ._tm-btn-sub {
+      width:100%;padding:10px;background:#eef7f1;color:#4d7a5e;border:1px solid #b4d4c0;
+      border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px;
+    }
+    ._tm-err { background:#fdf2f2;color:#b5453a;border:1px solid #eeaaa4;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px;display:none; }
+    ._tm-ok  { background:#eef7f1;color:#2e7d52;border:1px solid #95d0aa;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px;display:none; }
+    ._tm-close { position:absolute;top:14px;right:16px;background:none;border:none;font-size:20px;cursor:pointer;color:#aaa;line-height:1; }
+    ._tm-qr { text-align:center;margin:16px 0; }
+    ._tm-secret { background:#f5f8f4;border:1px solid #c8d8cc;border-radius:8px;padding:8px 12px;font-size:12px;color:#4d7a5e;word-break:break-all;text-align:center;margin-bottom:14px; }
+    ._tm-step { display:none; }
+    ._tm-step.active { display:block; }
+    ._tm-otp { letter-spacing:0.3em;font-size:22px;text-align:center; }
+  </style>
+
+  <!-- パスワード変更モーダル -->
+  <div id="_tm_pw" class="_tm-overlay" onclick="if(event.target===this)closePasswordChangeModal()">
+    <div class="_tm-box">
+      <button class="_tm-close" onclick="closePasswordChangeModal()">×</button>
+      <div class="_tm-title">🔑 パスワード変更</div>
+      <div class="_tm-sub">新しいパスワードを設定します（8文字以上）</div>
+      <div id="_tm_pw_err" class="_tm-err"></div>
+      <div id="_tm_pw_ok" class="_tm-ok">✅ パスワードを変更しました</div>
+      <label class="_tm-label">新しいパスワード</label>
+      <input id="_tm_pw_new" class="_tm-input" type="password" placeholder="新しいパスワード（8文字以上）">
+      <label class="_tm-label">確認（再入力）</label>
+      <input id="_tm_pw_conf" class="_tm-input" type="password" placeholder="もう一度入力">
+      <button id="_tm_pw_btn" class="_tm-btn" onclick="_doChangePassword()">変更する</button>
+      <button class="_tm-btn-sub" onclick="closePasswordChangeModal()">キャンセル</button>
+    </div>
+  </div>
+
+  <!-- 二段階認証設定モーダル -->
+  <div id="_tm_totp" class="_tm-overlay" onclick="if(event.target===this)closeTotpSetupModal()">
+    <div class="_tm-box">
+      <button class="_tm-close" onclick="closeTotpSetupModal()">×</button>
+      <div class="_tm-title">🛡️ 二段階認証設定</div>
+      <div id="_tm_totp_err" class="_tm-err"></div>
+      <div id="_tm_totp_ok" class="_tm-ok"></div>
+
+      <!-- ステップ0: 現在の状態 -->
+      <div id="_tm_totp_s0" class="_tm-step active">
+        <div class="_tm-sub" id="_tm_totp_status">状態を確認中...</div>
+        <button id="_tm_totp_start_btn" class="_tm-btn" onclick="_startTotpSetup()" style="display:none;">QRコードを表示して設定開始</button>
+        <button id="_tm_totp_disable_btn" class="_tm-btn-sub" onclick="_disableTotp()" style="display:none;background:#fdf2f2;color:#b5453a;border-color:#eeaaa4;">二段階認証を解除する</button>
+        <div id="_tm_totp_lock_note" style="display:none;font-size:12px;color:#888;background:#f5f8f4;border-radius:8px;padding:8px 12px;margin-top:8px;">🔒 組織のポリシーにより二段階認証の解除は制限されています。</div>
+        <button class="_tm-btn-sub" onclick="closeTotpSetupModal()" style="margin-top:8px;">閉じる</button>
+      </div>
+
+      <!-- ステップ1: QRコード表示 -->
+      <div id="_tm_totp_s1" class="_tm-step">
+        <div class="_tm-sub">① Google Authenticator または Microsoft Authenticator でQRコードを読み取ってください</div>
+        <div class="_tm-qr" id="_tm_qr_canvas"></div>
+        <div style="font-size:12px;color:#888;margin-bottom:6px;text-align:center;">QRコードが読めない場合はこのコードを手動入力</div>
+        <div class="_tm-secret" id="_tm_totp_secret"></div>
+        <button class="_tm-btn" onclick="_showTotpStep2()">次へ（コード入力）→</button>
+        <button class="_tm-btn-sub" onclick="_showTotpStep0()">キャンセル</button>
+      </div>
+
+      <!-- ステップ2: コード確認 -->
+      <div id="_tm_totp_s2" class="_tm-step">
+        <div class="_tm-sub">② アプリに表示されている6桁のコードを入力して設定を完了します</div>
+        <label class="_tm-label">6桁のコード</label>
+        <input id="_tm_totp_code" class="_tm-input _tm-otp" type="text" inputmode="numeric" maxlength="6" placeholder="000000">
+        <button id="_tm_totp_verify_btn" class="_tm-btn" onclick="_verifyTotpSetup()">設定を完了する</button>
+        <button class="_tm-btn-sub" onclick="_showTotpStep1()">← QRコードに戻る</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(div);
+}
+
+/* ===================== パスワード変更 ===================== */
+
+function showPasswordChangeModal() {
+  _injectModals();
+  document.getElementById('_tm_pw_new').value = '';
+  document.getElementById('_tm_pw_conf').value = '';
+  document.getElementById('_tm_pw_err').style.display = 'none';
+  document.getElementById('_tm_pw_ok').style.display = 'none';
+  document.getElementById('_tm_pw').classList.add('open');
+  setTimeout(() => document.getElementById('_tm_pw_new').focus(), 100);
+}
+
+function closePasswordChangeModal() {
+  document.getElementById('_tm_pw').classList.remove('open');
+}
+
+async function _doChangePassword() {
+  const np   = document.getElementById('_tm_pw_new').value;
+  const conf = document.getElementById('_tm_pw_conf').value;
+  const err  = document.getElementById('_tm_pw_err');
+  const ok   = document.getElementById('_tm_pw_ok');
+  const btn  = document.getElementById('_tm_pw_btn');
+  err.style.display = 'none';
+  ok.style.display = 'none';
+  if (np.length < 8) { err.textContent = 'パスワードは8文字以上で設定してください'; err.style.display = 'block'; return; }
+  if (np !== conf)   { err.textContent = 'パスワードが一致しません'; err.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = '変更中…';
+  const result = await changePassword(np);
+  btn.disabled = false; btn.textContent = '変更する';
+  if (result.ok) {
+    ok.style.display = 'block';
+    document.getElementById('_tm_pw_new').value = '';
+    document.getElementById('_tm_pw_conf').value = '';
+    setTimeout(() => closePasswordChangeModal(), 2000);
+  } else {
+    err.textContent = result.error; err.style.display = 'block';
+  }
+}
+
+/* ===================== 二段階認証設定 ===================== */
+
+let _totpFactorId = null;
+
+async function showTotpSetupModal() {
+  _injectModals();
+  _showTotpStep0();
+  document.getElementById('_tm_totp_err').style.display = 'none';
+  document.getElementById('_tm_totp_ok').style.display = 'none';
+  document.getElementById('_tm_totp').classList.add('open');
+
+  const status = document.getElementById('_tm_totp_status');
+  const startBtn  = document.getElementById('_tm_totp_start_btn');
+  const disableBtn = document.getElementById('_tm_totp_disable_btn');
+  status.textContent = '状態を確認中...';
+  startBtn.style.display = 'none';
+  disableBtn.style.display = 'none';
+
+  const factors = await getEnrolledFactors();
+  const role = sessionStorage.getItem('takao_role');
+  const canDisable = !isMfaEnforced() || role === 'super_admin';
+  if (factors.length > 0) {
+    _totpFactorId = factors[0].id;
+    if (canDisable) {
+      status.textContent = '✅ 二段階認証は有効です。認証アプリが設定されています。';
+      disableBtn.style.display = 'block';
+    } else {
+      status.textContent = '✅ 二段階認証は有効です（組織の設定により解除できません）。';
+      disableBtn.style.display = 'none';
+      const lockNote = document.getElementById('_tm_totp_lock_note');
+      if (lockNote) lockNote.style.display = 'block';
+    }
+  } else {
+    status.textContent = '二段階認証は現在無効です。設定するとログイン時にアプリのコード入力が必要になります。';
+    startBtn.style.display = 'block';
+  }
+}
+
+function closeTotpSetupModal() {
+  document.getElementById('_tm_totp').classList.remove('open');
+}
+
+function _showTotpStep0() {
+  ['_tm_totp_s0','_tm_totp_s1','_tm_totp_s2'].forEach((id, i) => {
+    document.getElementById(id).classList.toggle('active', i === 0);
+  });
+}
+function _showTotpStep1() {
+  ['_tm_totp_s0','_tm_totp_s1','_tm_totp_s2'].forEach((id, i) => {
+    document.getElementById(id).classList.toggle('active', i === 1);
+  });
+}
+function _showTotpStep2() {
+  document.getElementById('_tm_totp_code').value = '';
+  ['_tm_totp_s0','_tm_totp_s1','_tm_totp_s2'].forEach((id, i) => {
+    document.getElementById(id).classList.toggle('active', i === 2);
+  });
+  setTimeout(() => document.getElementById('_tm_totp_code').focus(), 100);
+}
+
+async function _startTotpSetup() {
+  const startBtn = document.getElementById('_tm_totp_start_btn');
+  const err = document.getElementById('_tm_totp_err');
+  err.style.display = 'none';
+  startBtn.disabled = true; startBtn.textContent = 'QRコード生成中…';
+
+  const result = await enrollTotp();
+  startBtn.disabled = false; startBtn.textContent = 'QRコードを表示して設定開始';
+  if (!result.ok) { err.textContent = result.error; err.style.display = 'block'; return; }
+
+  _totpFactorId = result.factorId;
+  document.getElementById('_tm_totp_secret').textContent = result.secret || '';
+
+  // QRコード描画
+  const canvas = document.getElementById('_tm_qr_canvas');
+  canvas.innerHTML = '';
+  _loadQRLib(() => {
+    new QRCode(canvas, { text: result.totpUri, width: 200, height: 200,
+      colorDark: '#2d4a36', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  });
+
+  _showTotpStep1();
+}
+
+async function _verifyTotpSetup() {
+  const code = document.getElementById('_tm_totp_code').value.replace(/\D/g, '');
+  const err  = document.getElementById('_tm_totp_err');
+  const ok   = document.getElementById('_tm_totp_ok');
+  const btn  = document.getElementById('_tm_totp_verify_btn');
+  err.style.display = 'none';
+  if (code.length !== 6) { err.textContent = '6桁のコードを入力してください'; err.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = '確認中…';
+  const result = await verifyTotpEnrollment(_totpFactorId, code);
+  btn.disabled = false; btn.textContent = '設定を完了する';
+  if (result.ok) {
+    ok.textContent = '✅ 二段階認証の設定が完了しました！次回ログインからコード入力が必要になります。';
+    ok.style.display = 'block';
+    _showTotpStep0();
+    document.getElementById('_tm_totp_status').textContent = '✅ 二段階認証は有効です。認証アプリが設定されています。';
+    document.getElementById('_tm_totp_start_btn').style.display = 'none';
+    document.getElementById('_tm_totp_disable_btn').style.display = 'block';
+  } else {
+    err.textContent = result.error; err.style.display = 'block';
+  }
+}
+
+async function _disableTotp() {
+  const role = sessionStorage.getItem('takao_role');
+  if (isMfaEnforced() && role !== 'super_admin') {
+    alert('組織のポリシーにより二段階認証は解除できません。');
+    return;
+  }
+  if (!confirm('二段階認証を解除しますか？\nログイン時のコード入力が不要になります。')) return;
+  const result = await unenrollTotp(_totpFactorId);
+  const err = document.getElementById('_tm_totp_err');
+  const ok  = document.getElementById('_tm_totp_ok');
+  if (result.ok) {
+    ok.textContent = '二段階認証を解除しました。';
+    ok.style.display = 'block';
+    document.getElementById('_tm_totp_status').textContent = '二段階認証は現在無効です。';
+    document.getElementById('_tm_totp_start_btn').style.display = 'block';
+    document.getElementById('_tm_totp_disable_btn').style.display = 'none';
+  } else {
+    err.textContent = '解除に失敗しました。'; err.style.display = 'block';
+  }
+}
+
+function _loadQRLib(cb) {
+  if (window.QRCode) { cb(); return; }
+  const s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+  s.onload = cb;
+  document.head.appendChild(s);
+}
+
+
+
+
+
+</script>
+<script>
+/* ===== ルート図をメールで送る ページロジック ===== */
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function getH(){
+  const s = _getSession();
+  const tok = (s && s.access_token) || ANON_KEY;
+  return { 'apikey': ANON_KEY, 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json' };
+}
+async function rpc(name, args){
+  await ensureFreshToken();
+  const res = await fetch(`${REST_URL}/rpc/${name}`, { method:'POST', headers:getH(), body: JSON.stringify(args || {}) });
+  const txt = await res.text();
+  if(!res.ok){
+    let m = txt; try{ m = JSON.parse(txt).message || txt; }catch(e){}
+    const err = new Error(m); err.denied = /Permission denied/.test(m); throw err;
+  }
+  return txt ? JSON.parse(txt) : null;
+}
+/** 全件を取る。途中で失敗したら、一部だけを返さずに失敗にする（読めなかったものを「無い」にしない） */
+async function fetchAll(path){
+  await ensureFreshToken();
+  const out = []; let from = 0; const step = 1000;
+  for(;;){
+    const sep = path.indexOf('?') >= 0 ? '&' : '?';
+    const r = await fetch(`${REST_URL}/${path}${sep}limit=${step}&offset=${from}`, { headers: getH() });
+    if(!r.ok) throw new Error(`${path.split('?')[0]} を読めませんでした（HTTP ${r.status}）`);
+    const rows = await r.json();
+    out.push(...rows);
+    if(rows.length < step) break;
+    from += step;
+  }
+  return out;
+}
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function say(msg, ok){
+  const el = document.getElementById('status');
+  el.className = ok ? 'ok' : 'err'; el.innerHTML = msg;
+  if(ok) setTimeout(() => { if(el.innerHTML === msg) el.className = ''; }, 7000);
+}
+function fail(e, what){
+  if(e && e.denied) say('この画面でメールを送るには、「日報の発行・一括送信」の権限か、管理者権限が必要です。管理者にご相談ください。');
+  else say(`${what}できませんでした：${esc(e && e.message || e)}`);
+}
+
+/* ---------- データ ---------- */
+let COURSES = [], ROUTES = {}, FORMS = {}, RECIP = { admins: [], staff: [] };
+const SEL = new Set();          // 選んだルートの鍵 'コースID|区分|日課|シナリオ'
+const PICK = new Map();         // 選んだ送り先 鍵→{name,email}
+let EXTRA = [];                 // 直接入力した送り先 [{name:'',email}]
+const OPEN = new Set();         // 開いているコース
+const SEG_ORDER = ['出庫回送登校','登校','帰庫回送登校','出庫回送下校','下校①','便間回送①','下校②','下校③','帰庫回送下校'];
+const TOUKOU = ['出庫回送登校','登校','帰庫回送登校'];
+const segRank = s => { const i = SEG_ORDER.indexOf(s); return i < 0 ? 99 : i; };
+const isKaisou = s => s.indexOf('回送') >= 0;
+const hasXY = p => p.lat != null && p.lng != null && String(p.lat).trim() !== '' && String(p.lng).trim() !== '' && isFinite(Number(p.lat)) && isFinite(Number(p.lng));
+const validPts = r => r.pts.filter(hasXY);
+const usable = r => validPts(r).length >= 2;
+
+async function loadAll(){
+  const today = ymd(new Date());
+  const [courses, vers, pts, forms, scen] = await Promise.all([
+    fetchAll('courses?select=id,school_name,course_name&active=eq.true&order=school_name,course_name,id'),
+    fetchAll('course_timetable_versions?select=id,course_id,valid_from&order=id'),
+    fetchAll('course_route_points?select=id,course_id,version_id,segment,seq,name,lat,lng,is_stop,split_here,form_name,scenario_id&order=course_id,segment,seq,id'),
+    fetchAll('course_schedule_forms?select=id,course_id,version_id,form_name,gekou_departures&active=eq.true&order=id'),
+    fetchAll('course_scenarios?select=id,course_id,segment,label&order=id'),
+  ]);
+  COURSES = courses;
+  // 各コースの「今日いまの版」（適用開始日が今日以前で、いちばん新しい版）
+  const cur = {};
+  vers.forEach(v => { if(v.valid_from <= today && (!cur[v.course_id] || v.valid_from > cur[v.course_id].valid_from)) cur[v.course_id] = v; });
+  const scenLabel = {}; scen.forEach(s => scenLabel[s.id] = s.label || '');
+  FORMS = {};
+  forms.forEach(f => { const cv = cur[f.course_id]; if(cv && f.version_id === cv.id) (FORMS[f.course_id] = FORMS[f.course_id] || {})[f.form_name] = f.gekou_departures || []; });
+  const byKey = {};
+  pts.forEach(p => {
+    const cv = cur[p.course_id]; if(!cv || p.version_id !== cv.id) return;
+    const key = [p.course_id, p.segment, p.form_name || '', p.scenario_id || 0].join('|');
+    (byKey[key] = byKey[key] || { key, courseId: p.course_id, segment: p.segment, form: p.form_name || '',
+      scenarioId: p.scenario_id || 0, scen: p.scenario_id ? (scenLabel[p.scenario_id] || '') : '', pts: [] }).pts.push(p);
+  });
+  ROUTES = {};
+  Object.values(byKey).forEach(r => { r.pts.sort((a, b) => a.seq - b.seq); (ROUTES[r.courseId] = ROUTES[r.courseId] || []).push(r); });
+  for(const id in ROUTES) ROUTES[id].sort((a, b) => segRank(a.segment) - segRank(b.segment) || a.form.localeCompare(b.form, 'ja') || a.scenarioId - b.scenarioId);
+}
+
+/* ---------- ① ルートを選ぶ ---------- */
+function itemLabel(r){
+  let t = r.segment;
+  if(r.scen) t += `（${r.scen}）`;
+  if(r.form){
+    t += `　日課「${r.form}」`;
+    const m = /下校([①②③])/.exec(r.segment);
+    if(m){ const dep = (FORMS[r.courseId] || {})[r.form]; const i = '①②③'.indexOf(m[1]); if(dep && dep[i]) t += ` ${dep[i]}発`; }
+  }
+  return t;
+}
+function renderCourses(){
+  const A = document.getElementById('courses');
+  const q = document.getElementById('q').value.trim();
+  const only = document.getElementById('onlyRoute').checked;
+  let list = COURSES.filter(c => !q || (c.school_name + c.course_name).indexOf(q) >= 0);
+  if(only) list = list.filter(c => (ROUTES[c.id] || []).some(usable));
+  if(!list.length){ A.innerHTML = '<div class="panel muted">該当するコースがありません。</div>'; return; }
+  let h = '';
+  for(const c of list){
+    const rs = (ROUTES[c.id] || []).filter(usable);
+    const tou = rs.filter(r => r.segment === '登校').length, ge = rs.filter(r => /^下校/.test(r.segment)).length, ka = rs.filter(r => isKaisou(r.segment)).length;
+    const nsel = rs.filter(r => SEL.has(r.key)).length;
+    h += `<details class="course" id="c${c.id}" ${OPEN.has(c.id) ? 'open' : ''} ontoggle="onToggle(${c.id}, this)">
+      <summary><span class="cn">${esc(c.course_name)}</span><span class="sc">${esc(c.school_name)}</span>
+        <span class="tag ${tou ? 't-on' : 't-off'}">登校</span><span class="tag ${ge ? 't-on' : 't-off'}">下校 ${ge}</span><span class="tag ${ka ? 't-kai' : 't-off'}">回送 ${ka}</span>
+        <span class="tag t-sel" id="sel${c.id}" style="${nsel ? '' : 'display:none;'}">選択 ${nsel}</span></summary>
+      <div class="cbody">`;
+    const box = (title, arr) => {
+      let s = `<div><h4>${title}</h4>`;
+      if(!arr.length) s += '<div class="muted">経路が登録されていません</div>';
+      for(const r of arr){
+        s += `<label class="item"><input type="checkbox" ${SEL.has(r.key) ? 'checked' : ''} data-k="${esc(r.key)}" onchange="onItem(this)">
+          <span>${esc(itemLabel(r))}${isKaisou(r.segment) ? ' <span class="tag t-kai">回送</span>' : ''}<br><span class="pt">${validPts(r).length}地点</span></span></label>`;
+      }
+      return s + '</div>';
+    };
+    h += box('登校の便', rs.filter(r => TOUKOU.indexOf(r.segment) >= 0)) + box('下校の便', rs.filter(r => TOUKOU.indexOf(r.segment) < 0));
+    h += `<div class="cfoot"><button type="button" class="mini" onclick="selCourse(${c.id}, true)">このコースのルートをすべて選ぶ</button>
+      <button type="button" class="mini" onclick="selCourse(${c.id}, false)">このコースの選択を解除</button></div></div></details>`;
+  }
+  A.innerHTML = h;
+  updateCounts();
+}
+function onToggle(id, el){ if(el.open) OPEN.add(id); else OPEN.delete(id); }
+function onItem(el){
+  const k = el.dataset.k;
+  if(el.checked) SEL.add(k); else SEL.delete(k);
+  updateCounts();
+}
+function selCourse(id, on){
+  (ROUTES[id] || []).filter(usable).forEach(r => { if(on) SEL.add(r.key); else SEL.delete(r.key); });
+  document.querySelectorAll(`#c${id} input[data-k]`).forEach(b => b.checked = on);
+  updateCounts();
+}
+function clearSel(){ SEL.clear(); document.querySelectorAll('#courses input[data-k]').forEach(b => b.checked = false); updateCounts(); }
+function updateCounts(){
+  const perCourse = {};
+  SEL.forEach(k => { const id = k.split('|')[0]; perCourse[id] = (perCourse[id] || 0) + 1; });
+  COURSES.forEach(c => { const el = document.getElementById('sel' + c.id); if(el){ const n = perCourse[c.id] || 0; el.textContent = '選択 ' + n; el.style.display = n ? '' : 'none'; } });
+  document.getElementById('selInfo').textContent = SEL.size ? `選んだルート：${SEL.size}件（${Object.keys(perCourse).length}コース）` : '';
+  updateSendInfo();
+}
+
+/* ---------- ② 送り先を選ぶ ---------- */
+async function loadRecipients(){
+  RECIP = await rpc('route_mail_recipients');
+}
+function renderRecipients(){
+  const A = document.getElementById('rlist');
+  const q = document.getElementById('rq').value.trim();
+  const show = { adm: document.getElementById('gAdm').checked, drv: document.getElementById('gDrv').checked, att: document.getElementById('gAtt').checked };
+  const hit = n => !q || String(n).replace(/[\s　]/g, '').indexOf(q.replace(/[\s　]/g, '')) >= 0;
+  const row = (key, name, email) => {
+    const ok = !!email;
+    return `<label class="${ok ? '' : 'na'}"><input type="checkbox" ${ok ? '' : 'disabled'} ${PICK.has(key) ? 'checked' : ''} onchange="onPick('${esc(key)}', this)">
+      <span>${esc(name)}<br><span class="em">${ok ? esc(email) : 'メール未登録'}</span></span></label>`;
+  };
+  let h = '';
+  if(show.adm){
+    const a = RECIP.admins.filter(u => hit(u.name));
+    if(a.length) h += `<div class="grp">管理者（システム利用者）</div>` + a.map(u => row('a:' + u.email, u.name, u.email)).join('');
+  }
+  for(const [flag, g] of [['drv', '運転手'], ['att', '添乗員']]){
+    if(!show[flag]) continue;
+    const s = RECIP.staff.filter(x => x.group === g && hit(x.name));
+    if(s.length) h += `<div class="grp">${g}</div>` + s.map(x => row('s:' + x.staff_id, x.name, x.email)).join('');
+  }
+  A.innerHTML = h || '<div class="muted" style="padding:10px;">該当する人がいません。</div>';
+}
+function recipientInfo(key){
+  if(key.startsWith('a:')){ const u = RECIP.admins.find(x => 'a:' + x.email === key); return u ? { name: u.name, email: u.email } : null; }
+  const id = Number(key.slice(2)); const s = RECIP.staff.find(x => x.staff_id === id); return s && s.email ? { name: s.name, email: s.email } : null;
+}
+function onPick(key, el){
+  if(el.checked){ const r = recipientInfo(key); if(r) PICK.set(key, r); else el.checked = false; }
+  else PICK.delete(key);
+  renderPicked();
+}
+function addExtra(){
+  const el = document.getElementById('xAddr'), v = el.value.trim();
+  if(!/^[^\s@　]+@[^\s@　]+\.[^\s@　]+$/.test(v)){ say('メールアドレスの形になっていません。'); return; }
+  if(!EXTRA.some(x => x.email.toLowerCase() === v.toLowerCase())) EXTRA.push({ name: '', email: v });
+  el.value = ''; renderPicked();
+}
+function delPicked(kind, key){
+  if(kind === 'p'){ PICK.delete(key); renderRecipients(); } else EXTRA = EXTRA.filter(x => x.email !== key);
+  renderPicked();
+}
+function allRecipients(){
+  const seen = new Set(), out = [];
+  [...PICK.values(), ...EXTRA].forEach(r => { const k = r.email.toLowerCase(); if(!seen.has(k)){ seen.add(k); out.push(r); } });
+  return out;
+}
+function renderPicked(){
+  const chips = [];
+  PICK.forEach((r, k) => chips.push(`<span class="chip">${esc(r.name)}<button type="button" onclick="delPicked('p','${esc(k)}')" aria-label="外す">×</button></span>`));
+  EXTRA.forEach(r => chips.push(`<span class="chip">${esc(r.email)}<button type="button" onclick="delPicked('x','${esc(r.email)}')" aria-label="外す">×</button></span>`));
+  document.getElementById('picked').innerHTML = chips.join('');
+  updateSendInfo();
+}
+function updateSendInfo(){
+  const n = SEL.size, k = allRecipients().length;
+  document.getElementById('sendInfo').textContent = (n || k) ? `ルート ${n}件 ／ 送り先 ${k}名　→　${k}通のメールを送ります` : '';
+}
+
+/* ---------- Googleマップのリンク（④ルート詳細と同じ作り方） ---------- */
+const MAXP = 44;   // 実測で通った地点数（unkou.html の記録）
+const TAIL = '/data=!4m5!4m4!2m2!1b1!2b1!3e0';   // 高速道路・有料道路を使わない・車
+const mapUrl = pts => 'https://www.google.com/maps/dir/' + pts.map(p => `${Number(p.lat)},${Number(p.lng)}`).join('/') + TAIL;
+/** 地点が多いときは、44地点ずつに分けて、つなぎ目の地点を重ねる */
+function mapUrls(pts){
+  const out = [];
+  for(let s = 0; ; s += MAXP - 1){ out.push(mapUrl(pts.slice(s, s + MAXP))); if(s + MAXP >= pts.length) break; }
+  return out;
+}
+const clean = n => String(n || '').replace(/（(下校|登校)）$/, '');
+/** ④の rptLegs と同じ区切り方。byStop=false：「切」だけ／true：バス停でも切る */
+function legsOf(pts, byStop){
+  if(pts.length < 2) return [];
+  const mk = (a, b) => ({ from: clean(pts[a].name) || `${a + 1}番目`, to: clean(pts[b].name) || `${b + 1}番目`, pts: pts.slice(a, b + 1) });
+  const legs = []; let start = 0;
+  for(let i = 1; i < pts.length; i++){
+    const last = i === pts.length - 1;
+    if(pts[i].split_here){ if(i > start) legs.push(mk(start, i)); start = i + 1; }
+    else if(byStop && pts[i].is_stop && !last){ if(i > start) legs.push(mk(start, i)); start = i; }
+    else if(last){ if(i > start) legs.push(mk(start, i)); }
+  }
+  return legs;
+}
+
+/* ---------- メールの組み立て ---------- */
+function selectedByCourse(){
+  const ids = new Set(); SEL.forEach(k => ids.add(Number(k.split('|')[0])));
+  return COURSES.filter(c => ids.has(c.id)).map(c => ({ course: c, routes: (ROUTES[c.id] || []).filter(r => SEL.has(r.key) && usable(r)) })).filter(x => x.routes.length);
+}
+function routeBlock(group){
+  // group: { labels:[...], pts:[...], kaisou:bool }
+  const pts = group.pts;
+  const stops = pts.filter(p => p.is_stop).map(p => clean(p.name)).filter(Boolean);
+  const chain = stops.length >= 2 ? stops.join(' → ') : `${clean(pts[0].name) || '出発地'} → ${clean(pts[pts.length - 1].name) || '到着地'}`;
+  const via = pts.length - pts.filter(p => p.is_stop).length;
+  const color = group.kaisou ? '#16a34a' : '#2563eb';
+  let h = `<div style="margin:16px 0 4px;padding-left:8px;border-left:4px solid ${color};">`;
+  h += group.labels.map(l => `<b>${esc(l)}</b>`).join('<br>');
+  if(group.labels.length > 1) h += `<br><span style="color:#666;font-size:12px;">（以上は同じ経路です）</span>`;
+  h += `</div><p style="margin:2px 0 4px;">${esc(chain)}${via > 0 ? `（経由点${via}か所）` : ''}</p>`;
+  const links = mapUrls(pts);
+  h += `<p style="margin:0 0 4px;">全ルート図：` + links.map((u, i) => `<a href="${u}">▶ 地図で開く${links.length > 1 ? `（その${i + 1}）` : ''}</a>`).join('　') + `</p>`;
+  const legs = legsOf(pts, true);
+  if(legs.length > 1){
+    h += `<p style="margin:6px 0 2px;color:#444;">バス停ごとのルート図</p>`;
+    legs.forEach((lg, i) => {
+      const us = mapUrls(lg.pts);
+      h += `<p style="margin:2px 0 2px 12px;">${i + 1}. ${esc(lg.from)} → ${esc(lg.to)}　` + us.map(u => `<a href="${u}">▶ 地図で開く</a>`).join('　')
+        + (lg.pts.length === 2 ? `　<span style="color:#b45309;font-size:12px;">※地点が2か所のため、道すじはGoogleの選ぶ道になります</span>` : '') + `</p>`;
+    });
+  }
+  return h;
+}
+function courseSection(x){
+  // 同じ座標の経路は、1つにまとめる
+  const groups = [];
+  x.routes.forEach(r => {
+    const vp = validPts(r), sig = vp.map(p => `${Number(p.lat)},${Number(p.lng)}|${p.is_stop ? 1 : 0}|${p.split_here ? 1 : 0}`).join(';');
+    const g = groups.find(y => y.sig === sig);
+    if(g){ g.labels.push(itemLabel(r)); g.kaisou = g.kaisou && isKaisou(r.segment); }
+    else groups.push({ sig, labels: [itemLabel(r)], pts: vp, kaisou: isKaisou(r.segment) });
+  });
+  return `<h3 style="margin:26px 0 4px;font-size:16px;border-bottom:2px solid #cbd5e1;padding-bottom:3px;">${esc(x.course.school_name)}　${esc(x.course.course_name)}</h3>` + groups.map(routeBlock).join('');
+}
+function mailSubject(items){
+  const c = items[0].course, t = `${c.school_name} ${c.course_name}`;
+  return `【高尾輸送】ルート図（${items.length > 1 ? `${t} ほか${items.length - 1}コース` : t}）`;
+}
+function mailHtml(name, items){
+  const today = new Date();
+  return `<div style="font-family:'Yu Gothic UI',Meiryo,sans-serif;font-size:14px;line-height:1.8;color:#222">
+${name ? `<p>${esc(name)} 様</p>` : ''}
+<p>ルート図をお送りします。システムに登録されている座標から作りました。<b>高速道路・有料道路を使わない</b>設定になっています。</p>
+${items.map(courseSection).join('')}
+<h3 style="margin:26px 0 6px;font-size:15px;border-left:4px solid #94a3b8;padding-left:8px">おことわり</h3>
+<ul style="margin:4px 0 0;padding-left:20px">
+<li>停留所は、各区間の名前のとおりです。地図の途中に出る点は、道すじを決めるための経由点です。</li>
+<li>Googleマップの画面では、各地点が近くの住所や施設名で表示されます。</li>
+</ul>
+<p style="margin-top:22px;color:#666;font-size:12px">業務管理システムの登録内容（${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')} 時点）から作成<br>---<br>高尾輸送サービス</p>
+</div>`;
+}
+
+/* ---------- ③ 送る ---------- */
+async function sendRoutes(){
+  const items = selectedByCourse();
+  const rec = allRecipients();
+  if(!items.length){ say('送りたいルートを、左の一覧から選んでください。'); return; }
+  if(!rec.length){ say('送り先を選んでください（または、メールアドレスを直接入力して「追加」を押します）。'); return; }
+  if(items.length > 10){ say(`1通に入れられるのは10コースまでです（いま ${items.length}コース）。分けて送ってください。`); return; }
+  const nRoutes = items.reduce((s, x) => s + x.routes.length, 0);
+  const subject = mailSubject(items);
+  const msg = `次のルートを、${rec.length}名にそれぞれ1通ずつ送ります。\n\n【ルート】${nRoutes}件\n`
+    + items.map(x => `・${x.course.school_name} ${x.course.course_name}（${x.routes.map(itemLabel).join('、')}）`).join('\n')
+    + `\n\n【送り先】\n` + rec.map(r => `・${r.name ? r.name + '　' : ''}${r.email}`).join('\n') + `\n\n【件名】${subject}\n\nよろしいですか？`;
+  if(!confirm(msg)) return;
+
+  const btn = document.getElementById('sendBtn'); btn.disabled = true;
+  const box = document.getElementById('sendResult');
+  const courses = items.map(x => `${x.course.school_name} ${x.course.course_name}`).join('、');
+  let sent = 0; const fails = [];
+  for(let i = 0; i < rec.length; i++){
+    const r = rec[i];
+    box.innerHTML = `<div class="muted">送信中… ${i + 1}/${rec.length}（${esc(r.name || r.email)}）</div>`;
+    let ok = false, err = null;
+    try{
+      await ensureFreshToken();
+      const res = await fetch(`${FUNCTIONS_URL}/send-email`, { method: 'POST', headers: getH(), body: JSON.stringify({ to: r.email, subject, html: mailHtml(r.name, items) }) });
+      const sr = await res.json().catch(() => ({}));
+      ok = res.ok && sr.ok; if(!ok) err = sr.error || ('HTTP ' + res.status);
+    }catch(e){ err = e.message; }
+    try{ await rpc('route_log_mail', { p_name: r.name || '', p_email: r.email, p_subject: subject, p_courses: courses, p_ok: ok, p_error: err }); }catch(e){}
+    if(ok) sent++; else fails.push(`${r.name || r.email}：${err}`);
+    if(i < rec.length - 1) await sleep(700);
+  }
+  btn.disabled = false;
+  box.innerHTML = `<div style="padding:10px 12px;border-radius:8px;font-size:13px;line-height:1.7;background:${fails.length ? '#fdf2f2' : '#eef7ef'};border:1px solid ${fails.length ? '#eeaaa4' : '#bfe3c0'};">
+    ✅ ${sent}件 送信${fails.length ? `／⚠ 失敗 ${fails.length}件<div style="margin-top:6px;color:#b5453a;">${fails.map(esc).join('<br>')}</div>` : ''}</div>`;
+  loadRecent();
+}
+
+async function loadRecent(){
+  const A = document.getElementById('recent');
+  try{
+    const rows = await rpc('route_mail_recent');
+    if(!rows.length){ A.innerHTML = '<span class="muted">まだ送信の記録はありません。</span>'; return; }
+    const f = iso => { const d = new Date(iso); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+    A.innerHTML = `<table class="log"><tbody>` + rows.slice(0, 10).map(r =>
+      `<tr><td style="white-space:nowrap;">${f(r.sent_at)}</td><td>${esc(r.recipient_name || r.recipient_email)}${r.ok ? '' : ' <span class="tag" style="background:#fdeceb;color:#b5453a;">失敗</span>'}<br><span class="muted">${esc(r.courses || '')}</span></td></tr>`).join('') + `</tbody></table>`;
+  }catch(e){ A.innerHTML = '<span class="muted">記録を読み込めませんでした。</span>'; }
+}
+
+/* ---------- 起動 ---------- */
+window.addEventListener('DOMContentLoaded', async () => {
+  const ok = await initAuth(['super_admin','admin','operator','staff']);
+  if(!ok) return;
+  try{ await loadAll(); renderCourses(); }
+  catch(e){ document.getElementById('courses').innerHTML = ''; say('経路を読み込めませんでした。画面を読み込み直してください：' + esc(e.message)); }
+  try{ await loadRecipients(); renderRecipients(); }
+  catch(e){ document.getElementById('rlist').innerHTML = ''; fail(e, '送り先の一覧を読み込むこと'); }
+  loadRecent();
+});
+</script>
+</body>
+</html>

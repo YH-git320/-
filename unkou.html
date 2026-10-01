@@ -44,6 +44,22 @@ button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
 #status{font-size:13px;padding:9px 12px;border-radius:8px;margin-bottom:12px;display:none;}
 #status.ok{display:block;background:#eef7ef;color:#2f7d32;border:1px solid #bfe3c0;}
 #status.err{display:block;background:#fdeceb;color:#b5453a;border:1px solid #f3c3bf;}
+/* 左のコース一覧と、編集画面の並び（パソコンの見え方は、これまでと同じ） */
+#courseListArea{flex:0 0 290px;align-self:flex-start;position:sticky;top:8px;max-height:calc(100vh - 24px);overflow:auto;}
+#editorArea{flex:1;min-width:300px;}
+#backToList{display:none;}
+/* 🔴 スマホなど狭い画面（2026-10-02 八重樫さん：左の窓と真ん中の窓がかぶる）
+   ⚠️ 狭い画面では、一覧と編集画面が上下に並ぶ。それなのに一覧を画面に貼り付けたままにすると、
+      スクロールしたとき、一覧が下の編集画面の上に乗って、かぶって見える。
+      だから、狭い画面では貼り付けをやめ、一覧は上に、編集画面は下に、それぞれ全幅で置く。
+   ⚠️ 一覧は枠の中だけでスクロール（高さを画面の4割まで）。長い一覧が編集画面を押し下げすぎないように。
+   ⚠️ 編集画面から一覧へ戻れるよう、右下に「↑ コース一覧」を出す。 */
+@media (max-width: 760px){
+  #courseListArea{flex:1 1 100%;position:static;max-height:42vh;}
+  #editorArea{flex:1 1 100%;min-width:0;}
+  #backToList{display:block;position:fixed;right:12px;bottom:14px;z-index:50;box-shadow:0 2px 10px rgba(0,0,0,.25);
+    background:var(--g);color:#fff;border:none;border-radius:22px;padding:10px 16px;font-size:13px;font-weight:700;}
+}
 </style>
 </head>
 <body>
@@ -80,12 +96,11 @@ button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
          > 今選んだコースの表示が残ります
          ⚠️ 一覧の中身は、この枠の中だけでスクロールする。
             編集画面をどれだけスクロールしても、選んだ行は見えたまま。 -->
-    <div id="courseListArea" class="panel"
-         style="flex:0 0 290px;align-self:flex-start;position:sticky;top:8px;
-                max-height:calc(100vh - 24px);overflow:auto;"></div>
-    <div id="editorArea" style="flex:1;min-width:300px;"></div>
+    <div id="courseListArea" class="panel"></div>
+    <div id="editorArea"></div>
   </div>
 </main>
+<button type="button" id="backToList" onclick="document.getElementById('courseListArea').scrollIntoView({behavior:'smooth',block:'start'})">↑ コース一覧</button>
 
 <script>
 // ===== 高尾輸送サービス 管理システム 共通認証モジュール =====
@@ -1286,7 +1301,16 @@ function _refDeparture(){
   for(const f of forms){ for(const t of (f.gekou_departures||[])){ if(t) return t; } }
   return '';
 }
-async function selectCourse(id){ undoClear(); _editOpen=false; selCourseId = id; loadFormUsage(id); selVerId = currentVerId(id); _nvOpen=false; rptSelIdx=null; rptPick={}; _editMode=null; _fixReason=''; _impact=null; _loadImpact().then(_renderEditBar); if(selVerId) await loadVersionInto(id, selVerId); await loadScenariosFor(id); selRefD = _refDeparture() || '14:00'; renderCourseList(); renderEditor(); }
+async function selectCourse(id){ undoClear(); _editOpen=false; selCourseId = id; loadFormUsage(id); selVerId = currentVerId(id); _nvOpen=false; rptSelIdx=null; rptPick={}; _editMode=null; _fixReason=''; _impact=null; _loadImpact().then(_renderEditBar); if(selVerId) await loadVersionInto(id, selVerId); await loadScenariosFor(id); selRefD = _refDeparture() || '14:00'; renderCourseList(); renderEditor(); _scrollToEditorIfNarrow(); }
+/** 狭い画面（スマホ）では、一覧の下に編集画面が出るので、コースを選んだら編集画面の先頭へ送る */
+function _scrollToEditorIfNarrow(){
+  try{
+    if(window.matchMedia && window.matchMedia('(max-width: 760px)').matches){
+      const e = document.getElementById('editorArea');
+      if(e && e.scrollIntoView) e.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }catch(err){}
+}
 async function changeVersion(verId){ undoClear(); _editOpen=false; selVerId = Number(verId); _editMode=null; _fixReason=''; _impact=null; await loadVersionInto(selCourseId, selVerId); selRefD = _refDeparture() || '14:00'; renderEditor(); _loadImpact().then(_renderEditBar); }
 function _nextApril(){ const d=new Date(); const y=d.getFullYear(); const ny=(d.getMonth()+1>=4)?y+1:y; return ny+'-04-01'; }
 // 編集タブ（主要・登校便／下校便／添乗員送迎）。再描画せず表示切替＝入力途中も保持・軽快
