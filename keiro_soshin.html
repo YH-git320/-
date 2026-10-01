@@ -60,6 +60,19 @@ details.course .sc{font-size:12px;color:#6b7d72;}
 .chip button{border:none;background:transparent;color:#0c447c;padding:0 6px;font-size:14px;line-height:1;}
 table.log{width:100%;border-collapse:collapse;font-size:12px;}
 table.log th,table.log td{border-bottom:1px solid #eef2ee;padding:4px 6px;text-align:left;vertical-align:top;}
+/* 🔴 携帯など狭い画面（2026-10-02 八重樫さん：パソコンでは送れたが、携帯では送れなかった）
+   ⚠️ 狭い画面では、ルートの一覧のずっと下に、送り先と送るボタンが縦に並ぶ。気づきにくく、
+      案内も遠くに出て見えなかった。だから、画面の下に「送り先へ」のボタンを常に出し、
+      送り先の欄の上に「ルートの一覧へ戻る」を出す。 */
+#toSend,.onlyNarrow{display:none;}
+@media(max-width:1000px){
+  .onlyNarrow{display:block;}
+  #toSend{display:block;position:fixed;left:12px;right:12px;bottom:12px;z-index:50;background:var(--g);color:#fff;border:none;
+    border-radius:24px;padding:13px 16px;font-size:14px;font-weight:700;box-shadow:0 2px 12px rgba(0,0,0,.3);}
+  #toSend.hide{display:none;}
+  main{padding-bottom:84px;}
+  .rl{max-height:240px;}
+}
 </style>
 </head>
 <body>
@@ -92,8 +105,9 @@ table.log th,table.log td{border-bottom:1px solid #eef2ee;padding:4px 6px;text-a
       <div id="courses"><div class="muted" style="padding:14px;">読み込んでいます…</div></div>
     </div>
 
-    <div class="side">
+    <div class="side" id="sidePanel">
       <div class="panel">
+        <button type="button" class="mini onlyNarrow" style="margin-bottom:8px;" onclick="document.getElementById('courses').scrollIntoView({behavior:'smooth',block:'start'})">↑ ルートの一覧へ戻る</button>
         <b style="color:var(--g2);">② 送り先を選ぶ</b>
         <div class="row" style="margin-top:8px;">
           <input id="rq" type="text" placeholder="名前で絞る" oninput="renderRecipients()">
@@ -122,6 +136,7 @@ table.log th,table.log td{border-bottom:1px solid #eef2ee;padding:4px 6px;text-a
     </div>
   </div>
 </main>
+<button type="button" id="toSend" onclick="document.getElementById('sidePanel').scrollIntoView({behavior:'smooth',block:'start'})">送り先を選んで送る ↓</button>
 <script>
 // ===== 高尾輸送サービス 管理システム 共通認証モジュール =====
 // initAuth(['admin', 'staff'])  → 管理者・事務員どちらも可
@@ -1026,7 +1041,13 @@ function renderPicked(){
 }
 function updateSendInfo(){
   const n = SEL.size, k = allRecipients().length;
-  document.getElementById('sendInfo').textContent = (n || k) ? `ルート ${n}件 ／ 送り先 ${k}名　→　${k}通のメールを送ります` : '';
+  const red = t => `<span style="color:#b5453a;font-weight:700;">${t}</span>`;
+  let h = `ルート ${n ? '<b>' + n + '件</b>' : red('未選択')} ／ 送り先 ${k ? '<b>' + k + '名</b>' : red('未選択')}`;
+  if(n && k) h += `　→　<b>${k}通</b>のメールを送ります`;
+  else h += `<br>${red(!n ? '左の一覧で、送りたいルートを選んでください。' : '送り先を選んでください。')}`;
+  document.getElementById('sendInfo').innerHTML = h;
+  const t = document.getElementById('toSend');   // 携帯の画面の下に出す案内ボタン
+  if(t) t.textContent = (n ? `選んだルート ${n}件　／　` : '') + (k ? `送り先 ${k}名 → 送る ↓` : '送り先を選んで送る ↓');
 }
 
 /* ---------- Googleマップのリンク（④ルート詳細と同じ作り方） ---------- */
@@ -1114,18 +1135,31 @@ ${items.map(courseSection).join('')}
 }
 
 /* ---------- ③ 送る ---------- */
+/** 送るボタンのすぐ下に、結果・案内を出す（ページの上の方に出すと、スクロールしていて見えない） */
+function sendMsg(html, kind){
+  const bg = kind === 'ok' ? ['#eef7ef', '#bfe3c0', '#2f7d32'] : kind === 'info' ? ['#f3f6f3', '#d7e2da', '#2d4a38'] : ['#fdeceb', '#f3c3bf', '#b5453a'];
+  const box = document.getElementById('sendResult');
+  box.innerHTML = `<div style="padding:10px 12px;border-radius:8px;font-size:13px;line-height:1.7;background:${bg[0]};border:1px solid ${bg[1]};color:${bg[2]};">${html}</div>`;
+  if(box.scrollIntoView) box.scrollIntoView({ block: 'nearest' });
+}
+/** 押したら必ず何かが見えるようにする。途中で失敗しても、画面に出す */
 async function sendRoutes(){
+  sendMsg('確認しています…', 'info');
+  try{ await _sendRoutes(); }
+  catch(e){ console.error(e); sendMsg('送れませんでした：' + esc(e && e.message || e)); document.getElementById('sendBtn').disabled = false; }
+}
+async function _sendRoutes(){
   const items = selectedByCourse();
   const rec = allRecipients();
-  if(!items.length){ say('送りたいルートを、左の一覧から選んでください。'); return; }
-  if(!rec.length){ say('送り先を選んでください（または、メールアドレスを直接入力して「追加」を押します）。'); return; }
-  if(items.length > 10){ say(`1通に入れられるのは10コースまでです（いま ${items.length}コース）。分けて送ってください。`); return; }
+  if(!items.length){ sendMsg('送りたいルートが選ばれていません。<br>左の一覧で、コースを開いて、送りたいルートにチェックを付けてください。'); return; }
+  if(!rec.length){ sendMsg('送り先が選ばれていません。<br>上の一覧から人を選ぶか、メールアドレスを入力して「追加」を押してください。'); return; }
+  if(items.length > 10){ sendMsg(`1通に入れられるのは10コースまでです（いま ${items.length}コース）。分けて送ってください。`); return; }
   const nRoutes = items.reduce((s, x) => s + x.routes.length, 0);
   const subject = mailSubject(items);
   const msg = `次のルートを、${rec.length}名にそれぞれ1通ずつ送ります。\n\n【ルート】${nRoutes}件\n`
     + items.map(x => `・${x.course.school_name} ${x.course.course_name}（${x.routes.map(itemLabel).join('、')}）`).join('\n')
     + `\n\n【送り先】\n` + rec.map(r => `・${r.name ? r.name + '　' : ''}${r.email}`).join('\n') + `\n\n【件名】${subject}\n\nよろしいですか？`;
-  if(!confirm(msg)) return;
+  if(!confirm(msg)){ sendMsg('送るのを取りやめました。まだ何も送っていません。', 'info'); return; }
 
   const btn = document.getElementById('sendBtn'); btn.disabled = true;
   const box = document.getElementById('sendResult');
@@ -1166,6 +1200,13 @@ async function loadRecent(){
 window.addEventListener('DOMContentLoaded', async () => {
   const ok = await initAuth(['super_admin','admin','operator','staff']);
   if(!ok) return;
+  updateSendInfo();
+  // 送り先の欄が画面に見えているあいだは、「送り先へ」のボタンを隠す
+  try{
+    const side = document.getElementById('sidePanel'), btn = document.getElementById('toSend');
+    if(side && btn && 'IntersectionObserver' in window)
+      new IntersectionObserver(es => btn.classList.toggle('hide', es[0].isIntersecting && es[0].intersectionRatio > 0.25), { threshold: [0, 0.25, 0.5, 1] }).observe(side);
+  }catch(e){}
   try{ await loadAll(); renderCourses(); }
   catch(e){ document.getElementById('courses').innerHTML = ''; say('経路を読み込めませんでした。画面を読み込み直してください：' + esc(e.message)); }
   try{ await loadRecipients(); renderRecipients(); }
