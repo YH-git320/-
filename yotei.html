@@ -63,6 +63,7 @@ button.link{border:none;background:none;color:#8a9a90;padding:4px 6px;}
   <p class="sub">各コースの<b>日課（A/B/C…）と運休</b>を月間で一覧します。学校の月間運行依頼書をもとに、日課をリストから選び、<b>中間利用やイレギュラーの注意書き</b>も入力できます。ここが運転手配置・添乗員シフトの土台になります。</p>
 
   <div id="status"></div>
+  <div id="retireWarn"></div>
 
   <div class="panel">
     <div class="row" style="align-items:center;">
@@ -1270,9 +1271,56 @@ function _hashParams(){
   });
   return o;
 }
+/* 🔔 退職日が過ぎているのに、在籍の印が残っている方の知らせ（2026-10-09 八重樫さん）
+   ⚠️ 知らせるだけ。何も書き換えない。判断はデータベースの retire_mismatch（staff_now）の1か所。
+   ⚠️ 閉じられる（その日は見ない）。閉じた記録はこの端末のブラウザだけ。次の日、または対象の方が変わったら、また出る。
+   ⚠️ 読み込めなかったときは「問題なし」にしない。
+   ⚠️ 従業員マスタ（master.html）・配置（haichi.html）にも同じ知らせがある。直すときは3つ揃えて直す。 */
+function _rwEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function _retireWarnClose(){
+  const box = document.getElementById('retireWarn'); if(!box) return;
+  try{
+    Object.keys(localStorage).filter(k=>k.indexOf('retire_warn_closed_')===0 && k!==box._rwKey).forEach(k=>localStorage.removeItem(k));
+    localStorage.setItem(box._rwKey, box._rwSig);
+  }catch(e){}
+  box.innerHTML = '';
+}
+async function retireWarnLoad(){
+  const box = document.getElementById('retireWarn'); if(!box) return;
+  try{
+    const r = await fetch(`${REST_URL}/staff_now?select=id,name,retirement_date,retired_on&retire_mismatch=eq.true&order=retired_on.asc`, { headers:getH() });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const list = await r.json();
+    if(!Array.isArray(list)) throw new Error('形が違います');
+    if(!list.length){ box.innerHTML=''; return; }
+    const d = new Date();
+    const key = 'retire_warn_closed_'+d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
+    const sig = list.map(x=>x.id).sort((a,b)=>a-b).join(',');
+    try{ if(localStorage.getItem(key)===sig){ box.innerHTML=''; return; } }catch(e){}
+    const role = sessionStorage.getItem('takao_role');
+    let perms = {}; try{ perms = JSON.parse(sessionStorage.getItem('takao_permissions')) || {}; }catch(e){}
+    const canEdit = role==='super_admin' || !!perms.staff_edit;
+    const items = list.map(x=>{
+      const act = canEdit ? `<a href="master.html#employees&e=${x.id}" target="_blank" rel="noopener" style="margin-left:8px;color:#94402f;font-weight:700;">従業員マスタで開く →</a>` : '';
+      return `<li>${_rwEsc(x.name)}（退職日：${_rwEsc(x.retirement_date||'')}）${act}</li>`;
+    }).join('');
+    box.innerHTML = `<div style="position:relative;background:#fdf1ef;border:1px solid #e0b4ac;color:#7a2e22;border-radius:10px;padding:12px 40px 12px 16px;margin:12px 0;font-size:13px;line-height:1.7;">
+      <button type="button" title="今日は閉じる" onclick="_retireWarnClose()" style="position:absolute;right:8px;top:6px;border:none;background:transparent;font-size:20px;line-height:1;cursor:pointer;color:#7a2e22;width:auto;padding:0 4px;">×</button>
+      <div style="font-weight:700;">⚠️ 退職日が過ぎているのに、在籍の印が残っている方が ${list.length}名 います</div>
+      <ul style="margin:6px 0 6px 20px;padding:0;">${items}</ul>
+      <div style="font-size:12px;color:#8a4b40;">
+        ${canEdit ? '従業員マスタで、退職された方は「退職・無効にする」、退職日の入力違いや再雇用の方は「編集」で退職日を直してください。' : '従業員情報を編集できる方（管理者など）にお伝えください。'}
+        この知らせは、×で今日は閉じられます（明日、また出ます）。
+      </div></div>`;
+    box._rwKey = key; box._rwSig = sig;
+  }catch(e){
+    box.innerHTML = '<div style="margin:12px 0;padding:8px 12px;border:1px solid #e0cfa0;background:#fbf6e6;color:#7a6320;border-radius:8px;font-size:12px;">退職日のチェックを読み込めませんでした（「該当なし」の意味ではありません）。</div>';
+  }
+}
 document.addEventListener('DOMContentLoaded', async () => {
   const ok = await initAuth(['super_admin','admin','operator','staff']);
   if (!ok) return;
+  retireWarnLoad();   // 待たずに出す。失敗しても本体の表示を止めない
   const pop=document.createElement('div'); pop.id='calPop'; pop.style.cssText='display:none;position:fixed;z-index:9999;background:#fff;border:1px solid #b7ccbe;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,0.18);max-height:60vh;overflow:auto;'; document.body.appendChild(pop);
   document.addEventListener('click',(e)=>{ const p=document.getElementById('calPop'); if(!p||p.style.display==='none') return; if(p.contains(e.target)) return; if(e.target.closest && e.target.closest('[id^="b_"]')) return; p.style.display='none'; CUR_CID=null; });
   try{

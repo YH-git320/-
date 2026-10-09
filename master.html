@@ -183,6 +183,7 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   background: #fdfffe; transition: box-shadow 0.15s;
 }
 .emp-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.emp-card.emp-focus { outline: 3px solid #c17f3e; outline-offset: 2px; }   /* 警告から開いた方を見分ける */
 .emp-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
 .emp-info .emp-name { font-size: 16px; font-weight: bold; color: #4d7a5e; }
 .emp-info .emp-sub { font-size: 12px; color: #666; margin-top: 3px; }
@@ -494,6 +495,7 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
           </div>
         </details>
         <div id="status-employees" class="status-bar"></div>
+        <div id="retire-warn-box"></div>
       </div>
 
       <!-- 絞り込み -->
@@ -1175,6 +1177,7 @@ const H = getH();
 
 // ===== グローバルキャッシュ =====
 let allEmployees = [];   // {id, name, email, phone, employee_code, license_number, license_expiry, note, jobTypes:[{id,name}]}
+let _pendingEmployeeFocus = null;   // 他のページの警告から #employees&e=ID で来たとき、その方のカードを開く
 let allJobTypes  = [];   // {id, name, description, sort_order}
 let allCourses   = [];
 let allVehiclesMaster = [];
@@ -1278,6 +1281,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (_wantV === null) { try { const s = sessionStorage.getItem('master_vehicle'); if (s) _wantV = parseInt(s, 10); } catch (e) {} }
     try { sessionStorage.removeItem('master_vehicle'); } catch (e) {}
     if (_wantV !== null && !isNaN(_wantV)) { _pendingVehicleOpen = _wantV; _savedSection = 'vehicles'; }
+  }
+  // 月間予定・配置の「退職日が過ぎている方」の警告から「従業員マスタで開く」で来た場合は、従業員セクションでその方のカードへ飛ぶ
+  {
+    const _me = /[#&]e=(\d+)/.exec(location.hash || '');
+    if (_me) { _pendingEmployeeFocus = parseInt(_me[1], 10); _savedSection = 'employees'; }
   }
   if (_savedSection === 'admins' && _role !== 'super_admin') _savedSection = 'employees';
   if (_savedSection === 'staffimport' && !_canEditStaff()) _savedSection = 'employees';
@@ -1438,6 +1446,86 @@ function _empLoadFailed(why){
   if (c) c.textContent = '⚠️';
 }
 
+/* 🔔 退職日が過ぎているのに、在籍の印が残っている方の知らせ（2026-10-09 八重樫さん）
+   ⚠️ 知らせるだけ。何も書き換えない。判断はデータベースの retire_mismatch（staff_now）の1か所。
+      自動で在籍の印を外さない（退職日の入力ミスで、在籍中の方が消えるのを防ぐため）。
+   ⚠️ 閉じられる（その日は見ない）。閉じた記録はこの端末のブラウザだけ。次の日、または対象の方が変わったら、また出る。
+   ⚠️ 読み込めなかったときは「問題なし」にしない（知らせが消えるだけだと、問題なしと見分けが付かない）。
+   ⚠️ 月間予定（yotei.html）・配置（haichi.html）にも同じ知らせがある。直すときは3つ揃えて直す。 */
+function _retireWarnRender(box, list, local) {
+  if (!list.length) { box.innerHTML = ''; return; }
+  const d = new Date();
+  const key = 'retire_warn_closed_' + d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+  const sig = list.map(x => x.id).sort((a, b) => a - b).join(',');
+  try { if (localStorage.getItem(key) === sig) { box.innerHTML = ''; return; } } catch (e) {}
+  const role = sessionStorage.getItem('takao_role');
+  let perms = {}; try { perms = JSON.parse(sessionStorage.getItem('takao_permissions')) || {}; } catch (e) {}
+  const canEdit = role === 'super_admin' || !!perms.staff_edit;
+  const items = list.map(x => {
+    const act = !canEdit ? ''
+      : (local ? `<button class="btn btn-edit btn-small" style="margin-left:8px;" onclick="focusEmployee(${x.id})">この方を表示</button>`
+               : `<a href="master.html#employees&e=${x.id}" target="_blank" rel="noopener" style="margin-left:8px;color:#94402f;font-weight:700;">従業員マスタで開く →</a>`);
+    return `<li>${esc(x.name)}（退職日：${esc(x.retirement_date || '')}）${act}</li>`;
+  }).join('');
+  box.innerHTML = `<div style="position:relative;background:#fdf1ef;border:1px solid #e0b4ac;color:#7a2e22;border-radius:10px;padding:12px 40px 12px 16px;margin:12px 0;font-size:13px;line-height:1.7;">
+    <button type="button" title="今日は閉じる" onclick="_retireWarnClose()" style="position:absolute;right:8px;top:6px;border:none;background:transparent;font-size:20px;line-height:1;cursor:pointer;color:#7a2e22;">×</button>
+    <div style="font-weight:700;">⚠️ 退職日が過ぎているのに、在籍の印が残っている方が ${list.length}名 います</div>
+    <ul style="margin:6px 0 6px 20px;padding:0;">${items}</ul>
+    <div style="font-size:12px;color:#8a4b40;">
+      ${canEdit
+        ? '退職された方は、「退職・無効にする」で在籍の印を外してください。退職日の入力違いや、再雇用で働き続けている方は、「編集」で退職日を直してください。'
+        : '従業員情報を編集できる方（管理者など）にお伝えください。'}
+      この知らせは、×で今日は閉じられます（明日、また出ます）。
+    </div></div>`;
+  box._rwKey = key; box._rwSig = sig;
+}
+function _retireWarnClose() {
+  const box = document.getElementById('retire-warn-box');
+  if (!box) return;
+  try {
+    Object.keys(localStorage).filter(k => k.indexOf('retire_warn_closed_') === 0 && k !== box._rwKey).forEach(k => localStorage.removeItem(k));
+    localStorage.setItem(box._rwKey, box._rwSig);
+  } catch (e) {}
+  box.innerHTML = '';
+}
+async function retireWarnLoadMaster() {
+  const box = document.getElementById('retire-warn-box');
+  if (!box) return;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_staff_directory`, {
+      method: 'POST', headers: getH(), body: JSON.stringify({ p_filter: 'active' })
+    });
+    const data = await res.json();
+    if (!res.ok || !Array.isArray(data)) throw new Error('HTTP ' + res.status);
+    const list = data.filter(e => e.retire_mismatch)
+      .map(e => ({ id: e.id, name: e.name, retirement_date: e.retirement_date }))
+      .sort((a, b) => _dateNum(a.retirement_date) - _dateNum(b.retirement_date));
+    _retireWarnRender(box, list, true);
+  } catch (e) {
+    box.innerHTML = '<div style="margin:12px 0;padding:8px 12px;border:1px solid #e0cfa0;background:#fbf6e6;color:#7a6320;border-radius:8px;font-size:12px;">退職日のチェックを読み込めませんでした（「該当なし」の意味ではありません）。画面を開き直してください。</div>';
+  }
+}
+// 一覧のその方のカードへ飛んで、色を付けて見せる。絞り込みで隠れているときは、絞り込みを外す
+function focusEmployee(id) {
+  if (!document.getElementById('emp-card-' + id)) {
+    const n = document.getElementById('filter-name'); if (n) n.value = '';
+    const j = document.getElementById('filter-jobtype'); if (j) j.value = '';
+    const inc = document.getElementById('filter-incomplete'); if (inc) inc.checked = false;
+    filterEmployees();
+  }
+  const el = document.getElementById('emp-card-' + id);
+  if (!el) return false;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.classList.add('emp-focus');
+  setTimeout(() => el.classList.remove('emp-focus'), 8000);
+  return true;
+}
+function _focusPendingEmployee() {
+  if (_pendingEmployeeFocus === null) return;
+  const id = _pendingEmployeeFocus; _pendingEmployeeFocus = null;
+  if (!focusEmployee(id)) showStatus('status-employees', 'error', '指定の従業員が、いまの一覧に見つかりませんでした（「現役」の一覧にいない可能性があります）');
+}
+
 async function loadEmployees() {
   const empFilter = document.querySelector('input[name="emp-filter"]:checked')?.value || 'active';
   const filter = empFilter === 'all' ? 'order=name' : empFilter === 'retired' ? 'active=eq.false&order=name' : 'active=eq.true&order=name';
@@ -1477,6 +1565,8 @@ async function loadEmployees() {
     /* ⚠️ 「全部」で0名は実務上ありえない。読めていない可能性を疑う */
     if (!allEmployees.length && _pf === 'all'){ _empLoadFailed('0名で返ってきました'); return; }
     filterEmployees();
+    retireWarnLoadMaster();     // 退職日が過ぎているのに在籍の印が残っている方の知らせ（一覧の絞り込みに関係なく出す）
+    _focusPendingEmployee();    // 他のページの警告から来たときは、その方のカードへ
   } catch(e) {
     console.error('loadEmployees exception:', e);
     _empLoadFailed(e && e.message);
