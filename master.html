@@ -1676,7 +1676,7 @@ function renderEmployeeGrid(employees, col) {
             <!-- ⚠️ 「退職」と出ているかどうかではなく、在籍の印（active）が残っているかで出す。
                  退職日が過ぎて「退職」と表示された方こそ、この印を外す必要がある。
                  表示で判断すると「⚠️ 在籍の印が残っています」と知らせながら、直す手段を隠すことになる（2026-09-01） -->
-            ${(_canEdit && emp.active !== false) ? `<button class="btn btn-danger btn-small" onclick="deleteEmployee(${emp.id},'${escAttr(emp.name)}')">無効化</button>` : ''}
+            ${(_canEdit && emp.active !== false) ? `<button class="btn btn-danger btn-small" onclick="deleteEmployee(${emp.id},'${escAttr(emp.name)}')">退職・無効にする</button>` : ''}
           </div>
         </div>
         <div class="job-chips">

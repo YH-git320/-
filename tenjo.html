@@ -890,7 +890,7 @@ function renderStaffGrid() {
       </div>
       <div style="display:flex; gap:6px; flex-shrink:0;">
         ${canContact ? `<button class="btn btn-edit btn-small" onclick="startEditStaff(${s.id})">メール編集</button>` : ''}
-        ${canFull ? `<button class="btn btn-danger btn-small" onclick="deleteStaff(${s.id}, '${_stEsc(s.name).replace(/'/g,'&#39;')}')">無効化</button>` : ''}
+        ${canFull ? `<button class="btn btn-danger btn-small" onclick="deleteStaff(${s.id}, '${_stEsc(s.name).replace(/'/g,'&#39;')}')">退職・無効にする</button>` : ''}
       </div>
     </div>`;
   }).join('');
