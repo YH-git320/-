@@ -70,21 +70,21 @@ details.pl summary{cursor:pointer;font-size:13px;color:var(--g);}
 </header>
 <main>
   <h1>送迎業務マスタ</h1>
-  <p class="sub">都筑車庫・青葉方面の<b>添乗員の送迎</b>を、コースとは別に1か所で登録します。「朝」「登校後」「下校前」「下校後」の4つです。時刻が決まるのは<b>「下校前」だけ</b>で、矢口の下校出発時間から数えます。</p>
-  <div class="infobar">いまは<b>登録するだけ</b>の画面です。月間予定からの送迎の自動作成と、配置画面への表示は、これから作ります。<br>登録済みの内容は、岩﨑さんの資料と八重樫さんのお話をもとにした<b>仮の入力</b>です。順番や場所は、確認して直してください。</div>
+  <p class="sub">都筑車庫・青葉方面の<b>添乗員の送迎</b>を、コースとは別に、1か所で登録する画面です。「朝」「登校後」「下校前」「下校後」の4つがあります。時刻を登録するのは<b>「下校前」だけ</b>で、矢口特別支援学校の下校出発時間の何分前かを登録します。</p>
+  <div class="infobar">現在は、<b>登録のみ</b>ができる画面です。月間予定からの送迎の自動作成と、配置画面への表示は、これから作成します。<br>すでに登録されている内容は、岩﨑さんの資料と八重樫さんのお話をもとにした<b>仮の入力</b>です。順番と場所は、確認のうえ、変更してください。</div>
   <div id="status"></div>
   <div class="wrap">
     <div>
       <div class="ptitle">送迎業務</div>
       <div id="jobs"></div>
       <div class="panel" style="margin-top:12px;">
-        <details class="pl"><summary>＋ 場所が無いとき（場所を足す）</summary>
+        <details class="pl"><summary>＋ 場所が一覧にないとき（場所を追加する）</summary>
           <div style="margin-top:10px;">
             <label class="fld">場所の名前（例：矢口特別支援学校）</label><input type="text" id="plName">
             <label class="fld" style="margin-top:8px;">住所（分かれば）</label><input type="text" id="plAddr">
             <label class="fld" style="margin-top:8px;">座標（分かれば。例：35.55, 139.52）</label><input type="text" id="plCoord">
-            <div style="margin-top:10px;"><button class="mini" onclick="addPlace()">この場所を足す</button></div>
-            <div class="muted" style="margin-top:6px;">足すだけです。すでにある場所は変わりません。</div>
+            <div style="margin-top:10px;"><button class="mini" onclick="addPlace()">この場所を追加する</button></div>
+            <div class="muted" style="margin-top:6px;">場所を追加するだけです。すでにある場所は変更されません。</div>
           </div>
         </details>
       </div>
@@ -895,13 +895,13 @@ function status(msg, ok){
 
 const PHASES = ['朝','登校後','下校前','下校後'];
 const PHASE_HELP = {
-  '朝':'登校便の前。都筑車庫に出勤する添乗員（青葉方面の人）を社用車で都筑車庫へ送ります。出社時刻だけ決まっています。',
-  '登校後':'登校便のあと。田園調布のハイエースが、田園調布と矢口の添乗員を青葉方面へ送り、都筑車庫へ戻ります。時刻は決めません（回送ルートだけ）。',
-  '下校前':'下校便の前。矢口の下校出発時間から数えて出庫します。ここだけ時刻が決まります。',
-  '下校後':'下校便のあと。朝の送迎の逆です。時刻は決めません（全員が帰庫次第、出発します）。'
+  '朝':'登校便の前の送迎です。都筑車庫に出勤する添乗員（青葉方面の方）を、社用車で都筑車庫へお送りします。登録する時刻は、出社の時刻だけです。',
+  '登校後':'登校便のあとの送迎です。田園調布のハイエースで、田園調布と矢口の添乗員を青葉方面へお送りし、都筑車庫へ戻ります。時刻は登録しません（通る場所の順番だけを登録します）。',
+  '下校前':'下校便の前の送迎です。矢口特別支援学校の下校出発時間の何分前に出発するかを登録します。時刻を登録するのは、この送迎だけです。',
+  '下校後':'下校便のあとの送迎です。朝の送迎の逆の順番で、青葉方面へお送りします。時刻は登録しません（全員が帰庫したら出発します）。'
 };
 const POOLS = ['都筑出勤全員','田園調布ハイエース'];
-const POOL_HELP = { '都筑出勤全員':'都筑車庫に出勤する運転手なら誰でも', '田園調布ハイエース':'田園調布のハイエースのコースの運転手だけ' };
+const POOL_HELP = { '都筑出勤全員':'都筑車庫に出勤する運転手であれば、どなたでも', '田園調布ハイエース':'田園調布のハイエースのコースの運転手のみ' };
 const KINDS = ['発','乗','降','着'];
 const KIND_HELP = { '発':'出発', '乗':'添乗員が乗る', '降':'添乗員が降りる', '着':'到着' };
 const WD = ['月','火','水','木','金','土','日'];   // 1〜7
@@ -1055,9 +1055,9 @@ function renderEditor(){
   h += '<div class="muted" style="margin-top:8px;">' + escHtml(PHASE_HELP[F.phase] || '') + '</div></div>';
 
   if (locked){
-    h += '<div class="warnbar">この版でできた過去の送迎の記録があるため、直せません。内容を変えるときは、新しい版を作って「〇月〇日より適用」を入れてください。</div>';
+    h += '<div class="warnbar">この版から作成された過去の日の送迎の記録があるため、変更できません。内容を変更するときは、新しい版を作成し、「〇月〇日より適用」の日付を入力してください。</div>';
   } else if (F.valid_from <= todayStr()){
-    h += '<div class="notebar">この版は適用中ですが、過去の日の送迎の記録がまだないので、直すことができます。</div>';
+    h += '<div class="notebar">この版は適用中ですが、過去の日の送迎の記録がまだないため、変更できます。</div>';
   }
 
   h += '<div class="panel">';
@@ -1073,7 +1073,7 @@ function renderEditor(){
     h += '<div><label class="fld">出社時刻（例：5:10）</label><input type="text" value="' + escAttr(F.fixed_start) + '" placeholder="5:10" oninput="fset(\'fixed_start\',this.value)"' + dis + '></div>';
   }
   if (isMae){
-    h += '<div><label class="fld">基準にする学校（この学校の下校出発から数えます）</label><select onchange="fset(\'ref_school\',this.value)"' + dis + '>'
+    h += '<div><label class="fld">基準にする学校（この学校の下校出発時間の何分前かを登録します）</label><select onchange="fset(\'ref_school\',this.value)"' + dis + '>'
       + opt('', '（選んでください）', F.ref_school)
       + SCHOOLS.map(s => opt(s, s, F.ref_school)).join('') + '</select></div>';
   }
@@ -1088,9 +1088,9 @@ function renderEditor(){
   // 経由地
   h += '<div class="panel"><div class="ptitle">経由地（順番どおり）</div>';
   if (isMae){
-    h += '<div class="muted" style="margin-bottom:8px;">「発」の行に、<b>' + escHtml(F.ref_school || '基準の学校') + 'の下校出発の何分前か</b>を入れます。　試しに計算する下校出発時刻：<input type="text" value="' + escAttr(SAMPLE) + '" style="width:80px;display:inline-block;" oninput="SAMPLE=this.value;renderEditor()"> <span class="muted">（保存されません）</span></div>';
+    h += '<div class="muted" style="margin-bottom:8px;">「発」の行に、<b>' + escHtml(F.ref_school || '基準の学校') + 'の下校出発時間の何分前か</b>を入力してください。　確認用の下校出発時刻：<input type="text" value="' + escAttr(SAMPLE) + '" style="width:80px;display:inline-block;" oninput="SAMPLE=this.value;renderEditor()"> <span class="muted">（保存されません）</span></div>';
   } else {
-    h += '<div class="muted" style="margin-bottom:8px;">この局面は時刻を持ちません。場所と順番だけ入れます。</div>';
+    h += '<div class="muted" style="margin-bottom:8px;">この送迎では、時刻は登録しません。場所と順番だけを登録します。</div>';
   }
   if (!F.stops.length) h += '<div class="muted" style="margin:6px 0;">経由地がまだ入っていません。</div>';
   h += '<div class="stops">' + F.stops.map((s,i) => {
@@ -1101,16 +1101,16 @@ function renderEditor(){
       + (isMae ? '<span class="so"><input type="text" value="' + escAttr(s.offset_min) + '" placeholder="分" oninput="sset(' + i + ',\'offset_min\',this.value)"' + dis + '> 分前 <span class="muted">' + escHtml(minLabel(s.offset_min)) + (calc ? '＝' + escHtml(calc) : '') + '</span></span>' : '')
       + '<button class="mini" onclick="smove(' + i + ',-1)"' + dis + '>▲</button><button class="mini" onclick="smove(' + i + ',1)"' + dis + '>▼</button><button class="mini" onclick="sdel(' + i + ')"' + dis + '>✕</button></div>';
   }).join('') + '</div>';
-  h += '<div style="margin-top:8px;"><button class="mini" onclick="sadd()"' + dis + '>＋ 経由地を足す</button></div></div>';
+  h += '<div style="margin-top:8px;"><button class="mini" onclick="sadd()"' + dis + '>＋ 経由地を追加する</button></div></div>';
 
   // 操作
   h += '<div class="panel"><div class="row">'
     + '<button class="primary" onclick="save()"' + dis + '>💾 保存</button>'
     + '<span class="muted">' + (DIRTY ? '保存していない変更があります' : '') + '</span></div></div>';
 
-  h += '<div class="panel"><div class="ptitle">新しい版を作る（〇月〇日より適用）</div>'
-    + '<div class="muted" style="margin-bottom:8px;">内容を変えるときは、今の最新版を写して新しい版を作ります。過去の日は変わりません。</div>'
-    + '<div class="row"><input type="date" id="nvDate" style="width:auto;"> <button onclick="newVer()">この日より適用の新しい版を作る</button></div></div>';
+  h += '<div class="panel"><div class="ptitle">新しい版を作成する（〇月〇日より適用）</div>'
+    + '<div class="muted" style="margin-bottom:8px;">内容を変更するときは、現在の最新版の内容を引き継いで、新しい版を作成します。過去の日の内容は変更されません。</div>'
+    + '<div class="row"><input type="date" id="nvDate" style="width:auto;"> <button onclick="newVer()">この日より適用する新しい版を作成する</button></div></div>';
 
   box.innerHTML = h;
 }
@@ -1162,7 +1162,7 @@ async function rpc(name, body){
 async function save(){
   if (!LOADED){ status('読み込めていないので、保存できません。画面を開き直してください。', false); return; }
   if (!F) return;
-  if (F.phase === '朝' && !validFixed(F.fixed_start)){ status('出社時刻は「5:10」の形で入れてください。', false); return; }
+  if (F.phase === '朝' && !validFixed(F.fixed_start)){ status('出社時刻は「5:10」の形式で入力してください。', false); return; }
   const def = {
     id:F.id, job_key:F.job_key, name:F.name, phase:F.phase, valid_from:F.valid_from,
     ref_school:F.ref_school || null, fixed_start:F.fixed_start || null,
@@ -1185,12 +1185,12 @@ async function save(){
 async function newVer(){
   if (!F) return;
   const d = document.getElementById('nvDate').value;
-  if (!d){ status('適用開始日を入れてください。', false); return; }
+  if (!d){ status('適用開始日を入力してください。', false); return; }
   if (!confirmLeave()) return;
-  if (!confirm('「' + md(d) + 'より適用」の新しい版を作ります。今の最新版の内容を写します。過去の日は変わりません。よろしいですか？')) return;
+  if (!confirm('「' + md(d) + 'より適用」する新しい版を作成します。現在の最新版の内容を引き継ぎます。過去の日の内容は変更されません。よろしいでしょうか？')) return;
   try{
     const id = await rpc('new_shuttle_version', { p_job_key:F.job_key, p_valid_from:d });
-    status('新しい版を作りました。内容を直して「保存」してください。', true);
+    status('新しい版を作成しました。内容を変更したうえで、「保存」を押してください。', true);
     DIRTY = false;
     await load(); openDef(Number(id));
   }catch(e){ status(e.message, false); }
@@ -1200,7 +1200,7 @@ async function addPlace(){
   const name = (document.getElementById('plName').value || '').trim();
   const addr = (document.getElementById('plAddr').value || '').trim();
   const coord = (document.getElementById('plCoord').value || '').trim();
-  if (!name){ status('場所の名前を入れてください。', false); return; }
+  if (!name){ status('場所の名前を入力してください。', false); return; }
   if (PLACES.some(p => p.name === name)){ status('その名前の場所はすでにあります。経由地の場所の欄から選べます。', false); return; }
   try{
     const r = await fetch(REST_URL + '/places', { method:'POST', headers:getH(), body:JSON.stringify({ name:name, address:addr, coord:coord }) });
