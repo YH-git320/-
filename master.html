@@ -2240,7 +2240,7 @@ function applyCourseColVisibility() {
 async function loadCourses() {
   try {
     const [vRes, oRes, pRes, cRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/vehicles?active=eq.true&order=vehicle_number&select=id,vehicle_number,vehicle_type,office_name`, { headers: getH() }),
+      fetch(`${SUPABASE_URL}/rest/v1/vehicles?active=eq.true&in_service=eq.true&order=vehicle_number&select=id,vehicle_number,vehicle_type,office_name`, { headers: getH() }),
       fetch(`${SUPABASE_URL}/rest/v1/offices?active=eq.true&order=name&select=id,name`, { headers: getH() }),
       fetch(`${SUPABASE_URL}/rest/v1/permits?active=eq.true&order=permit_number&select=id,permit_number,permit_type,short_label,target_name`, { headers: getH() }),
       fetch(`${SUPABASE_URL}/rest/v1/courses?active=eq.true&order=id&select=id,prefecture,school_name,contract_name,course_name,vehicle_id,office_id,permit_id,vehicle_type,contract_start,contract_end`, { headers: getH() })

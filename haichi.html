@@ -1159,7 +1159,7 @@ async function hLoadBase(){
   RETIRED_P['添乗員'] = gone.filter(s=>att.has(s.id));
   RETIRED_P['運転手'] = gone.filter(s=>drv.has(s.id));
   // 車両
-  VEH = await _fetchAllStrict('vehicles_with_office?select=id,vehicle_number,vehicle_model,permit_type,capacity,current_office_name,active&active=eq.true&order=vehicle_number');
+  VEH = await _fetchAllStrict('vehicles_with_office?select=id,vehicle_number,vehicle_model,permit_type,capacity,current_office_name,active&active=eq.true&in_service=eq.true&order=vehicle_number');
   /* ⚠️ 0台は実務上ありえない。読めていない可能性を疑う */
   if(!VEH.length){ PEOPLE_BROKEN = true;
     throw new Error('車両が1台も出てきませんでした。読み取りに失敗しているかもしれません。画面を開き直してください。'); }
