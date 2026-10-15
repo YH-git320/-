@@ -1039,7 +1039,7 @@ function _permOf(vid){ return PERM.filter(x=>x.vehicle_id===vid); }
 // 許可を変更する（履歴はDB側で自動的に切り替わる）
 async function dChangePermit(){
   const v=VEHBY[CURV]; if(!v) return;
-  const list=['特定','貸切','請負','介護','自家用'];
+  const list=['特定','貸切','請負','乗用(介護)','貨物','貨物(霊柩)','自家用'];
   const cur=v.permit_type||'';
   const inp=prompt(
     `${v.vehicle_number} の許可を変更します。\n現在：${cur||'（未設定）'}\n\n`

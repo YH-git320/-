@@ -1190,7 +1190,7 @@ function _vehOptsFor(cid){
   }
   const groups = {};
   VEH.forEach(v=>{ const k = v.permit_type || '（許可未設定）'; (groups[k]=groups[k]||[]).push(v); });
-  const order = ['特定','貸切','請負','介護','自家用'];
+  const order = ['特定','貸切','請負','乗用(介護)','貨物','貨物(霊柩)','自家用'];
   const keys = Object.keys(groups).sort((a,b)=>{
     const ia=order.indexOf(a), ib=order.indexOf(b);
     return (ia<0?99:ia)-(ib<0?99:ib) || a.localeCompare(b,'ja');
