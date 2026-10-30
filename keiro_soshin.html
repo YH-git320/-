@@ -896,7 +896,7 @@ async function loadAll(){
   const [courses, vers, pts, forms, scen] = await Promise.all([
     fetchAll('courses?select=id,school_name,course_name&active=eq.true&order=school_name,course_name,id'),
     fetchAll('course_timetable_versions?select=id,course_id,valid_from&order=id'),
-    fetchAll('course_route_points?select=id,course_id,version_id,segment,seq,name,lat,lng,is_stop,split_here,form_name,scenario_id&order=course_id,segment,seq,id'),
+    fetchAll('course_route_points?select=id,course_id,version_id,segment,seq,name,lat,lng,is_stop,split_here,note,form_name,scenario_id&order=course_id,segment,seq,id'),
     fetchAll('course_schedule_forms?select=id,course_id,version_id,form_name,gekou_departures&active=eq.true&order=id'),
     fetchAll('course_scenarios?select=id,course_id,segment,label&order=id'),
   ]);
@@ -1065,7 +1065,7 @@ const clean = n => String(n || '').replace(/（(下校|登校)）$/, '');
 /** ④の rptLegs と同じ区切り方。byStop=false：「切」だけ／true：バス停でも切る */
 function legsOf(pts, byStop){
   if(pts.length < 2) return [];
-  const mk = (a, b) => ({ from: clean(pts[a].name) || `${a + 1}番目`, to: clean(pts[b].name) || `${b + 1}番目`, pts: pts.slice(a, b + 1) });
+  const mk = (a, b) => ({ from: clean(pts[a].name) || `${a + 1}番目`, to: clean(pts[b].name) || `${b + 1}番目`, cut: !!pts[b].split_here, pts: pts.slice(a, b + 1) });
   const legs = []; let start = 0;
   for(let i = 1; i < pts.length; i++){
     const last = i === pts.length - 1;
@@ -1081,58 +1081,67 @@ function selectedByCourse(){
   const ids = new Set(); SEL.forEach(k => ids.add(Number(k.split('|')[0])));
   return COURSES.filter(c => ids.has(c.id)).map(c => ({ course: c, routes: (ROUTES[c.id] || []).filter(r => SEL.has(r.key) && usable(r)) })).filter(x => x.routes.length);
 }
+/* ---------- メール本文：運転手向けのボタン形式 ----------
+   仕様の正本：claude_work\tools\route_mail\README.md（2026-08-19「大塚ろう学校 六郷コース」の形。八重樫さん 2026-10-30「携帯で見てこちらが良い。デフォルトに」）
+   ・緑の大きなボタン＝全区間を通しで／白いボタン＝バス停ごと　・名前のない地点は「Uターン地点」　・「切」の後ろに「ここでUターン」の案内
+   ・地図の吹き出し（地点の note）は「注意」の枠で一番上に　・バス停の区切りが無い経路は「バス停ごと」を出さず1行で書く */
+const nmBtn = s => (!s || /^\d+番目$/.test(s)) ? 'Uターン地点' : s;
+/** 44地点をこえる区間は、つなぎ目を重ねて分ける */
+function splitLeg(lg){
+  const out = [];
+  for(let s = 0; ; s += MAXP - 1){ out.push(lg.pts.slice(s, s + MAXP)); if(s + MAXP >= lg.pts.length) break; }
+  return out.map((c, i) => ({ from: lg.from, to: lg.to, pts: c, part: out.length > 1 ? i + 1 : 0, parts: out.length, cut: i === out.length - 1 ? lg.cut : false }));
+}
+function btnHtml(g, big){
+  const label = nmBtn(g.from) + ' → ' + nmBtn(g.to) + (g.parts > 1 ? `（その${g.part}）` : '');
+  return `<a href="${mapUrl(g.pts)}" style="display:block;background:${big ? '#4d7a5e' : '#ffffff'};color:${big ? '#ffffff' : '#2d4a38'};border:${big ? 'none' : '2px solid #b4d4c0'};text-decoration:none;padding:${big ? '17px 18px' : '13px 16px'};border-radius:10px;font-size:${big ? '17px' : '15px'};font-weight:700;margin:0 0 9px;text-align:center;">&#128506; ${esc(label)}</a>`
+    + (g.cut ? `<div style="text-align:center;color:#b5453a;font-size:14px;font-weight:700;margin:-3px 0 12px;">&#11015; ここでUターン。終わったら次のボタン</div>` : '');
+}
+const subHd = t => `<div style="font-size:14px;font-weight:700;color:#4d7a5e;margin:14px 0 8px;">${t}</div>`;
 function routeBlock(group){
   // group: { labels:[...], pts:[...], kaisou:bool }
-  const pts = group.pts;
-  const stops = pts.filter(p => p.is_stop).map(p => clean(p.name)).filter(Boolean);
-  const chain = stops.length >= 2 ? stops.join(' → ') : `${clean(pts[0].name) || '出発地'} → ${clean(pts[pts.length - 1].name) || '到着地'}`;
-  const via = pts.length - pts.filter(p => p.is_stop).length;
-  const color = group.kaisou ? '#16a34a' : '#2563eb';
-  let h = `<div style="margin:16px 0 4px;padding-left:8px;border-left:4px solid ${color};">`;
-  h += group.labels.map(l => `<b>${esc(l)}</b>`).join('<br>');
-  if(group.labels.length > 1) h += `<br><span style="color:#666;font-size:12px;">（以上は同じ経路です）</span>`;
-  h += `</div><p style="margin:2px 0 4px;">${esc(chain)}${via > 0 ? `（経由点${via}か所）` : ''}</p>`;
-  const links = mapUrls(pts);
-  h += `<p style="margin:0 0 4px;">全ルート図：` + links.map((u, i) => `<a href="${u}">▶ 地図で開く${links.length > 1 ? `（その${i + 1}）` : ''}</a>`).join('　') + `</p>`;
-  const legs = legsOf(pts, true);
-  if(legs.length > 1){
-    h += `<p style="margin:6px 0 2px;color:#444;">バス停ごとのルート図</p>`;
-    legs.forEach((lg, i) => {
-      const us = mapUrls(lg.pts);
-      h += `<p style="margin:2px 0 2px 12px;">${i + 1}. ${esc(lg.from)} → ${esc(lg.to)}　` + us.map(u => `<a href="${u}">▶ 地図で開く</a>`).join('　')
-        + (lg.pts.length === 2 ? `　<span style="color:#b45309;font-size:12px;">※地点が2か所のため、道すじはGoogleの選ぶ道になります</span>` : '') + `</p>`;
-    });
-  }
-  return h;
+  const whole = legsOf(group.pts, false).flatMap(splitLeg), stops = legsOf(group.pts, true).flatMap(splitLeg);
+  const same = stops.length === whole.length && stops.every((g, i) => mapUrl(g.pts) === mapUrl(whole[i].pts));   // バス停の区切りが無い＝通しと同じ
+  let h = `<div style="margin:0 0 30px;"><div style="font-size:19px;font-weight:700;color:#2d4a38;border-bottom:2px solid #4d7a5e;padding-bottom:6px;margin-bottom:4px;">${group.labels.map(esc).join('／')}</div>`;
+  if(group.labels.length > 1) h += `<div style="font-size:12px;color:#6b7d72;margin:2px 0 0;">（上の便は、同じ経路です）</div>`;
+  h += subHd('■ 全区間を通しで' + (whole.length > 1 ? `（${whole.length}本に分かれます）` : ''));
+  whole.forEach(g => { h += btnHtml(g, true); });
+  if(same) h += `<div style="font-size:13px;color:#6b7d72;margin:6px 0 0;">バス停ごとの区切りはありません（出発地と到着地だけの経路です）。</div>`;
+  else { h += subHd(`■ バス停ごと（${stops.length}区間）`); stops.forEach(g => { h += btnHtml(g, false); }); }
+  return h + '</div>';
 }
-function courseSection(x){
+function courseParts(x){
   // 同じ座標の経路は、1つにまとめる
-  const groups = [];
+  const groups = [], notes = [];
   x.routes.forEach(r => {
     const vp = validPts(r), sig = vp.map(p => `${Number(p.lat)},${Number(p.lng)}|${p.is_stop ? 1 : 0}|${p.split_here ? 1 : 0}`).join(';');
     const g = groups.find(y => y.sig === sig);
     if(g){ g.labels.push(itemLabel(r)); g.kaisou = g.kaisou && isKaisou(r.segment); }
     else groups.push({ sig, labels: [itemLabel(r)], pts: vp, kaisou: isKaisou(r.segment) });
+    vp.forEach(p => { const n = String(p.note || '').trim(); if(n && notes.indexOf(n) < 0) notes.push(n); });   // 地図の吹き出し
   });
-  return `<h3 style="margin:26px 0 4px;font-size:16px;border-bottom:2px solid #cbd5e1;padding-bottom:3px;">${esc(x.course.school_name)}　${esc(x.course.course_name)}</h3>` + groups.map(routeBlock).join('');
+  return {
+    head: `<div style="font-size:20px;font-weight:700;color:#2d4a38;margin-bottom:4px;">${esc(x.course.school_name)}／${esc(x.course.course_name)}</div>`,
+    notes: notes.length ? `<div style="background:#fff8e8;border:1px solid #e8d9b0;border-radius:10px;padding:12px 14px;margin-bottom:20px;font-size:14px;line-height:1.8;color:#8a6d1a;"><b>注意</b><br>` + notes.map(n => '・' + esc(n)).join('<br>') + '</div>' : '',
+    blocks: groups.map(routeBlock).join('')
+  };
 }
 function mailSubject(items){
   const c = items[0].course, t = `${c.school_name} ${c.course_name}`;
   return `【高尾輸送】ルート図（${items.length > 1 ? `${t} ほか${items.length - 1}コース` : t}）`;
 }
 function mailHtml(name, items){
-  const today = new Date();
-  return `<div style="font-family:'Yu Gothic UI',Meiryo,sans-serif;font-size:14px;line-height:1.8;color:#222">
-${name ? `<p>${esc(name)} 様</p>` : ''}
-<p>ルート図をお送りします。システムに登録されている座標から作りました。<b>高速道路・有料道路を使わない</b>設定になっています。</p>
-${items.map(courseSection).join('')}
-<h3 style="margin:26px 0 6px;font-size:15px;border-left:4px solid #94a3b8;padding-left:8px">おことわり</h3>
-<ul style="margin:4px 0 0;padding-left:20px">
-<li>停留所は、各区間の名前のとおりです。地図の途中に出る点は、道すじを決めるための経由点です。</li>
-<li>Googleマップの画面では、各地点が近くの住所や施設名で表示されます。</li>
-</ul>
-<p style="margin-top:22px;color:#666;font-size:12px">業務管理システムの登録内容（${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')} 時点）から作成<br>---<br>高尾輸送サービス</p>
-</div>`;
+  const usage = `<div style="background:#f6faf7;border:1px solid #e2ede6;border-radius:10px;padding:12px 14px;margin-bottom:22px;font-size:14px;line-height:1.8;">ボタンを押すとGoogleマップの道案内が開きます。<b>有料道路・高速道路は使わない</b>設定です。<br><b>緑のボタン</b>＝全区間を通しで。<b>白いボタン</b>＝バス停ごと。<br>どちらでも構いません。使いやすいほうをお使いください。</div>`;
+  const parts = items.map(courseParts);
+  let h = `<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:16px;color:#2d3b35;">`;
+  if(name) h += `<div style="font-size:14px;margin-bottom:10px;">${esc(name)} 様</div>`;
+  if(items.length === 1){
+    h += parts[0].head + `<div style="font-size:14px;color:#6b7d72;margin-bottom:18px;">運行経路のご案内</div>` + parts[0].notes + usage + parts[0].blocks;
+  } else {
+    h += `<div style="font-size:20px;font-weight:700;color:#2d4a38;margin-bottom:4px;">運行経路のご案内</div><div style="font-size:14px;color:#6b7d72;margin-bottom:18px;">${items.length}コース</div>` + usage
+      + parts.map(p => `<div style="margin-top:30px;">` + p.head + `<div style="height:10px"></div>` + p.notes + p.blocks + '</div>').join('');
+  }
+  return h + `<div style="color:#9bb0a3;font-size:12px;margin-top:8px;text-align:center;">高尾輸送サービス</div></div>`;
 }
 
 /* ---------- ③ 送る ---------- */
