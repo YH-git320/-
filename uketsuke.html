@@ -962,7 +962,9 @@ function render(){
   h += `<div class="panel"><div class="row" style="justify-content:space-between;"><b>${D.files.length ? 'そろい具合' : 'まだ、書類が添付されていません'}</b><span>${c.have} / ${c.want} 枚</span></div>
         <div class="bar"><i style="width:${pct}%"></i></div>`;
   if(D.files.length){
-    if(!c.missing) h += `<div style="margin-top:6px;color:#1f5e3a;font-weight:700;">すべての学校の書類が、そろいました。</div>`;
+    const short = D.slots.filter(s => haveOf(s) < s.expect);
+    if(!short.length) h += `<div style="margin-top:6px;color:#1f5e3a;font-weight:700;">すべての学校の書類が、そろいました。</div>`;
+    else if(!c.missing) h += `<div style="margin-top:8px;font-size:14px;line-height:1.8;"><b style="color:#9a5f12;">足りない学校は、理由をつけて${open ? '送ります' : '送りました'}（${short.length}校）：</b>` + short.map(s => `${esc(s.label)}${s.expect > 1 ? `（${haveOf(s)}/${s.expect}）` : ''}`).join('、') + '<div class="muted">理由：' + esc([...new Set(short.map(s => s.no_doc_reason).filter(Boolean))].join(' ／ ')) + '</div></div>';
     else {
       h += `<div style="margin-top:8px;font-size:14px;line-height:1.8;"><b>足りない学校（${c.missing}）：</b>` +
         c.missingSlots.map(s => `${esc(s.label)}${s.expect > 1 ? `（${haveOf(s)}/${s.expect}）` : ''}${s.no_doc_reason ? '<span class="tag t-no" style="margin-left:2px;">理由あり</span>' : ''}`).join('、') + '</div>';
