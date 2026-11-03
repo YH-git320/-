@@ -371,11 +371,17 @@ async function _refresh(session) {
   } catch { return null; }
 }
 
+function _uidFromToken(tok){
+  // ログインの証明（トークン）から、自分のユーザーIDを取り出す。取り出せないときは空（→ 行が1つも返らず、権限なしになる）
+  try{ const p = String(tok).split('.')[1].replace(/-/g,'+').replace(/_/g,'/'); return JSON.parse(decodeURIComponent(escape(atob(p)))).sub || ''; }catch(e){ return ''; }
+}
+
 async function _getRole(accessToken) {
   const cached = sessionStorage.getItem('takao_role');
   if (cached) return cached;
   try {
-    const res = await fetch(`${REST_URL}/user_roles?select=role,display_name,permissions,mfa_enforced`, {
+    const uid = _uidFromToken(accessToken);
+    const res = await fetch(`${REST_URL}/user_roles?select=role,display_name,permissions,mfa_enforced&user_id=eq.${encodeURIComponent(uid)}`, {
       headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${accessToken}` },
     });
     if (!res.ok) return null;
