@@ -876,30 +876,25 @@ function render(){
   else h += '<span class="tag t-gray">まだ送信されていません</span>';
   h += `</div></div>`;
 
-  if(open){
-    h += `<div class="panel"><b>${valid ? '新しい版に差し替える' : 'PDFを添付する'}</b>
-      <div class="drop" id="drop" style="margin-top:8px;"><div style="font-weight:700;font-size:15px;">ここに、PDFを1枚ドラッグ</div>
-        <div class="muted" style="margin:6px 0 10px;">または、次のボタンで選びます（10MBまで）</div>
+  if(P.status !== 'closed'){
+    h += `<div class="panel"><b>${valid ? '差し替えるとき' : 'PDFを送る'}</b>
+      <div class="drop" id="drop" style="margin-top:8px;"><div style="font-weight:700;font-size:16px;">ここに、PDFを1枚ドラッグしてください</div>
+        <div class="muted" style="margin:6px 0 10px;">ドラッグすると、そのまま送信されます。差し替えも、同じです。（10MBまで）</div>
         <button type="button" class="primary" id="pickFile">PDFを選ぶ</button></div>
       <input type="file" id="fileIn" accept="application/pdf,.pdf" style="display:none">
       <div id="prog" class="muted" style="margin-top:8px;"></div>`;
     if(pending.length){
-      h += '<div style="margin-top:10px;"><b>送信前の書類</b></div>' + pending.map(f =>
+      h += '<div style="margin-top:10px;"><b>まだ送信していない書類</b>（途中で止まったものです）</div>' + pending.map(f =>
         `<div class="row" style="margin-top:6px;"><span class="chip unc">${esc(f.name)}</span><span class="muted">${esc(kb(f.size))}　${esc(fmtDT(f.uploaded_at))}</span> ${scanTag(f.scan_status)}
-         <button type="button" class="mini" data-act="detach" data-f="${f.id}">取り消す</button></div>`).join('');
+         <button type="button" class="mini" data-act="detach" data-f="${f.id}">取り消す</button></div>`).join('') +
+        '<div style="margin-top:8px;"><button type="button" class="primary" data-act="submit">この書類を送信する</button></div>';
     }
     h += '</div>';
-    if(!files.length){
-      h += `<div class="panel"><b>予定表がない日</b><div class="muted" style="margin:2px 0 8px;">この日の予定表がないときは、理由をつけて選べます。</div>
+    if(!valid && !files.length){
+      h += `<div class="panel"><b>予定表がない日</b><div class="muted" style="margin:2px 0 8px;">この日の予定表がないときは、押すと、理由をつけて送信されます。</div>
         ${noDoc ? `<span class="tag t-no">予定表なし</span> ${esc(slot.no_doc_reason)} <button type="button" class="mini" data-act="nodocClear">取り消す</button>`
                 : `<button type="button" data-act="nodoc">この日は予定表なし</button>`}</div>`;
     }
-    const canSend = pending.length > 0 || (noDoc && !valid);
-    h += `<div class="panel sendbar"><button type="button" class="primary big" data-act="submit" ${canSend ? '' : 'disabled'}>この内容で送信する</button>
-      <span class="muted" style="margin-left:10px;">${canSend ? '送信すると、いま有効な版が入れ替わります。' : (valid ? '新しい版を添付すると、送信できます。' : 'PDFを添付すると、送信できます。')}</span></div>`;
-  } else if(P.status === 'submitted'){
-    h += `<div class="panel"><div class="row" style="justify-content:space-between;"><span>送信済みです（${esc(fmtDT(P.submitted_at))}）。検査の結果が、この画面に出ます。</span>
-      <button type="button" data-act="replace">差し替える</button></div></div>`;
   } else {
     h += '<div class="panel">この受付は終了しています。</div>';
   }
@@ -945,9 +940,9 @@ async function act(a, ds){
       const why = prompt('予定表がない理由を書いてください（例：お休みの日のため）');
       if(why === null) return;
       if(!why.trim()){ say('理由を入力してください。'); return; }
-      await rpc('doc_set_no_doc', {...P, p_slot: D.slots[0].id, p_reason: why.trim()}); await load();
+      await rpc('doc_set_no_doc', {...P, p_slot: D.slots[0].id, p_reason: why.trim()}); await rpc('doc_submit', P); await load(); say('送信しました。', true);
     }
-    else if(a === 'nodocClear'){ await rpc('doc_set_no_doc', {...P, p_slot: D.slots[0].id, p_reason: null}); await load(); }
+    else if(a === 'nodocClear'){ await rpc('doc_replace_start', P).catch(() => {}); await rpc('doc_set_no_doc', {...P, p_slot: D.slots[0].id, p_reason: null}); await load(); }
   });
 }
 
@@ -961,6 +956,8 @@ async function upload(list){
     if(f.size < 1) throw new Error('空のファイルです');
     if(f.size > 10 * 1024 * 1024) throw new Error('10MBを超えています');
     if(prog) prog.textContent = '送信中：' + f.name;
+    const P0 = { p_token: TOKEN, p_period: PERIOD_ID };
+    if(D.period.status === 'submitted') await rpc('doc_replace_start', P0);   // 送信済みなら、差し替えのために開く
     const buf = await f.arrayBuffer();
     if(String.fromCharCode(...new Uint8Array(buf.slice(0,5))) !== '%PDF-') throw new Error('PDFの形式ではありません');
     const sha = hex(await crypto.subtle.digest('SHA-256', buf));
@@ -970,7 +967,8 @@ async function upload(list){
       headers: { 'apikey': ANON_KEY, 'Authorization': 'Bearer ' + s.access_token, 'Content-Type': 'application/pdf', 'x-upsert': 'false' }, body: buf });
     if(!r.ok) throw new Error('保管場所に送れませんでした（' + r.status + '）');
     await rpc('doc_register_file', { p_token: TOKEN, p_period: PERIOD_ID, p_path: path, p_orig: f.name, p_size: f.size, p_sha: sha, p_guess: null });
-    BUSY = false; await load(); say('添付しました。「この内容で送信する」を押してください。', true);
+    await rpc('doc_submit', P0);                                              // そのまま送信する
+    BUSY = false; await load(); say('送信しました。検査の結果が出るまで、お待ちください。', true);
   }catch(e){ BUSY = false; say(errMsg(e) + '（' + esc(f.name) + '）'); }
   finally{ BUSY = false; }
 }

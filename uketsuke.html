@@ -848,7 +848,7 @@ function fmtD(iso){ if(!iso) return ''; const d = new Date(iso); return (d.getMo
 function kb(n){ return n >= 1048576 ? (n/1048576).toFixed(1)+'MB' : Math.max(1,Math.round(n/1024))+'KB'; }
 const CAT = { school_schedule:'学校予定表', hire_schedule:'雇上車運行予定表' };
 const CATSHORT = { school_schedule:'学校予定表', hire_schedule:'雇上車' };
-function slotName(s){ return (CATSHORT[s.category]||'') + '：' + s.label + (s.region ? '（'+s.region+'）' : ''); }
+function slotName(s){ return s.label + (s.region ? '（'+s.region+'）' : ''); }
 function scanTag(st){
   return st === 'passed' ? '<span class="tag t-ok">検査合格</span>'
        : st === 'review' ? '<span class="tag t-no">要確認</span>'
@@ -858,21 +858,17 @@ function scanTag(st){
 
 /* ---- 名前からの候補（ファイル名だけを見る。PDFの中身は、この画面では開かない） ---- */
 function norm(s){ return String(s).replace(/\.pdf$/i,'').replace(/[\s　()（）【】\[\]「」・_\-－―]/g,'').replace(/[ヶケ]/g,'ケ').toLowerCase(); }
-function guessFor(name, catHint){
+function guessFor(name){
+  // 学校の名前（枠の別名）が、ファイル名に入っているかを見る。いちばん長く合うものを選ぶ。1つに決まれば、そのまま確定する
   const nm = norm(name);
-  const hireHint = /依頼書|報告書|共通様式|雇上/.test(nm), schoolHint = /学校予定|行事予定|時刻表|全コース共通|月間予定/.test(nm);
   let best = 0, hits = [];
   for(const s of D.slots){
-    if(s.category === 'crew_monthly') continue;
-    if(catHint && s.category !== catHint) continue;
+    if(s.category !== 'school_group') continue;
     let sc = 0;
     for(const a of (s.aliases || [])){ const na = norm(a); if(na && nm.includes(na)) sc = Math.max(sc, na.length); }
-    if(sc > 0){ hits.push({id:s.id, cat:s.category, sc}); best = Math.max(best, sc); }
+    if(sc > 0){ hits.push({ id: s.id, sc }); best = Math.max(best, sc); }
   }
-  hits = hits.filter(h => h.sc === best);
-  if(hireHint && hits.some(h => h.cat === 'hire_schedule')) hits = hits.filter(h => h.cat === 'hire_schedule');
-  else if(schoolHint && hits.some(h => h.cat === 'school_schedule')) hits = hits.filter(h => h.cat === 'school_schedule');
-  const ids = hits.map(h => h.id);
+  const ids = hits.filter(h => h.sc === best).map(h => h.id);
   if(ids.length === 1) return { slot_ids: ids, candidates: [] };
   return { slot_ids: [], candidates: ids };
 }
@@ -902,109 +898,114 @@ function renderAdminOnly(){
   document.getElementById('app').innerHTML = '<h1>月次書類の受付</h1><p class="sub">管理者として開いています。受付をつくる、リンクを作り直す、案内メールを送る、ができます。</p>' + adminHtml();
 }
 function rerender(){ if(D && D.period) render(); else renderAdminOnly(); }
+const haveOf = s => s.files.filter(f => f.confirmed).length;
 function calc(){
   const slots = D.slots, files = D.files;
-  const covered = s => s.no_doc_reason || s.files.some(f => f.confirmed);
+  const covered = s => !!s.no_doc_reason || haveOf(s) >= s.expect;
+  const missing = slots.filter(s => !covered(s));
   return {
-    missing: slots.filter(s => !covered(s)).length,
+    missing: missing.length, missingSlots: missing,
+    noReason: missing.filter(s => !s.no_doc_reason),
     unconf: files.reduce((n,f) => n + Number(f.unconfirmed||0), 0),
     orphan: files.filter(f => !f.slot_ids.length).length,
     rejected: files.filter(f => f.scan_status === 'rejected').length,
-    done: slots.filter(covered).length, total: slots.length, covered
+    done: slots.filter(covered).length, total: slots.length, covered,
+    have: slots.reduce((n, s) => n + Math.min(haveOf(s), s.expect), 0),
+    want: slots.reduce((n, s) => n + s.expect, 0)
   };
 }
 
 /* ---- 画面 ---- */
 function slotOptions(selIds){
-  let h = '<option value="">枠を選ぶ…</option>';
-  for(const c of ['school_schedule','hire_schedule']){
-    h += `<optgroup label="${esc(CAT[c])}">`;
-    for(const s of D.slots.filter(x => x.category === c)){
-      if(selIds.includes(s.id)) continue;
-      const mark = s.files.some(f => f.confirmed) ? '✓ ' : '';
-      h += `<option value="${s.id}">${mark}${esc(s.label + (s.region ? '（'+s.region+'）' : ''))}</option>`;
-    }
-    h += '</optgroup>';
+  let h = '<option value="">学校を選ぶ…</option>';
+  for(const s of D.slots.filter(x => x.category === 'school_group')){
+    if(selIds.includes(s.id)) continue;
+    h += `<option value="${s.id}">${esc(s.label + (s.region ? '（'+s.region+'）' : ''))}</option>`;
   }
   return h;
+}
+function fileRow(f, open){
+  const mine = f.slot_ids.map(id => D.slots.find(s => s.id === id)).filter(Boolean);
+  const cands = ((f.guess && f.guess.candidates) || []).map(id => D.slots.find(s => s.id === id)).filter(s => s && !f.slot_ids.includes(s.id));
+  let h = `<tr><td style="max-width:260px;word-break:break-all;">${esc(f.name)}<div class="muted">${esc(kb(f.size))}　${esc(fmtDT(f.uploaded_at))}</div></td><td>`;
+  for(const s of mine){
+    const sl = s.files.find(x => x.id === f.id), ok = sl && sl.confirmed;
+    h += `<span class="chip ${ok ? 'ok' : 'unc'}">${esc(slotName(s))}${ok ? '' : '（未確認）'}${open ? ` <a href="#" data-act="unassign" data-f="${f.id}" data-s="${s.id}" title="この学校から外す">×</a>` : ''}</span> `;
+  }
+  if(!mine.length && open && cands.length){
+    h += '<div class="muted" style="margin-bottom:4px;">どちらですか（押すと決まります）：</div>' + cands.map(s => `<button type="button" class="mini" data-act="pickCand" data-f="${f.id}" data-s="${s.id}">${esc(slotName(s))}</button>`).join(' ') + '<br>';
+  }
+  if(!mine.length && !cands.length) h += '<span class="muted">ファイル名から、学校が分かりません。学校を選んでください</span><br>';
+  if(open && (!mine.length || mine.some(s => !(s.files.find(x => x.id === f.id) || {}).confirmed))) h += `<select data-act="addSlot" data-f="${f.id}" style="margin-top:4px;font-size:13px;padding:5px 6px;">${slotOptions(f.slot_ids)}</select>`;
+  h += `</td><td>${scanTag(f.scan_status)}</td>`;
+  if(open) h += `<td><button type="button" class="mini" data-act="detach" data-f="${f.id}">取り消す</button></td>`;
+  return h + '</tr>';
 }
 function render(){
   const P = D.period, open = P.status === 'open', c = calc();
   const ym = String(P.target_month).slice(0,4) + '年' + Number(String(P.target_month).slice(5,7)) + '月分';
   let h = `<h1>${esc(ym)}の書類 ${P.is_test ? '<span class="tag t-no">テスト用</span>' : ''}</h1>
-    <p class="sub">${open ? '届いた書類を、まとめて選んで添付してください。全部の枠がそろうと、送信できます。途中で閉じても、添付した分は残ります。' : '送信済みです（' + esc(fmtDT(P.submitted_at)) + '）。検査の結果が、下に出ます。'}${P.expires_at ? '　このリンクの期限：' + esc(fmtD(P.expires_at)) + 'まで' : ''}</p>`;
+    <p class="sub">${open ? '月のフォルダを、そのままドラッグするだけです。学校の名前から、自動で振り分けます。そろうと、送信できます。途中で閉じても、添付した分は残ります。' : '送信済みです（' + esc(fmtDT(P.submitted_at)) + '）。検査の結果が、下に出ます。'}${P.expires_at ? '　このリンクの期限：' + esc(fmtD(P.expires_at)) + 'まで' : ''}</p>`;
 
   if(open){
-    h += `<div class="panel"><b>学校予定表と雇上車運行予定表を、まとめて添付する</b>
-      <div class="muted" style="margin:2px 0 10px;">月のフォルダ（例：令和8年12月）を、そのままドラッグしてください。フォルダの名前から、学校予定表か雇上車かを判断します。PDFだけをドラッグしてもかまいません。1ファイル10MBまでです。</div>
-      <div class="drop" id="drop"><div style="font-weight:700;font-size:15px;">ここに、フォルダまたはPDFをドラッグ</div>
-        <div class="muted" style="margin:6px 0 10px;">または、次のボタンで選びます</div>
+    h += `<div class="panel">
+      <div class="drop" id="drop"><div style="font-weight:700;font-size:16px;">ここに、月のフォルダ（または、PDF）を、ドラッグしてください</div>
+        <div class="muted" style="margin:6px 0 10px;">学校予定表も雇上車運行予定表も、まとめて入れて構いません。1ファイル10MBまでです。</div>
         <button type="button" class="primary" id="pickDir">フォルダを選ぶ</button> <button type="button" id="pickFiles">PDFを選ぶ</button></div>
       <input type="file" id="fileIn" accept="application/pdf,.pdf" multiple style="display:none">
       <input type="file" id="dirIn" webkitdirectory multiple style="display:none">
       <div id="prog" class="muted" style="margin-top:8px;"></div></div>`;
   }
 
-  const pct = c.total ? Math.round(c.done / c.total * 100) : 0;
-  h += `<div class="panel"><div class="row" style="justify-content:space-between;"><b>枠の進み具合</b><span>${c.done} / ${c.total} 枠</span></div>
-        <div class="bar"><i style="width:${pct}%"></i></div></div>`;
-
-  const amb = D.files.filter(f => !f.slot_ids.length && ((f.guess && f.guess.candidates) || []).length).length;
+  // 要約：そろい具合と、足りない学校だけ
+  const pct = c.want ? Math.round(c.have / c.want * 100) : 0;
+  h += `<div class="panel"><div class="row" style="justify-content:space-between;"><b>${D.files.length ? 'そろい具合' : 'まだ、書類が添付されていません'}</b><span>${c.have} / ${c.want} 枚</span></div>
+        <div class="bar"><i style="width:${pct}%"></i></div>`;
   if(D.files.length){
-    h += `<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:8px;"><b>添付した書類（${D.files.length}枚）</b>
-      ${open ? `<button type="button" class="primary" data-act="confirmAll" ${c.unconf ? '' : 'disabled'}>候補どおりにすべて決定（${c.unconf}件）</button>` : ''}</div>
-      ${open && amb ? `<div class="warnbox" style="margin:0 0 8px;">学校予定表か雇上車か、迷っている書類が ${amb} 枚あります。まとめて決める：<button type="button" class="mini" data-act="bulkCat" data-c="school_schedule">すべて学校予定表にする</button> <button type="button" class="mini" data-act="bulkCat" data-c="hire_schedule">すべて雇上車にする</button></div>` : ''}
-      <table class="list"><thead><tr><th>ファイル</th><th>どの枠か</th><th>検査</th>${open ? '<th></th>' : ''}</tr></thead><tbody>`;
-    for(const f of D.files){
-      const mine = f.slot_ids.map(id => D.slots.find(s => s.id === id)).filter(Boolean);
-      const cands = ((f.guess && f.guess.candidates) || []).map(id => D.slots.find(s => s.id === id)).filter(s => s && !f.slot_ids.includes(s.id));
-      h += `<tr><td style="max-width:260px;word-break:break-all;">${esc(f.name)}<div class="muted">${esc(kb(f.size))}　${esc(fmtDT(f.uploaded_at))}</div></td><td>`;
-      for(const s of mine){
-        const sl = s.files.find(x => x.id === f.id);
-        const ok = sl && sl.confirmed;
-        h += `<span class="chip ${ok ? 'ok' : 'unc'}">${esc(slotName(s))}${ok ? '' : '（未確認）'}${open ? ` <a href="#" data-act="unassign" data-f="${f.id}" data-s="${s.id}" title="この枠から外す">×</a>` : ''}</span> `;
-      }
-      if(!mine.length && open && cands.length){
-        h += '<div class="muted" style="margin-bottom:4px;">候補（押すと決まります）：</div>' + cands.map(s => `<button type="button" class="mini" data-act="pickCand" data-f="${f.id}" data-s="${s.id}">${esc(slotName(s))}</button>`).join(' ') + '<br>';
-      }
-      if(!mine.length && !cands.length) h += '<span class="muted">候補がありません。枠を選んでください</span><br>';
-      if(open) h += `<select data-act="addSlot" data-f="${f.id}" style="margin-top:4px;font-size:13px;padding:5px 6px;">${slotOptions(f.slot_ids)}</select>`;
-      h += `</td><td>${scanTag(f.scan_status)}</td>`;
-      if(open) h += `<td><button type="button" class="mini" data-act="detach" data-f="${f.id}">取り消す</button></td>`;
-      h += '</tr>';
+    if(!c.missing) h += `<div style="margin-top:6px;color:#1f5e3a;font-weight:700;">すべての学校の書類が、そろいました。</div>`;
+    else {
+      h += `<div style="margin-top:8px;font-size:14px;line-height:1.8;"><b>足りない学校（${c.missing}）：</b>` +
+        c.missingSlots.map(s => `${esc(s.label)}${s.expect > 1 ? `（${haveOf(s)}/${s.expect}）` : ''}${s.no_doc_reason ? '<span class="tag t-no" style="margin-left:2px;">理由あり</span>' : ''}`).join('、') + '</div>';
+      if(open && c.noReason.length) h += `<div style="margin-top:8px;"><button type="button" data-act="nodocAll">足りない学校は、すべて、理由をつけて送る…</button> <span class="muted">（理由を1回入力すると、足りない学校の全部に、同じ理由がつきます）</span></div>`;
     }
-    h += '</tbody></table></div>';
-  }
-
-  h += `<div class="panel"><b>枠ごとの状態</b><div class="muted" style="margin:2px 0 8px;">学校から書類が届かない枠は、「今月は書類なし」を、理由をつけて選べます。</div>`;
-  for(const cat of ['school_schedule','hire_schedule']){
-    const list = D.slots.filter(s => s.category === cat);
-    if(!list.length) continue;
-    h += `<div class="sec">${esc(CAT[cat])}　${list.filter(c.covered).length}/${list.length}</div><table class="list"><tbody>`;
-    for(const s of list){
-      const fs = s.files;
-      h += `<tr><td style="width:34%;">${esc(s.label)}${s.region ? '<span class="muted">（'+esc(s.region)+'）</span>' : ''}</td><td>`;
-      if(fs.length) h += fs.map(f => `<span class="chip ${f.confirmed ? 'ok' : 'unc'}">${esc(f.name)}${f.confirmed ? '' : '（未確認）'}</span>`).join(' ');
-      else if(s.no_doc_reason) h += `<span class="tag t-no">書類なし</span> ${esc(s.no_doc_reason)}`;
-      else h += '<span class="tag t-gray">未提出</span>';
-      h += '</td>';
-      if(open){
-        h += '<td style="text-align:right;white-space:nowrap;">';
-        if(s.no_doc_reason) h += `<button type="button" class="mini" data-act="nodocClear" data-s="${s.id}">取り消す</button>`;
-        else if(!fs.length) h += `<button type="button" class="mini" data-act="nodoc" data-s="${s.id}">今月は書類なし</button>`;
-        h += '</td>';
-      }
-      h += '</tr>';
-    }
-    h += '</tbody></table>';
   }
   h += '</div>';
 
+  // 人の判断が要る書類だけを、ここに出す
+  const attention = D.files.filter(f => !f.slot_ids.length || f.slot_ids.some(id => !((D.slots.find(s => s.id === id) || { files: [] }).files.find(x => x.id === f.id) || {}).confirmed));
+  if(open && attention.length){
+    h += `<div class="panel" style="border-color:#e8d9b0;"><b>学校を決める書類（${attention.length}枚）</b><div class="muted" style="margin:2px 0 8px;">ファイル名から、学校が1つに決まらなかった書類です。</div>
+      <table class="list"><thead><tr><th>ファイル</th><th>どの学校か</th><th>検査</th><th></th></tr></thead><tbody>${attention.map(f => fileRow(f, open)).join('')}</tbody></table></div>`;
+  }
+
+  // 内訳（普段は、たたんでおく）
+  if(D.files.length){
+    h += `<details class="panel"><summary style="cursor:pointer;font-weight:700;">添付した書類の一覧（${D.files.length}枚）</summary>
+      <table class="list" style="margin-top:8px;"><thead><tr><th>ファイル</th><th>どの学校か</th><th>検査</th>${open ? '<th></th>' : ''}</tr></thead><tbody>${D.files.map(f => fileRow(f, open)).join('')}</tbody></table></details>`;
+  }
+  h += `<details class="panel"><summary style="cursor:pointer;font-weight:700;">学校ごとの内訳（${c.done} / ${c.total}校）</summary><table class="list" style="margin-top:8px;"><tbody>`;
+  for(const s of D.slots){
+    const n = haveOf(s);
+    h += `<tr><td style="width:30%;">${esc(s.label)}${s.region ? '<span class="muted">（'+esc(s.region)+'）</span>' : ''}</td><td>`;
+    h += (n ? `<span class="chip ${n >= s.expect ? 'ok' : 'unc'}">${n}/${s.expect}枚</span> ` : '') + s.files.map(f => `<span class="muted">${esc(f.name)}</span>`).join('、');
+    if(s.no_doc_reason) h += ` <span class="tag t-no">理由あり</span> ${esc(s.no_doc_reason)}`;
+    else if(!n) h += '<span class="tag t-gray">未提出</span>';
+    h += '</td>';
+    if(open){
+      h += '<td style="text-align:right;white-space:nowrap;">';
+      if(s.no_doc_reason) h += `<button type="button" class="mini" data-act="nodocClear" data-s="${s.id}">取り消す</button>`;
+      else if(n < s.expect) h += `<button type="button" class="mini" data-act="nodoc" data-s="${s.id}">足りないまま送る…</button>`;
+      h += '</td>';
+    }
+    h += '</tr>';
+  }
+  h += '</tbody></table></details>';
+
   if(open){
     const msgs = [];
-    if(c.missing) msgs.push(`枠が埋まっていないところが ${c.missing} 枠あります`);
-    if(c.unconf) msgs.push(`決定していない割り当てが ${c.unconf} 件あります`);
-    if(c.orphan) msgs.push(`枠が決まっていない書類が ${c.orphan} 枚あります`);
+    if(c.missing) msgs.push(`そろっていない学校が ${c.missing} 校あります`);
+    if(c.unconf) msgs.push(`学校を決めていない書類が あります`);
+    if(c.orphan) msgs.push(`学校が決まっていない書類が ${c.orphan} 枚あります`);
     if(c.rejected) msgs.push(`検査に通らなかった書類が ${c.rejected} 枚あります`);
     h += `<div class="panel sendbar"><button type="button" class="primary big" data-act="submit" ${msgs.length ? 'disabled' : ''}>この内容で送信する</button>
       <span class="muted" style="margin-left:10px;">${msgs.length ? esc(msgs.join('。')) + '。' : 'すべてそろいました。送信すると、検査が始まります。'}</span></div>`;
@@ -1090,6 +1091,12 @@ async function act(a, ds){
       const f = D.files.find(x => x.id === ds.f); const ids = (f.slot_ids || []).concat([Number(ds.s)]);
       await rpc('doc_assign', {...P, p_file: ds.f, p_slots: ids}); await load();
     }
+    else if(a === 'nodocAll'){
+      const why = prompt('足りない学校すべてに付ける理由を、書いてください（例：学校から届いていない）');
+      if(why === null) return;
+      if(!why.trim()){ say('理由を入力してください。'); return; }
+      const r = await rpc('doc_set_no_doc_all', {...P, p_reason: why.trim()}); await load(); say(r.n + '校に、理由をつけました。', true);
+    }
     else if(a === 'bulkCat'){
       const todo = D.files.filter(f => !f.slot_ids.length && ((f.guess && f.guess.candidates) || []).length);
       let n = 0;
@@ -1108,14 +1115,14 @@ async function act(a, ds){
       await rpc('doc_detach_file', {...P, p_file: ds.f}); await load();
     }
     else if(a === 'nodoc'){
-      const why = prompt('今月は書類がない理由を書いてください（例：学校から届いていない）');
+      const why = prompt('足りないまま送る理由を、書いてください（例：学校から届いていない）');
       if(why === null) return;
       if(!why.trim()){ say('理由を入力してください。'); return; }
       await rpc('doc_set_no_doc', {...P, p_slot: Number(ds.s), p_reason: why.trim()}); await load();
     }
     else if(a === 'nodocClear'){ await rpc('doc_set_no_doc', {...P, p_slot: Number(ds.s), p_reason: null}); await load(); }
     else if(a === 'submit'){
-      if(!confirm(`この内容で送信します。\n書類 ${D.files.length} 枚／書類なし ${D.slots.filter(s => s.no_doc_reason).length} 枠\n送信すると、検査が始まり、内容は直せなくなります。よろしいですか？`)) return;
+      if(!confirm(`この内容で送信します。\n書類 ${D.files.length} 枚／理由つきで足りない学校 ${D.slots.filter(s => s.no_doc_reason).length} 校\n送信すると、検査が始まり、内容は直せなくなります。よろしいですか？`)) return;
       await rpc('doc_submit', P); await load(); say('送信しました。検査の結果が出るまで、お待ちください。', true);
     }
     else if(a === 'adminOpen' && ds.k && ds.k !== 'monthly'){ location.href = (ds.k === 'daily' ? 'uketsuke_daily.html' : 'uketsuke_crew.html') + '#p=' + ds.p; }
@@ -1196,7 +1203,9 @@ async function handleFiles(items){
   await load();
   const note = skipped ? `（添乗員の予定表 ${skipped}枚は、この画面では受け付けないため、飛ばしました）` : '';
   if(fails.length) say(`${ok}枚を受け付けました。次の${fails.length}枚は受け付けられませんでした：<br>` + fails.map(esc).join('<br>') + note);
-  else say(`${ok}枚を受け付けました。下の「どの枠か」を確認してください。${note}`, true);
+  else { const need = D.files.filter(f => !f.slot_ids.length || f.slot_ids.some(id => !((D.slots.find(s => s.id === id) || { files: [] }).files.find(x => x.id === f.id) || {}).confirmed)).length;
+    if(need) say(`${ok}枚を受け付けました。学校が決まらない書類が ${need} 枚あります。下で、学校を選んでください。${note}`);
+    else say(`${ok}枚を受け付けて、学校ごとに、自動で振り分けました。${note}`, true); }
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
