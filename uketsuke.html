@@ -815,7 +815,7 @@ function _redirectLogin(){
 }
 const SUPA = 'https://wxdyqkyqtizhtkwtpvru.supabase.co';
 let TOKEN = null, PERIOD_ID = null, D = null, ADMIN_LIST = null, BUSY = false;
-(function(){ const m = /^#t=([0-9a-f]{64})$/.exec(location.hash || ''); if(m) TOKEN = m[1]; })();
+(function(){ const m = /^#t=([0-9a-f]{64})$/.exec(location.hash || ''); if(m) TOKEN = m[1]; const p = /^#p=(\d+)$/.exec(location.hash || ''); if(p) PERIOD_ID = Number(p[1]); })();
 
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function getH(){
@@ -1014,20 +1014,27 @@ function render(){
   document.getElementById('app').innerHTML = h;
   wire();
 }
+function periodLabel(p){
+  const d = String(p.target_month).slice(0,10), y = Number(d.slice(0,4)), m = Number(d.slice(5,7)), dd = Number(d.slice(8,10));
+  const tag = p.is_test ? '<span class="tag t-no">テスト</span>' : '';
+  if(p.kind === 'daily'){ const w = ['日','月','火','水','木','金','土'][new Date(Date.UTC(y, m-1, dd)).getUTCDay()]; return esc('日ごと　' + m + '月' + dd + '日（' + w + '）分') + ' ' + tag; }
+  if(p.kind === 'crew'){ return esc('月間勤務予定表　' + m + '月21日〜' + (m === 12 ? 1 : m + 1) + '月20日') + ' ' + tag; }
+  return esc('学校予定表と雇上車　' + y + '年' + m + '月分') + ' ' + tag;
+}
 function adminHtml(){
   let h = `<div class="panel admin"><b>管理者用</b><div class="muted" style="margin:2px 0 8px;">受付の作成、リンクの作り直し、案内メールの送信ができます。リンクは、作り直すと前のものが使えなくなります。</div>
-    <table class="list"><thead><tr><th>月</th><th>状態</th><th>枠／書類</th><th>案内メール</th><th></th></tr></thead><tbody>`;
+    <table class="list"><thead><tr><th>受付</th><th>状態</th><th>枠／書類</th><th>案内メール</th><th></th></tr></thead><tbody>`;
   for(const p of (ADMIN_LIST || [])){
-    const ym = String(p.target_month).slice(0,4) + '年' + Number(String(p.target_month).slice(5,7)) + '月分';
+    const ym = periodLabel(p);
     h += `<tr><td>${esc(ym)} ${p.is_test ? '<span class="tag t-no">テスト</span>' : ''}</td><td>${p.status === 'open' ? '受付中' : p.status === 'submitted' ? '送信済み' : '終了'}</td><td>${p.slots}／${p.files}</td>
       <td>${p.mail_sent_at ? esc(fmtDT(p.mail_sent_at)) + ' 送信' : '未送信'}</td>
-      <td style="white-space:nowrap;"><button type="button" class="mini" data-act="adminOpen" data-p="${p.id}">開く</button>
+      <td style="white-space:nowrap;"><button type="button" class="mini" data-act="adminOpen" data-p="${p.id}" data-k="${p.kind || 'monthly'}">開く</button>
       <button type="button" class="mini" data-act="adminLink" data-p="${p.id}">リンクを作り直す</button>
       ${p.status === 'submitted' ? `<button type="button" class="mini" data-act="adminReopen" data-p="${p.id}">受付を再開</button>` : ''}
-      <button type="button" class="mini" data-act="adminMail" data-m="${esc(String(p.target_month).slice(0,10))}" data-t="${p.is_test ? 1 : 0}">案内メール</button></td></tr>`;
+      <button type="button" class="mini" data-act="adminMail" data-m="${esc(String(p.target_month).slice(0,10))}" data-k="${p.kind || 'monthly'}" data-t="${p.is_test ? 1 : 0}">案内メール</button></td></tr>`;
   }
   h += `</tbody></table><div id="adminOut" class="muted" style="margin-top:8px;word-break:break-all;"></div>
-    <div class="row" style="margin-top:10px;"><label class="muted">新しい受付</label><input type="month" id="newMonth"><label style="font-size:13px;"><input type="checkbox" id="newTest" style="width:auto;"> テスト用</label>
+    <div class="row" style="margin-top:10px;"><label class="muted">新しい受付</label><select id="newKind"><option value="monthly">学校予定表と雇上車（月）</option><option value="crew">添乗員の月間勤務予定表（21日〜）</option><option value="daily">日ごとの勤務予定表</option></select><input type="date" id="newDate" title="月次は、その月の中の日。月間勤務予定表は、21日。日ごとは、その日。"><label style="font-size:13px;"><input type="checkbox" id="newTest" style="width:auto;"> テスト用</label>
     <button type="button" data-act="adminCreate">つくる</button></div>
     <div class="row" style="margin-top:8px;"><label class="muted">案内メールのテスト送信先</label><input type="text" id="mailTest" value="${esc((_getSession() || {}).email || '')}" style="width:260px;"></div></div>`;
   return h;
@@ -1111,6 +1118,7 @@ async function act(a, ds){
       if(!confirm(`この内容で送信します。\n書類 ${D.files.length} 枚／書類なし ${D.slots.filter(s => s.no_doc_reason).length} 枠\n送信すると、検査が始まり、内容は直せなくなります。よろしいですか？`)) return;
       await rpc('doc_submit', P); await load(); say('送信しました。検査の結果が出るまで、お待ちください。', true);
     }
+    else if(a === 'adminOpen' && ds.k && ds.k !== 'monthly'){ location.href = (ds.k === 'daily' ? 'uketsuke_daily.html' : 'uketsuke_crew.html') + '#p=' + ds.p; }
     else if(a === 'adminOpen'){ TOKEN = null; PERIOD_ID = Number(ds.p); history.replaceState(null,'',location.pathname); await load(); window.scrollTo(0,0); }
     else if(a === 'adminLink'){
       if(!confirm('リンクを作り直します。前のリンクは使えなくなります。よろしいですか？')) return;
@@ -1122,8 +1130,12 @@ async function act(a, ds){
     else if(a === 'copyLink'){ const el = document.getElementById('linkOut'); el.select(); try{ await navigator.clipboard.writeText(el.value); say('リンクをコピーしました。他の人には渡さないでください。', true); }catch(e){ document.execCommand('copy'); say('コピーしました。', true); } }
     else if(a === 'adminReopen'){ if(!confirm('受付を再開します（書類を追加・取り消しできるようになります）。よろしいですか？')) return; await rpc('doc_reopen', {p_period: Number(ds.p)}); ADMIN_LIST = await rpc('doc_admin_periods'); await load(); }
     else if(a === 'adminCreate'){
-      const m = document.getElementById('newMonth').value; if(!m){ say('月を選んでください。'); return; }
-      await rpc('doc_open_period', {p_target: m + '-01', p_test: document.getElementById('newTest').checked});
+      const kd = document.getElementById('newKind').value, dv = document.getElementById('newDate').value, tst = document.getElementById('newTest').checked;
+      if(!dv){ say('日付を選んでください。'); return; }
+      if(kd === 'crew' && dv.slice(8,10) !== '21'){ say('月間勤務予定表の受付は、期間のはじまりの21日を選んでください。'); return; }
+      if(kd === 'daily') await rpc('doc_open_daily', {p_date: dv, p_test: tst});
+      else if(kd === 'crew') await rpc('doc_open_crew', {p_start: dv, p_test: tst});
+      else await rpc('doc_open_period', {p_target: dv.slice(0,7) + '-01', p_test: tst});
       ADMIN_LIST = await rpc('doc_admin_periods'); rerender(); say('受付をつくりました。', true);
     }
     else if(a === 'adminMail'){
@@ -1135,7 +1147,7 @@ async function act(a, ds){
         if(!confirm(`テスト送信：${to} に、案内メールを送ります。（曾木さんには送りません）よろしいですか？`)) return;
       }
       await ensureFreshToken();
-      const res = await fetch(`${FUNCTIONS_URL}/docs-request-mail`, { method:'POST', headers: getH(), body: JSON.stringify({ target_month: ds.m, ...(real ? {} : { test_to: to }), force: false }) });
+      const res = await fetch(`${FUNCTIONS_URL}/docs-request-mail`, { method:'POST', headers: getH(), body: JSON.stringify({ kind: ds.k || 'monthly', ...((ds.k === 'daily' || ds.k === 'crew') ? { target_date: ds.m } : { target_month: ds.m }), ...(real ? {} : { test_to: to }), force: false }) });
       const j = await res.json().catch(() => ({}));
       if(!res.ok) { say('送信できませんでした：' + esc(j.error || res.status)); return; }
       if(j.skipped) say('送りませんでした（' + esc(j.skipped === 'already_sent' ? 'この月は送信済みです' : j.skipped) + '）。', true);
