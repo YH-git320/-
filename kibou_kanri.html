@@ -1384,6 +1384,7 @@ function xlMatrix(){
   const M = XL.model, G = GRID, x = !!G.period.x_mode;
   const writeO = document.getElementById('xlO').checked, skipW = document.getElementById('xlW').checked;
   const nRows = M.r1 - M.r0 + 1, mat = Array.from({ length: nRows }, () => Array(M.nd).fill(''));
+  const full = Array.from({ length: nRows }, () => Array(M.nd).fill('')), st = Array.from({ length: nRows }, () => Array(M.nd).fill(''));
   const conflicts = []; let nPeople = 0, willWrite = 0, same = 0;
   for(const p of M.people){
     const s = p.staff; if(!s || !s.submitted_at) continue;
@@ -1397,19 +1398,20 @@ function xlMatrix(){
         if(x){ t = o ? (writeO ? '○' : '') : ng ? M.X : (off && skipW ? '' : '△'); }
         else { t = o ? (writeO ? '○' : '') : M.X; }
         if(t === '') continue;
-        const ex = p.ex[k][i];
-        if(ex.f){ conflicts.push({ p, k, i, ex: '（数式）', t }); continue; }
-        if(ex.v === t){ same++; continue; }
-        if(ex.v !== '' && !XL_MARKS.includes(ex.v)){ conflicts.push({ p, k, i, ex: ex.v, t }); continue; }
-        mat[p.r - M.r0 + k][i] = t; willWrite++;
+        const ex = p.ex[k][i], rr = p.r - M.r0 + k;
+        full[rr][i] = t;
+        if(ex.f){ conflicts.push({ p, k, i, ex: '（数式）', t }); st[rr][i] = 'c'; continue; }
+        if(ex.v === t){ same++; st[rr][i] = 's'; continue; }
+        if(ex.v !== '' && !XL_MARKS.includes(ex.v)){ conflicts.push({ p, k, i, ex: ex.v, t }); st[rr][i] = 'c'; continue; }
+        mat[rr][i] = t; st[rr][i] = 'w'; willWrite++;
       }
     }
   }
-  return { mat, nPeople, conflicts, willWrite, same };
+  return { mat, full, st, nPeople, conflicts, willWrite, same };
 }
 function xlRender(){
   const out = document.getElementById('xlOut'), M = XL.model;
-  const { mat, nPeople, conflicts, willWrite, same } = xlMatrix();
+  const { mat, full, st, nPeople, conflicts, willWrite, same } = xlMatrix();
   const dest = `${xlCol(M.startCol)}${M.r0 + 1}`;
   const submitted = GRID.staff.filter(s => s.submitted_at).length;
   let h = `<div class="panel"><b>反映の準備ができました</b>
@@ -1420,8 +1422,9 @@ function xlRender(){
       <div class="box"><div class="lb">すでに同じ（書かない）</div><div class="vl">${same}</div></div>
       <div class="box"><div class="lb">上書きしない（別の内容あり）</div><div class="vl">${conflicts.length}</div></div>
     </div>
-    <div class="row"><button type="button" class="primary" onclick="xlSaveBook()">💾 反映したExcelを保存</button>
-      <span class="muted">「${esc(M.name)}」シートの、${esc(jp(GRID.period.start))}から${esc(jp(GRID.period.end))}までの列に書き込みます。元のファイルは、変えません。新しい名前のファイルになります。</span></div></div>`;
+    ${willWrite ? '' : `<div class="warnbox" style="background:#eef7ef;border-color:#bfe3c0;color:#1f5e3a;margin-top:0;">書き込むセルは、ありません。<b>希望は、すべてこのExcelに反映ずみ</b>です（${same}個のセルが、すでに同じ記号になっています）。${conflicts.length ? '別の内容が入っていて、上書きしないセルが ' + conflicts.length + ' 個あります。' : ''}</div>`}
+    <div class="row"><button type="button" class="primary" onclick="xlSaveBook()" ${willWrite ? '' : 'disabled'}>💾 反映したExcelを保存</button>
+      <span class="muted">${willWrite ? `「${esc(M.name)}」シートの、${esc(jp(GRID.period.start))}から${esc(jp(GRID.period.end))}までの列に書き込みます。元のファイルは、変えません。新しい名前のファイルになります。` : '保存するものがないので、ボタンは押せません。'}</span></div></div>`;
   if(M.warns.length) h += `<div class="warnbox">${M.warns.map(esc).join('<br>')}</div>`;
   if(conflicts.length){
     h += `<div class="warnbox"><b>次のセルには、すでに別の内容（コース名など）が入っているので、上書きしません。</b>（${conflicts.length}個）<br>` +
@@ -1434,14 +1437,14 @@ function xlRender(){
   const nameMatched = M.people.filter(p => p.staff && p.byName).length;
   if(M.idCol >= 0 && nameMatched) h += `<div class="warnbox">「システムID」が入っていない行は、名前で照合しました（${nameMatched}人）。</div>`;
   // プレビュー
-  h += `<div class="panel"><b>書き込む内容の見本</b><div class="muted" style="margin:2px 0 6px;">${esc(jp(GRID.period.start))}から。空欄のセルは、書き込みません。</div><div class="gwrap"><table class="grid" style="min-width:${182 + M.nd * 30}px"><thead><tr><th class="nm">氏名</th><th class="lab">便</th>`;
-  GRID.days.forEach(d => { h += `<th class="${dayCls(d)}">${Number(d.d.slice(8,10))}</th>`; });
+  h += `<div class="panel"><b>希望の内容</b><div class="muted" style="margin:2px 0 6px;"><span style="background:#fff3b0;padding:1px 6px;">黄色＝今回、書き込む</span>　<span style="padding:1px 6px;border:1px solid #ddd;">白＝すでに同じ（書かない）</span>　<span style="padding:0 6px;outline:2px solid #d33;">赤い枠＝別の内容があるので、上書きしない</span></div>
+    <div class="gwrap"><table class="grid" style="min-width:${182 + M.nd * 30}px"><thead><tr><th class="nm">氏名</th><th class="lab">便</th>`;GRID.days.forEach(d => { h += `<th class="${dayCls(d)}">${Number(d.d.slice(8,10))}</th>`; });
   h += '</tr></thead><tbody>';
   for(const p of M.people){
     if(!(p.staff && p.staff.submitted_at)) continue;
     for(let k = 0; k < 2; k++){
       h += `<tr class="${k ? 's2' : 's1'}">${k ? '' : `<td class="nm" rowspan="2">${esc(p.name)}</td>`}<td class="lab">${k ? '下校' : '登校'}</td>` +
-        mat[p.r - M.r0 + k].map((v, i) => `<td class="c ${dayCls(GRID.days[i])}" style="${v === M.X ? 'color:#a82d24;' : v === '△' ? 'color:#9a5f12;' : ''}">${esc(v)}</td>`).join('') + '</tr>';
+        full[p.r - M.r0 + k].map((v, i) => { const s = st[p.r - M.r0 + k][i]; return `<td class="c ${dayCls(GRID.days[i])}" style="${v === M.X ? 'color:#a82d24;' : v === '△' ? 'color:#9a5f12;' : ''}${s === 'w' ? 'background:#fff3b0;' : ''}${s === 'c' ? 'outline:2px solid #d33;outline-offset:-2px;' : ''}">${esc(v)}</td>`; }).join('') + '</tr>';
     }
   }
   h += '</tbody></table></div></div>';
