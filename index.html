@@ -324,6 +324,15 @@ footer {
       </div>
     </a>
 
+    <a href="menseki.html" class="card card-accent-purple">
+      <div class="card-icon">📐</div>
+      <div class="card-title">車庫の届出面積</div>
+      <div class="card-desc">
+        運輸局へ届け出ている車庫の面積を、車庫・許可ごとに管理します。<br>
+        増車しても車庫に収まるかも確認できます。
+      </div>
+    </a>
+
     <a href="keiro_soshin.html" class="card card-accent-purple">
       <div class="card-icon">🗺</div>
       <div class="card-title">ルート図をメールで送る</div>
@@ -447,11 +456,17 @@ async function _refresh(session) {
   } catch { return null; }
 }
 
+function _uidFromToken(tok){
+  // ログインの証明（トークン）から、自分のユーザーIDを取り出す。取り出せないときは空（→ 行が1つも返らず、権限なしになる）
+  try{ const p = String(tok).split('.')[1].replace(/-/g,'+').replace(/_/g,'/'); return JSON.parse(decodeURIComponent(escape(atob(p)))).sub || ''; }catch(e){ return ''; }
+}
+
 async function _getRole(accessToken) {
   const cached = sessionStorage.getItem('takao_role');
   if (cached) return cached;
   try {
-    const res = await fetch(`${REST_URL}/user_roles?select=role,display_name,permissions`, {
+    const uid = _uidFromToken(accessToken);
+    const res = await fetch(`${REST_URL}/user_roles?select=role,display_name,permissions&user_id=eq.${encodeURIComponent(uid)}`, {
       headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${accessToken}` },
     });
     if (!res.ok) return null;
