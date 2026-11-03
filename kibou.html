@@ -48,6 +48,7 @@
   .c{font-family:inherit;border:none;border-left:1px solid var(--line);background:transparent;border-radius:0;
     font-size:34px;font-weight:800;color:transparent;cursor:pointer;padding:0;min-height:60px;}
   .c.o{background:var(--on-tint);color:var(--on);}
+  .c.x{background:#fbe4e1;color:var(--danger);}
   .c:disabled{cursor:default;}
   .note{padding:16px 14px;background:#fff;border-top:1px solid var(--line);}
   .note label{display:block;font-size:16px;font-weight:700;margin-bottom:6px;}
@@ -99,6 +100,7 @@
   table.cal .lb{font-size:10px;color:var(--ink-soft);letter-spacing:-.3px;}
   table.cal .mk{font-size:18px;font-weight:800;line-height:1;color:#c3cdc7;}
   table.cal .mk.on{color:var(--on);}
+  table.cal .mk.ng{color:var(--danger);}
   .calleg{font-size:12px;color:var(--ink-soft);margin:8px 0 0;line-height:1.6;}
   .calnote{font-size:13px;margin:8px 0 0;line-height:1.6;white-space:pre-wrap;}
   .calbtns{display:flex;gap:10px;padding:0 14px;margin-top:4px;}
@@ -141,7 +143,8 @@ let accessToken = null;
 })();
 
 let INFO = null;        // サーバーから受け取った内容
-let ON = {};            // { 'YYYY-MM-DD|g': true, 'YYYY-MM-DD|b': true }
+let ON = {};            // { 'YYYY-MM-DD|g': true(○) か 'x'(×。x_mode の期間だけ) }。無いものは空欄
+function XM(){ return !!(INFO && INFO.period && INFO.period.x_mode); }
 let CLOSED = false;
 let DRAFT_KEY = null;
 
@@ -165,10 +168,17 @@ function draftSave(){
 function draftClear(){ try{ localStorage.removeItem(DRAFT_KEY); }catch(e){} }
 
 function counts(){
-  let g=0,b=0;
-  for(const k in ON){ if(!ON[k]) continue; if(k.endsWith('|g')) g++; else b++; }
-  return {g,b};
+  let g=0,b=0,gx=0,bx=0;
+  for(const k in ON){
+    const v = ON[k]; if(!v) continue;
+    const isG = k.endsWith('|g');
+    if(v === 'x'){ if(isG) gx++; else bx++; }
+    else { if(isG) g++; else b++; }
+  }
+  return {g,b,gx,bx};
 }
+function mark(v){ return v === true ? '○' : (v === 'x' ? '×' : '○'); }       // 空欄のボタンは文字を透明にしてあるので、○のままでよい
+function nextState(v){ return XM() ? (v === true ? 'x' : (v === 'x' ? undefined : true)) : (v ? undefined : true); }
 
 function fmtDT(iso){
   if(!iso) return '';
@@ -183,7 +193,10 @@ function render(){
     <div class="trow"><div class="nm">${esc(INFO.staff_name)} さん</div>
     <div class="dl">${CLOSED ? '〆切を過ぎました' : '〆切 ' + md(P.deadline)}</div></div></div>`;
   if(!CLOSED){
-    h += `<div class="intro"><div class="guide">出勤できる便をタップして <b>○</b> をつけてください。<br>○のない便は、出勤できない日として扱います。<br>どうしても出勤できない日（旅行など）は、いちばん下の<b>「備考」欄</b>にその旨を書いてください。</div>
+    h += XM()
+      ? `<div class="intro"><div class="guide">出勤できる便をタップして <b>○</b> をつけてください。<br>どうしても出勤できない便は、もう一度タップして <b>×</b> をつけてください。（タップするたびに、○ → × → 空欄 の順に変わります）<br>空欄の便は、「まだ決まっていない・相談に応じられる」便として扱います。</div>
+    <div class="bar"><button type="button" id="bAll">平日の空欄をすべて○</button><button type="button" id="bClr">すべて消す</button></div></div>`
+      : `<div class="intro"><div class="guide">出勤できる便をタップして <b>○</b> をつけてください。<br>○のない便は、出勤できない日として扱います。<br>どうしても出勤できない日（旅行など）は、いちばん下の<b>「備考」欄</b>にその旨を書いてください。</div>
     <div class="bar"><button type="button" id="bAll">平日をすべて○</button><button type="button" id="bClr">すべて消す</button></div></div>`;
   }
 
@@ -200,15 +213,15 @@ function render(){
     const lab = day.hol ? '祝・'+esc(day.hol) : DOW[day.dow];
     h += `<div class="r ${cls}"><div class="dt"><b>${md(day.d)}</b><small>${lab}</small></div>`;
     for(const s of ['g','b']){
-      const k = day.d+'|'+s, on = !!ON[k];
-      h += `<button type="button" class="c${on?' o':''}" data-k="${k}" aria-pressed="${on}" aria-label="${md(day.d)} ${s==='g'?'登校':'下校'}" ${CLOSED?'disabled':''}>○</button>`;
+      const k = day.d+'|'+s, v = ON[k];
+      h += `<button type="button" class="c${v===true?' o':(v==='x'?' x':'')}" data-k="${k}" aria-label="${md(day.d)} ${s==='g'?'登校':'下校'}" aria-pressed="${!!v}" ${CLOSED?'disabled':''}>${mark(v)}</button>`;
     }
     h += `</div>`;
   }
   h += `</div>
   <div class="note"><label for="note">備考</label>
-    <div style="font-size:13px;color:var(--ink-soft);margin:0 0 6px;line-height:1.6;">どうしても出勤できない日（旅行など）は、その日付と理由を書いてください。</div>
-    <textarea id="note" maxlength="500" placeholder="例：10/28〜10/30は旅行のため出勤できません" ${CLOSED?'disabled':''}></textarea></div>`;
+    <div style="font-size:13px;color:var(--ink-soft);margin:0 0 6px;line-height:1.6;">${XM() ? '事務所に伝えておきたいことがあれば書いてください。（出勤できない日は、上の表で × をつけてください）' : 'どうしても出勤できない日（旅行など）は、その日付と理由を書いてください。'}</div>
+    <textarea id="note" maxlength="500" placeholder="${XM() ? '例：12/5は午後から相談できます' : '例：10/28〜10/30は旅行のため出勤できません'}" ${CLOSED?'disabled':''}></textarea></div>`;
   if(!CLOSED){
     h += `<div class="foot"><button type="button" class="send" id="bSend">この内容で送信する</button>
       <div class="sm">送信したあとも、〆切までは直して送り直せます</div></div>`;
@@ -219,36 +232,37 @@ function render(){
   note.value = INFO._note || '';
   note.addEventListener('input', draftSave);
   const bCal = document.getElementById('bCal');
-  if(bCal) bCal.addEventListener('click', () => { const c = counts(); showDone(c.g, c.b, 'view'); });
+  if(bCal) bCal.addEventListener('click', () => { showDone(counts(), 'view'); });
   syncTop();
 
   root.querySelectorAll('.c').forEach(b => b.addEventListener('click', () => {
     if(CLOSED) return;
-    const k = b.dataset.k; ON[k] = !ON[k];
-    b.classList.toggle('o', !!ON[k]); b.setAttribute('aria-pressed', String(!!ON[k]));
+    const k = b.dataset.k, nv = nextState(ON[k]);
+    if(nv === undefined) delete ON[k]; else ON[k] = nv;
+    paintOne(b);
     draftSave();
   }));
   const bAll = document.getElementById('bAll');
   if(bAll){
     bAll.addEventListener('click', () => {
-      for(const day of INFO.days){ if(isOff(day)) continue; ON[day.d+'|g']=true; ON[day.d+'|b']=true; }
+      for(const day of INFO.days){ if(isOff(day)) continue; for(const s of ['g','b']){ const k = day.d+'|'+s; if(ON[k] !== 'x') ON[k] = true; } }
       paintAll(); draftSave();
     });
     document.getElementById('bClr').addEventListener('click', () => {
       if(!Object.values(ON).some(Boolean)) return;
-      if(!confirm('つけた○をすべて消します。よろしいですか？')) return;
+      if(!confirm(XM() ? 'つけた ○ と × をすべて消します。よろしいですか？' : 'つけた○をすべて消します。よろしいですか？')) return;
       ON = {}; paintAll(); draftSave();
     });
     document.getElementById('bSend').addEventListener('click', confirmSend);
   }
 }
 
-function paintAll(){
-  root.querySelectorAll('.c').forEach(b => {
-    const on = !!ON[b.dataset.k];
-    b.classList.toggle('o', on); b.setAttribute('aria-pressed', String(on));
-  });
+function paintOne(b){
+  const v = ON[b.dataset.k];
+  b.classList.toggle('o', v === true); b.classList.toggle('x', v === 'x');
+  b.setAttribute('aria-pressed', String(!!v)); b.textContent = mark(v);
 }
+function paintAll(){ root.querySelectorAll('.c').forEach(paintOne); }
 function syncTop(){
   const t = document.getElementById('top'); if(!t) return;
   document.documentElement.style.setProperty('--topH', t.offsetHeight + 'px');
@@ -259,10 +273,15 @@ window.addEventListener('resize', syncTop);
 function confirmSend(){
   const c = counts();
   const ov = document.getElementById('ov'), dlg = document.getElementById('dlg');
-  const dates = (s) => INFO.days.filter(d => ON[d.d+'|'+s]).map(d => md(d.d)).join('、') || 'なし';
-  dlg.innerHTML = `<h2>送信の確認</h2>
+  const dates = (s, val) => INFO.days.filter(d => ON[d.d+'|'+s] === val).map(d => md(d.d)).join('、') || 'なし';
+  dlg.innerHTML = XM()
+    ? `<h2>送信の確認</h2>
+    <div class="sum">登校 ○ ${c.g}日・× ${c.gx}日　／　下校 ○ ${c.b}日・× ${c.bx}日</div>
+    <div class="lst"><b>登校 ○：</b>${esc(dates('g', true))}<br><b>登校 ×（どうしても出勤できない）：</b>${esc(dates('g', 'x'))}<br><b>下校 ○：</b>${esc(dates('b', true))}<br><b>下校 ×（どうしても出勤できない）：</b>${esc(dates('b', 'x'))}<br>それ以外の便は、空欄（相談できる）として送ります。</div>
+    <div class="btns"><button type="button" class="b-ng" id="dNo">戻る</button><button type="button" class="b-ok" id="dYes">送信する</button></div>`
+    : `<h2>送信の確認</h2>
     <div class="sum">登校 ○ ${c.g}日　／　下校 ○ ${c.b}日</div>
-    <div class="lst"><b>登校：</b>${esc(dates('g'))}<br><b>下校：</b>${esc(dates('b'))}</div>
+    <div class="lst"><b>登校：</b>${esc(dates('g', true))}<br><b>下校：</b>${esc(dates('b', true))}</div>
     ${(c.g+c.b)===0 ? '<div class="status warn" style="margin:0 0 8px;">○が1つもありません。「出勤できる日がない」として送ります。</div>' : ''}
     <div class="btns"><button type="button" class="b-ng" id="dNo">戻る</button><button type="button" class="b-ok" id="dYes">送信する</button></div>`;
   ov.classList.add('show');
@@ -273,12 +292,12 @@ function confirmSend(){
 async function doSend(){
   const ov = document.getElementById('ov'), dlg = document.getElementById('dlg');
   if(previewMode){
-    const c = counts(); INFO._note = document.getElementById('note').value;
-    ov.classList.remove('show'); showDone(c.g, c.b, 'preview');
+    INFO._note = document.getElementById('note').value;
+    ov.classList.remove('show'); showDone(counts(), 'preview');
     return;
   }
   const yes = document.getElementById('dYes'); yes.disabled = true; yes.textContent = '送信中…';
-  const days = INFO.days.map(d => ({ d: d.d, go: !!ON[d.d+'|g'], back: !!ON[d.d+'|b'] }));
+  const days = INFO.days.map(d => ({ d: d.d, go: ON[d.d+'|g'] === true, back: ON[d.d+'|b'] === true, gx: ON[d.d+'|g'] === 'x', bx: ON[d.d+'|b'] === 'x' }));
   const note = document.getElementById('note').value;
   try{
     const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/shift_submit`, { method:'POST',
@@ -297,7 +316,7 @@ async function doSend(){
     draftClear();
     ov.classList.remove('show');
     INFO.submitted = true; INFO.last_submitted_at = new Date().toISOString(); INFO._note = note;
-    showDone(r.go, r.back, 'sent');
+    showDone({ g:r.go, b:r.back, gx:r.gx||0, bx:r.bx||0 }, 'sent');
   }catch(e){
     dlg.innerHTML = `<h2 style="color:var(--danger)">通信エラー</h2><p>送信できませんでした。電波の良いところで、もう一度お試しください。（入力した内容はこの端末に残っています）</p><div class="btns"><button type="button" class="b-ok" id="dOk">閉じる</button></div>`;
     document.getElementById('dOk').onclick = () => ov.classList.remove('show');
@@ -329,6 +348,10 @@ function calGrid(){
   }
   return weeks;
 }
+function legend(){
+  return XM() ? '※ ○は出勤できる便、×はどうしても出勤できない便、－（空欄）は相談できる便です。'
+              : '※ ○は出勤できる便、－は出勤できない便です。';
+}
 function calHtml(){
   const wk = calGrid();
   let h = `<div class="calttl">${esc(calTitle())}<small>${esc(calMeta())}</small></div><table class="cal"><thead><tr>`;
@@ -339,11 +362,11 @@ function calHtml(){
     for(const d of w){
       if(d.out){ h += `<td class="out"></td>`; continue; }
       const cls = (d.dow===0 || d.hol) ? 'sun' : (d.dow===6 ? 'sat' : '');
-      h += `<td class="${cls}"><div class="dn">${md(d.d)}${d.hol ? ' 祝' : ''}</div><div class="dbox">${['g','b'].map(s => `<div class="ln"><span class="lb">${s==='g'?'登校':'下校'}</span><span class="mk${ON[d.d+'|'+s]?' on':''}">${ON[d.d+'|'+s]?'○':'－'}</span></div>`).join('')}</div></td>`;
+      h += `<td class="${cls}"><div class="dn">${md(d.d)}${d.hol ? ' 祝' : ''}</div><div class="dbox">${['g','b'].map(s => `<div class="ln"><span class="lb">${s==='g'?'登校':'下校'}</span><span class="mk${ON[d.d+'|'+s]===true?' on':(ON[d.d+'|'+s]==='x'?' ng':'')}">${ON[d.d+'|'+s]===true?'○':(ON[d.d+'|'+s]==='x'?'×':'－')}</span></div>`).join('')}</div></td>`;
     }
     h += `</tr>`;
   }
-  h += `</tbody></table><div class="calleg">※ ○は出勤できる便、－は出勤できない便です。</div>`;
+  h += `</tbody></table><div class="calleg">${esc(legend())}</div>`;
   const nt = (INFO._note || '').trim();
   if(nt) h += `<div class="calnote">備考：${esc(nt)}</div>`;
   return h;
@@ -382,7 +405,8 @@ function saveImage(){
         if(k === 1){ c.strokeStyle = '#b9c6bd'; c.lineWidth = 1; c.beginPath(); c.moveTo(x + 6, ly); c.lineTo(x + cw - 6, ly); c.stroke(); c.lineWidth = 2; }
         c.textAlign = 'left'; c.fillStyle = '#5c7066'; c.font = '400 18px ' + FONT; c.textBaseline = 'middle';
         c.fillText(s === 'g' ? '登校' : '下校', x + 10, cy);
-        if(ON[d.d+'|'+s]){ c.strokeStyle = '#1f6fb5'; c.lineWidth = 4; c.beginPath(); c.arc(x + cw - 32, cy, 14, 0, Math.PI*2); c.stroke(); }
+        if(ON[d.d+'|'+s] === true){ c.strokeStyle = '#1f6fb5'; c.lineWidth = 4; c.beginPath(); c.arc(x + cw - 32, cy, 14, 0, Math.PI*2); c.stroke(); }
+        else if(ON[d.d+'|'+s] === 'x'){ c.textAlign = 'right'; c.fillStyle = '#a82d24'; c.font = '800 30px ' + FONT; c.fillText('×', x + cw - 16, cy); }
         else { c.textAlign = 'right'; c.fillStyle = '#b3beb8'; c.font = '700 26px ' + FONT; c.fillText('－', x + cw - 16, cy); }
         c.textBaseline = 'top'; c.strokeStyle = '#444'; c.lineWidth = 2;
       });
@@ -390,7 +414,7 @@ function saveImage(){
   });
   let y = top0 + 40 + wk.length * (dh + bh) + 16;
   c.textAlign = 'left'; c.fillStyle = '#555'; c.font = '400 20px ' + FONT;
-  c.fillText('※ ○は出勤できる便、－は出勤できない便です。', M, y);
+  c.fillText(legend(), M, y);
   const nt = (INFO._note || '').trim();
   if(nt){ y += 32; c.fillStyle = '#222'; c.fillText('備考：' +nt.replace(/\s+/g, ' ').slice(0, 60), M, y); }
   const a = document.createElement('a');
@@ -399,15 +423,16 @@ function saveImage(){
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
-function showDone(g, b, mode){
+function showDone(c, mode){
   window.scrollTo(0,0);
+  const sum = XM() ? `登校 ○ ${c.g}日・× ${c.gx}日　／　下校 ○ ${c.b}日・× ${c.bx}日` : `登校 ○ ${c.g}日　／　下校 ○ ${c.b}日`;
   const head = mode === 'sent'
     ? `<div class="big">✅</div><h2>送信しました</h2>
-       <p>${esc(INFO.staff_name)} さん<br>登校 ○ ${g}日　／　下校 ○ ${b}日</p>
+       <p>${esc(INFO.staff_name)} さん<br>${sum}</p>
        <p>下のカレンダーが、提出した内容です。PDFや画像で保存しておけます。</p>`
     : mode === 'preview'
     ? `<h2>見本です</h2><p>管理者用の見本のため、送信はされていません。<br>実際は、送信後にこのカレンダーが出ます。</p>`
-    : `<h2>提出した内容</h2><p>登校 ○ ${g}日　／　下校 ○ ${b}日</p>`;
+    : `<h2>提出した内容</h2><p>${sum}</p>`;
   root.innerHTML = `<div class="done no-print" style="padding-bottom:6px;">${head}</div>
     <div class="calbox">${calHtml()}</div>
     <div class="calbtns no-print"><button type="button" id="bPdf">PDFで保存・印刷</button><button type="button" class="sub" id="bImg">画像で保存</button></div>
@@ -425,7 +450,7 @@ function previewInfo(){
   const s = new Date(y, m, 21), e = new Date(y, m+1, 20), dl = new Date(y, m, 15);
   const f = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   const days=[]; for(let d=new Date(s); d<=e; d.setDate(d.getDate()+1)) days.push({ d:f(d), dow:d.getDay(), hol:null });
-  return { staff_name:'見本 太郎', period:{id:0,start:f(s),end:f(e),deadline:f(dl),closed:false}, days, answers:[], submitted:false, note:null };
+  return { staff_name:'見本 太郎', period:{id:0,start:f(s),end:f(e),deadline:f(dl),closed:false,x_mode:true}, days, answers:[], submitted:false, note:null };
 }
 
 (async function start(){
@@ -450,7 +475,10 @@ function previewInfo(){
     INFO = await res.json();
     CLOSED = !!INFO.period.closed;
     DRAFT_KEY = 'kibou_' + INFO.period.id + '_' + accessToken.slice(-12);
-    for(const a of INFO.answers){ if(a.go) ON[a.d+'|g']=true; if(a.back) ON[a.d+'|b']=true; }
+    for(const a of INFO.answers){
+      if(a.go) ON[a.d+'|g']=true; else if(a.gx) ON[a.d+'|g']='x';
+      if(a.back) ON[a.d+'|b']=true; else if(a.bx) ON[a.d+'|b']='x';
+    }
     INFO._note = INFO.note || '';
     if(!CLOSED){                                  // 送信前の途中経過があれば、そちらを優先
       const dr = draftLoad();

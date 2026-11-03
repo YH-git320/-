@@ -58,6 +58,7 @@ table.grid th.nm{background:#eef4ef;z-index:5;}
 table.grid th.dsat,table.grid td.dsat{background:#e6f1fb;}
 table.grid th.dsun,table.grid td.dsun{background:#fceaea;}
 table.grid td.c{height:32px;font-size:17px;font-weight:700;color:#1f6fb5;}
+table.grid td.c.ng{color:#a82d24;}
 table.grid tr.s2 td,table.grid tr.s2 th{border-bottom:2px solid #c9d3cc;}
 table.grid tr.tot td{background:#fbf6e6;font-weight:700;color:#5a4a10;}
 table.grid tr.tot td.nm,table.grid tr.tot td.lab{background:#fbf6e6;}
@@ -159,7 +160,7 @@ table.grid tr.none td.nm{background:#fafafa;}
       <div class="row">
         <button type="button" class="primary" onclick="window.print()">🖨 印刷（A3・横）</button>
         <button type="button" onclick="csvSave()">📄 CSVで保存（Excel用）</button>
-        <span class="muted">○＝出勤できる。空欄＝出勤できない。</span>
+        <span class="muted" id="gLegend">○＝出勤できる。空欄＝出勤できない。</span>
       </div>
     </div>
     <div id="gTitle" style="font-weight:700;color:var(--g2);margin:0 0 6px;"></div>
@@ -1072,10 +1073,14 @@ ${CUR.is_test ? '<p style="background:#fff8e8;border:1px solid #e8d9b0;padding:8
 ${kind === 'remind' ? '<p>シフト希望を、まだご提出いただいていないようです。お手数ですが、下のボタンから入力をお願いします。</p>'
                     : `<p>${esc(jp(CUR.start))}〜${esc(jp(CUR.end))}のシフト希望を、下のボタンから入力してください。</p>`}
 <p>
-・スマートフォンで開き、出勤できる日の「登校」「下校」をタップして ○ をつけます<br>
+${CUR.x_mode ? `・スマートフォンで開き、出勤できる日の「登校」「下校」をタップして ○ をつけます<br>
+・どうしても出勤できない日（旅行など）は、もう一度タップして × をつけます（タップするたびに ○ → × → 空欄 と変わります）<br>
+・空欄の便は、「まだ決まっていない・相談に応じられる」便として扱います<br>
+・土日祝も、出勤できる場合は ○、出勤できない場合は × をつけてください<br>`
+: `・スマートフォンで開き、出勤できる日の「登校」「下校」をタップして ○ をつけます<br>
 ・○のない便は、出勤できない日として扱います<br>
 ・土日祝も、出勤できる場合は ○ をつけてください<br>
-・どうしても出勤できない日（旅行など）は、いちばん下の「備考」欄にその旨を書いてください<br>
+・どうしても出勤できない日（旅行など）は、いちばん下の「備考」欄にその旨を書いてください<br>`}
 ・入力が終わったら、いちばん下の「この内容で送信する」を押します<br>
 ・送信したあとも、〆切までは直して送り直せます</p>
 <p><b>〆切：${esc(dl)}</b></p>
@@ -1174,12 +1179,19 @@ function renderGrid(){
   for(const d of days) h += `<th class="${dayCls(d)}">${d.hol ? '祝' : DOW[d.dow]}</th>`;
   h += `</tr></thead><tbody>`;
   // 日ごとの合計
+  const XM = !!GRID.period.x_mode;     // true の期間：○＝出勤できる／×＝どうしても出勤できない／空欄＝相談できる
+  const lg = document.getElementById('gLegend');
+  if(lg) lg.textContent = XM ? '○＝出勤できる。×＝どうしても出勤できない。空欄＝未定（相談できる）。' : '○＝出勤できる。空欄＝出勤できない。';
   const cnt = (k) => days.map(d => done.filter(s => { const a = s.answers[d.d]; return a && a[k]; }).length);
-  const g = cnt(0), b = cnt(1);
-  h += `<tr class="tot"><td class="nm" rowspan="2">出勤できる人数</td><td class="lab">登校</td>${g.map(n => `<td class="c">${n}</td>`).join('')}</tr>`;
-  h += `<tr class="tot s2"><td class="lab">下校</td>${b.map(n => `<td class="c">${n}</td>`).join('')}</tr>`;
+  const g = cnt(0), b = cnt(1), gx = cnt(2), bx = cnt(3);
+  const tot = (o, x) => o.map((n, i) => `<td class="c">${XM ? `${n}<span style="color:#a82d24;font-size:.8em;">/${x[i]}</span>` : n}</td>`).join('');
+  h += `<tr class="tot"><td class="nm" rowspan="2">${XM ? '出勤できる人数／×の人数' : '出勤できる人数'}</td><td class="lab">登校</td>${tot(g, gx)}</tr>`;
+  h += `<tr class="tot s2"><td class="lab">下校</td>${tot(b, bx)}</tr>`;
   for(const s of done){
-    const cell = (k) => days.map(d => { const a = s.answers[d.d] || [false, false]; return `<td class="c ${dayCls(d)}">${a[k] ? '○' : ''}</td>`; }).join('');
+    const cell = (k) => days.map(d => {
+      const a = s.answers[d.d] || [false, false, false, false];
+      return a[k] ? `<td class="c ${dayCls(d)}">○</td>` : (XM && a[k + 2] ? `<td class="c ng ${dayCls(d)}">×</td>` : `<td class="c ${dayCls(d)}"></td>`);
+    }).join('');
     h += `<tr class="s1"><td class="nm" rowspan="2" title="${esc(s.note||'')}">${esc(s.name)}${s.note ? ' ※' : ''}</td><td class="lab">登校</td>${cell(0)}</tr>`;
     h += `<tr class="s2"><td class="lab">下校</td>${cell(1)}</tr>`;
   }
@@ -1202,7 +1214,8 @@ function csvSave(){
   const rows = [head];
   for(const s of GRID.staff){
     const r = [s.name, s.submitted_at ? '提出済み' : '未提出'];
-    for(const d of days){ const a = s.answers[d.d]; r.push(a && a[0] ? '○' : '', a && a[1] ? '○' : ''); }
+    const XM = !!GRID.period.x_mode;
+    for(const d of days){ const a = s.answers[d.d]; r.push(a && a[0] ? '○' : (XM && a && a[2] ? '×' : ''), a && a[1] ? '○' : (XM && a && a[3] ? '×' : '')); }
     r.push(s.note || ''); rows.push(r);
   }
   const csv = '﻿' + rows.map(r => r.map(q).join(',')).join('\r\n');
