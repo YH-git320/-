@@ -54,6 +54,9 @@ button:disabled,select:disabled,input:disabled,textarea:disabled{opacity:.55;cur
 .srow .sp{flex:1;min-width:200px;}
 .srow .so input{width:70px;display:inline-block;}
 details.pl summary{cursor:pointer;font-size:13px;color:var(--g);}
+table.rt{border-collapse:collapse;width:100%;font-size:14px;line-height:1.8;}
+table.rt th,table.rt td{border:1px solid #cfdad2;padding:6px 10px;text-align:left;vertical-align:top;}
+table.rt th{background:#eef4ef;color:#2d4a38;}
 </style>
 </head>
 <body>
@@ -71,7 +74,8 @@ details.pl summary{cursor:pointer;font-size:13px;color:var(--g);}
 <main>
   <h1>送迎業務マスタ</h1>
   <p class="sub">都筑車庫・青葉方面の<b>添乗員の送迎</b>を、コースとは別に、1か所で登録する画面です。「朝」「登校後」「下校前」「下校後」の4つがあります。時刻を登録するのは<b>「下校前」だけ</b>で、矢口特別支援学校の下校出発時間の何分前かを登録します。</p>
-  <div class="infobar">現在は、<b>登録のみ</b>ができる画面です。月間予定からの送迎の自動作成と、配置画面への表示は、これから作成します。<br>すでに登録されている内容は、岩﨑さんの資料と八重樫さんのお話をもとにした<b>仮の入力</b>です。順番と場所は、確認のうえ、変更してください。</div>
+  <div class="infobar">月間予定（運行時程マスタ）に便が入ると、送迎が自動で作成されます。配置画面への表示は、これから作成します。<br>すでに登録されている内容は、岩﨑さんの資料と八重樫さんのお話をもとにした<b>仮の入力</b>です。順番と場所は、確認のうえ、変更してください。</div>
+  <div id="synclog"></div>
   <div id="status"></div>
   <div class="wrap">
     <div>
@@ -91,6 +95,7 @@ details.pl summary{cursor:pointer;font-size:13px;color:var(--g);}
     </div>
     <div id="editor"></div>
   </div>
+  <div class="panel" id="upcoming" style="margin-top:16px;"></div>
 </main>
 <script>
 // ===== 高尾輸送サービス 管理システム 共通認証モジュール =====
@@ -260,11 +265,17 @@ async function _refresh(session) {
   } catch { return null; }
 }
 
+function _uidFromToken(tok){
+  // ログインの証明（トークン）から、自分のユーザーIDを取り出す。取り出せないときは空（→ 行が1つも返らず、権限なしになる）
+  try{ const p = String(tok).split('.')[1].replace(/-/g,'+').replace(/_/g,'/'); return JSON.parse(decodeURIComponent(escape(atob(p)))).sub || ''; }catch(e){ return ''; }
+}
+
 async function _getRole(accessToken) {
   const cached = sessionStorage.getItem('takao_role');
   if (cached) return cached;
   try {
-    const res = await fetch(`${REST_URL}/user_roles?select=role,display_name,permissions,mfa_enforced`, {
+    const uid = _uidFromToken(accessToken);
+    const res = await fetch(`${REST_URL}/user_roles?select=role,display_name,permissions,mfa_enforced&user_id=eq.${encodeURIComponent(uid)}`, {
       headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${accessToken}` },
     });
     if (!res.ok) return null;
@@ -906,7 +917,7 @@ const KINDS = ['発','乗','降','着'];
 const KIND_HELP = { '発':'出発', '乗':'添乗員が乗る', '降':'添乗員が降りる', '着':'到着' };
 const WD = ['月','火','水','木','金','土','日'];   // 1〜7
 
-let DEFS = [], STOPS = {}, PLACES = [], VEHICLES = [], SCHOOLS = [], LOCKED = {};
+let DEFS = [], STOPS = {}, PLACES = [], VEHICLES = [], SCHOOLS = [], LOCKED = {}, OFFICES = [], RUNS = [], SYNCLOG = null;
 let LOADED = false;
 let SEL = null;      // 選んでいる版の id
 let SELJOB = null;   // 選んでいる業務の job_key
@@ -919,6 +930,7 @@ function todayStr(){
   const m = String(d.getMonth()+1).padStart(2,'0'), dd = String(d.getDate()).padStart(2,'0');
   return d.getFullYear() + '-' + m + '-' + dd;
 }
+function addDays(s, n){ const p = s.split('-'); const d = new Date(Number(p[0]), Number(p[1])-1, Number(p[2]) + n); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
 function md(s){ if(!s) return ''; const p = String(s).split('-'); return Number(p[1]) + '月' + Number(p[2]) + '日'; }
 function minLabel(n){
   if (n==null || n==='' || isNaN(Number(n))) return '';
@@ -943,18 +955,23 @@ async function getJson(path){
 async function load(){
   LOADED = false;
   try{
-    const [defs, stops, places, vehicles, courses, runs] = await Promise.all([
+    const [defs, stops, places, vehicles, courses, runs, offices, upcoming, synclog] = await Promise.all([
       getJson('shuttle_defs?select=*&order=job_key.asc,valid_from.asc'),
       getJson('shuttle_def_stops?select=*&order=def_id.asc,seq.asc'),
       getJson('places?select=id,name,address,coord&active=eq.true&order=name.asc&limit=2000'),
       getJson('vehicles?select=id,vehicle_number,vehicle_type,note,active&active=eq.true&order=vehicle_number.asc&limit=1000'),
       getJson('courses?select=school_name,active&active=eq.true&limit=2000'),
-      getJson('shuttle_runs?select=def_id&work_date=lt.' + todayStr() + '&limit=5000')
+      getJson('shuttle_runs?select=def_id&work_date=lt.' + todayStr() + '&limit=5000'),
+      getJson('offices?select=id,name&order=id.asc&limit=100'),
+      getJson('shuttle_runs?select=work_date,job_key,phase,start_time,times&work_date=gte.' + todayStr() + '&work_date=lte.' + addDays(todayStr(), 14) + '&order=work_date.asc&limit=500'),
+      getJson('shuttle_sync_log?select=*&order=id.desc&limit=1')
     ]);
     DEFS = defs; PLACES = places; VEHICLES = vehicles;
     STOPS = {}; stops.forEach(s => { (STOPS[s.def_id] = STOPS[s.def_id] || []).push(s); });
     SCHOOLS = Array.from(new Set(courses.map(c => c.school_name).filter(Boolean))).sort();
     LOCKED = {}; runs.forEach(r => { LOCKED[r.def_id] = true; });
+    OFFICES = offices.filter(o => String(o.name).indexOf('車庫') >= 0);
+    RUNS = upcoming; SYNCLOG = synclog[0] || null;
     LOADED = true;
   }catch(e){
     LOADED = false;
@@ -1001,7 +1018,7 @@ function openDef(id){
   SEL = d.id; SELJOB = d.job_key; DIRTY = false;
   F = {
     id:d.id, job_key:d.job_key, name:d.name, phase:d.phase, valid_from:d.valid_from,
-    ref_school:d.ref_school || '', fixed_start:d.fixed_start || '',
+    ref_school:d.ref_school || '', ref_office_id:d.ref_office_id || '', fixed_start:d.fixed_start || '',
     default_vehicle_id:d.default_vehicle_id || '', driver_pool:d.driver_pool,
     weekdays:(d.weekdays || []).slice(), active:d.active !== false, note:d.note || '',
     stops:(STOPS[d.id] || []).map(s => ({ id:s.id, place_id:s.place_id, kind:s.kind, offset_min:(s.offset_min==null?'':s.offset_min), note:s.note || '' }))
@@ -1010,8 +1027,10 @@ function openDef(id){
 }
 
 function render(){
+  renderSyncLog();
   renderJobs();
   renderEditor();
+  renderUpcoming();
 }
 
 function renderJobs(){
@@ -1072,10 +1091,17 @@ function renderEditor(){
   if (F.phase === '朝'){
     h += '<div><label class="fld">出社時刻（例：5:10）</label><input type="text" value="' + escAttr(F.fixed_start) + '" placeholder="5:10" oninput="fset(\'fixed_start\',this.value)"' + dis + '></div>';
   }
-  if (isMae){
-    h += '<div><label class="fld">基準にする学校（この学校の下校出発時間の何分前かを登録します）</label><select onchange="fset(\'ref_school\',this.value)"' + dis + '>'
+  if (isMae || F.phase === '登校後'){
+    const lbl = isMae ? '基準にする学校（この学校に便がある日に作成します。この学校の、いちばん早い下校①の出発時間の何分前かを登録します）'
+                      : '基準にする学校（この学校に便がある日に、この送迎を作成します）';
+    h += '<div><label class="fld">' + lbl + '</label><select onchange="fset(\'ref_school\',this.value)"' + dis + '>'
       + opt('', '（選んでください）', F.ref_school)
       + SCHOOLS.map(s => opt(s, s, F.ref_school)).join('') + '</select></div>';
+  }
+  if (F.phase === '朝' || F.phase === '下校後'){
+    h += '<div><label class="fld">基準にする営業所の車庫（この車庫のコースに、' + (F.phase === '朝' ? '登校便' : '下校便') + 'がある日に、この送迎を作成します）</label><select onchange="fset(\'ref_office_id\',this.value)"' + dis + '>'
+      + opt('', '（選んでください）', F.ref_office_id)
+      + OFFICES.map(o => opt(o.id, o.name, F.ref_office_id)).join('') + '</select></div>';
   }
   h += '</div>';
   h += '<div style="margin-top:10px;"><label class="fld">曜日の指定（決まっているときだけ。何も選ばなければ毎日）</label><div class="wd">'
@@ -1115,11 +1141,49 @@ function renderEditor(){
   box.innerHTML = h;
 }
 
+function renderSyncLog(){
+  const box = document.getElementById('synclog'); if (!box) return;
+  if (SYNCLOG && SYNCLOG.ok === false){
+    const t = String(SYNCLOG.ran_at || '').replace('T', ' ').slice(0, 16);
+    box.innerHTML = '<div class="warnbar">送迎の自動作成が、正常に終わりませんでした（' + escHtml(t) + '）。内容：' + escHtml(SYNCLOG.message || '') + '<br>運行時程マスタの便には、影響していません。お手数ですが、八重樫さんにご連絡ください。</div>';
+  } else { box.innerHTML = ''; }
+}
+
+function runTimeText(r){
+  if (r.phase === '下校前'){
+    const ks = Object.keys(r.times || {}).sort((a, b) => Number(a) - Number(b));
+    return ks.map((k, i) => (i === 0 ? '出庫 ' : '再出庫 ') + r.times[k]).join('　／　') || '時刻なし';
+  }
+  if (r.phase === '朝') return r.start_time ? '出社 ' + r.start_time : '時刻なし';
+  return '時刻は登録しません';
+}
+function renderUpcoming(){
+  const box = document.getElementById('upcoming'); if (!box) return;
+  if (!LOADED){ box.innerHTML = ''; return; }
+  const WDN = ['日','月','火','水','木','金','土'];
+  let h = '<div class="ptitle">今後2週間の送迎の予定（自動で作成されます）</div>';
+  h += '<div class="muted" style="margin-bottom:8px;">運行時程マスタ（月間予定）に便が入ると、送迎が自動で作成されます。下校前の出発時刻は、矢口特別支援学校の、いちばん早い下校①の出発時間をもとに計算されます。日課が変更されると、まだ過去になっていない日の時刻も、自動で変わります。</div>';
+  if (!RUNS.length){
+    h += '<div class="muted">この期間の送迎は、まだ作成されていません。月間予定に便が入っていない日は、作成されません。</div>';
+  } else {
+    const byDate = {}; RUNS.forEach(r => { (byDate[r.work_date] = byDate[r.work_date] || []).push(r); });
+    h += '<table class="rt"><tr><th style="width:18%">日付</th><th>送迎と時刻</th></tr>';
+    Object.keys(byDate).sort().forEach(d => {
+      const p = d.split('-'); const w = WDN[new Date(Number(p[0]), Number(p[1])-1, Number(p[2])).getDay()];
+      const rows = byDate[d].sort((a, b) => PHASES.indexOf(a.phase) - PHASES.indexOf(b.phase));
+      h += '<tr><td>' + Number(p[1]) + '月' + Number(p[2]) + '日（' + w + '）</td><td>'
+        + rows.map(r => '<b>' + escHtml(r.phase) + '</b>　' + escHtml(runTimeText(r))).join('<br>') + '</td></tr>';
+    });
+    h += '</table>';
+  }
+  box.innerHTML = h;
+}
+
 function pickVer(id){ if (!confirmLeave()) return; openDef(id); }
 function fset(k, v){
-  if (k === 'default_vehicle_id') v = v === '' ? '' : Number(v);
+  if (k === 'default_vehicle_id' || k === 'ref_office_id') v = v === '' ? '' : Number(v);
   F[k] = v; DIRTY = true;
-  if (k === 'ref_school' || k === 'driver_pool' || k === 'default_vehicle_id' || k === 'valid_from' || k === 'active') renderEditor();
+  if (k === 'ref_school' || k === 'ref_office_id' || k === 'driver_pool' || k === 'default_vehicle_id' || k === 'valid_from' || k === 'active') renderEditor();
   else softUpdate(k);
 }
 function softUpdate(k){
@@ -1165,7 +1229,7 @@ async function save(){
   if (F.phase === '朝' && !validFixed(F.fixed_start)){ status('出社時刻は「5:10」の形式で入力してください。', false); return; }
   const def = {
     id:F.id, job_key:F.job_key, name:F.name, phase:F.phase, valid_from:F.valid_from,
-    ref_school:F.ref_school || null, fixed_start:F.fixed_start || null,
+    ref_school:F.ref_school || null, ref_office_id:(F.ref_office_id === '' ? null : F.ref_office_id), fixed_start:F.fixed_start || null,
     default_vehicle_id:(F.default_vehicle_id === '' ? null : F.default_vehicle_id),
     driver_pool:F.driver_pool, weekdays:F.weekdays, active:F.active, note:F.note || null
   };
