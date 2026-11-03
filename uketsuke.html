@@ -878,7 +878,7 @@ async function load(){
   try{
     D = await rpc('doc_open', { p_token: TOKEN, p_period: PERIOD_ID });
     PERIOD_ID = D.period.id;
-    if(D.is_admin && !ADMIN_LIST){ try{ ADMIN_LIST = await rpc('doc_admin_periods'); }catch(e){ ADMIN_LIST = []; } }
+    if(D.is_admin){ try{ ADMIN_LIST = await rpc('doc_admin_periods'); }catch(e){ ADMIN_LIST = ADMIN_LIST || []; } }
     render();
   }catch(e){
     // リンクなしで開いた管理者は、期間の一覧から選ぶ
@@ -1027,7 +1027,7 @@ function adminHtml(){
     <table class="list"><thead><tr><th>受付</th><th>状態</th><th>枠／書類</th><th>案内メール</th><th></th></tr></thead><tbody>`;
   for(const p of (ADMIN_LIST || [])){
     const ym = periodLabel(p);
-    h += `<tr><td>${esc(ym)} ${p.is_test ? '<span class="tag t-no">テスト</span>' : ''}</td><td>${p.status === 'open' ? '受付中' : p.status === 'submitted' ? '送信済み' : '終了'}</td><td>${p.slots}／${p.files}</td>
+    h += `<tr><td>${ym}</td><td>${p.status === 'open' ? '受付中' : p.status === 'submitted' ? '送信済み' : '終了'}</td><td>${p.slots}／${p.files}</td>
       <td>${p.mail_sent_at ? esc(fmtDT(p.mail_sent_at)) + ' 送信' : '未送信'}</td>
       <td style="white-space:nowrap;"><button type="button" class="mini" data-act="adminOpen" data-p="${p.id}" data-k="${p.kind || 'monthly'}">開く</button>
       <button type="button" class="mini" data-act="adminLink" data-p="${p.id}">リンクを作り直す</button>
