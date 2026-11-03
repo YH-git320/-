@@ -122,7 +122,43 @@ const ROLE_LABEL = { super_admin: '権限付与者', admin: 'システム管理�
 
 /* ===================== セッション管理 ===================== */
 
-function _saveSession(data) {
+/* ---- ログインを、このパソコンに一定時間だけ覚える（2026-11-03）----
+   目的：メールのリンクを別のタブで開いても、ログインし直さなくてよいようにする。
+   ・覚えるのは、二段階認証まで終えたログインだけ（パスワードだけの途中の状態は覚えない）
+   ・12時間たつと自動で消える。ログアウトすると、すぐ消える */
+const _REMEMBER_KEY = 'takao_remember';
+const _REMEMBER_HOURS = 12;
+function _jwtAal(tok){
+  try{ const p = String(tok).split('.')[1].replace(/-/g,'+').replace(/_/g,'/'); return JSON.parse(decodeURIComponent(escape(atob(p)))).aal || ''; }catch(e){ return ''; }
+}
+function _readRemembered(){
+  try{
+    const r = JSON.parse(localStorage.getItem(_REMEMBER_KEY) || 'null');
+    if(!r || !r.session || !r.until) return null;
+    if(Date.now() > r.until){ localStorage.removeItem(_REMEMBER_KEY); return null; }
+    return r;
+  }catch(e){ return null; }
+}
+function _rememberSession(session, fresh){
+  try{
+    if(_jwtAal(session.access_token) !== 'aal2') return;
+    const cur = _readRemembered();
+    // 期限は、ログインしたときから数える。トークンの更新では延ばさない
+    const until = (!fresh && cur && cur.session.user_id === session.user_id) ? cur.until : Date.now() + _REMEMBER_HOURS * 3600 * 1000;
+    localStorage.setItem(_REMEMBER_KEY, JSON.stringify({ session, until }));
+  }catch(e){}
+}
+function _forgetRemembered(){ try{ localStorage.removeItem(_REMEMBER_KEY); }catch(e){} }
+// 別のタブでログアウトした（または12時間たった）ときは、このタブもログアウトする
+window.addEventListener('storage', e => {
+  if(e.key !== _REMEMBER_KEY || e.newValue !== null) return;
+  if(sessionStorage.getItem('takao_session')){
+    _clearSession();
+    if(!/login\.html/.test(location.pathname)) location.href = 'login.html';
+  }
+});
+
+function _saveSession(data, fresh) {
   const session = {
     access_token:  data.access_token,
     refresh_token: data.refresh_token,
@@ -131,13 +167,24 @@ function _saveSession(data) {
     email:         data.user?.email || data.email,
   };
   sessionStorage.setItem('takao_session', JSON.stringify(session));
+  _rememberSession(session, fresh);
   return session;
 }
 
 function _getSession() {
-  try { return JSON.parse(sessionStorage.getItem('takao_session')); }
-  catch { return null; }
+  try {
+    let s = null;
+    try { s = JSON.parse(sessionStorage.getItem('takao_session')); } catch(e) {}
+    const r = _readRemembered();
+    // このタブにログインが無いときは、覚えているログインを使う。別のタブが更新した新しいものがあれば、そちらを使う
+    if (r && (!s || (r.session.user_id === s.user_id && (r.session.expires_at || 0) > (s.expires_at || 0)))) {
+      s = r.session;
+      sessionStorage.setItem('takao_session', JSON.stringify(s));
+    }
+    return s;
+  } catch { return null; }
 }
+try { _getSession(); } catch(e) {}   // ページの読み込みの最初に、覚えているログインをこのタブへ写す
 
 function _clearSession() {
   sessionStorage.removeItem('takao_session');
@@ -246,6 +293,7 @@ async function signOut() {
       headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` },
     }).catch(() => {});
   }
+  _forgetRemembered();
   _clearSession();
   window.location.href = 'login.html';
 }
@@ -344,7 +392,7 @@ async function verifyTotpEnrollment(factorId, code) {
       body: JSON.stringify({ challenge_id: challengeId, code })
     });
     if (!vRes.ok) return { ok: false, error: 'コードが正しくありません。もう一度お試しください。' };
-    _saveSession(await vRes.json());
+    _saveSession(await vRes.json(), true);
     return { ok: true };
   } catch (e) {
     return { ok: false, error: 'ネットワークエラー: ' + e.message };
@@ -392,7 +440,7 @@ async function initAuth(allowedRoles) {
     if (!session) { _redirectLogin(); return false; }
     if (_isExpired(session)) {
       session = await _refresh(session);
-      if (!session) { _clearSession(); _redirectLogin(); return false; }
+      if (!session) { _forgetRemembered(); _clearSession(); _redirectLogin(); return false; }
     }
     const role = await _getRole(session.access_token);
     if (!role || !allowedRoles.includes(role)) {
@@ -808,7 +856,7 @@ function _loadQRLib(cb) {
 
 
 </script>
-<script>window.PAGE_CFG = {"page":"uketsuke_crew.html","heading":"添乗員の月間勤務予定表","help":"21日から翌月20日までの、添乗員の月間勤務予定表のPDFを1枚添付して、送信してください。送信したあとで直したいときは、「差し替える」から上げ直せます。最新の版が使われます。"};</script>
+<script>window.PAGE_CFG = {"page":"uketsuke_crew.html","heading":"添乗員の月間勤務予定表","help":"21日から翌月20日までの、添乗員の月間勤務予定表のPDFを1枚、下の枠にドラッグしてください。ドラッグすると、そのまま送信されます。送信したあとで直したいときも、同じ枠にドラッグし直してください。最新の版が使われます。"};</script>
 <script>
 /* ===== 勤務予定表の受付（枠が1つ：日ごと／月間）===== */
 const CFG = window.PAGE_CFG || { page: 'uketsuke_daily.html', heading: '勤務予定表', help: '' };
@@ -937,7 +985,7 @@ async function act(a, ds){
       if(!confirm('この内容で送信します。よろしいですか？')) return;
       await rpc('doc_submit', P); await load(); say('送信しました。検査の結果が出るまで、お待ちください。', true);
     }
-    else if(a === 'replace'){ await rpc('doc_replace_start', P); await load(); say('差し替えできます。新しいPDFを添付して、送信してください。送信するまでは、いまの版が使われます。', true); }
+    else if(a === 'replace'){ await rpc('doc_replace_start', P); await load(); say('差し替えできます。新しいPDFを、下の枠にドラッグしてください。ドラッグするまでは、いまの版が使われます。', true); }
     else if(a === 'detach'){
       if(!confirm('この書類を取り消します。（保管場所には記録が残ります）よろしいですか？')) return;
       await rpc('doc_detach_file', {...P, p_file: ds.f}); await load();
@@ -975,7 +1023,7 @@ async function upload(list){
     await rpc('doc_register_file', { p_token: TOKEN, p_period: PERIOD_ID, p_path: path, p_orig: f.name, p_size: f.size, p_sha: sha, p_guess: null });
     await rpc('doc_submit', P0);                                              // そのまま送信する
     BUSY = false; await load(); say('送信しました。検査の結果が出るまで、お待ちください。', true);
-  }catch(e){ BUSY = false; say(errMsg(e) + '（' + esc(f.name) + '）'); }
+  }catch(e){ BUSY = false; if(prog) prog.textContent = ''; say(errMsg(e) + '（' + esc(f.name) + '）'); }
   finally{ BUSY = false; }
 }
 

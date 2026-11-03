@@ -197,7 +197,43 @@ const ROLE_LABEL = { super_admin: '権限付与者', admin: 'システム管理�
 
 /* ===================== セッション管理 ===================== */
 
-function _saveSession(data) {
+/* ---- ログインを、このパソコンに一定時間だけ覚える（2026-11-03）----
+   目的：メールのリンクを別のタブで開いても、ログインし直さなくてよいようにする。
+   ・覚えるのは、二段階認証まで終えたログインだけ（パスワードだけの途中の状態は覚えない）
+   ・12時間たつと自動で消える。ログアウトすると、すぐ消える */
+const _REMEMBER_KEY = 'takao_remember';
+const _REMEMBER_HOURS = 12;
+function _jwtAal(tok){
+  try{ const p = String(tok).split('.')[1].replace(/-/g,'+').replace(/_/g,'/'); return JSON.parse(decodeURIComponent(escape(atob(p)))).aal || ''; }catch(e){ return ''; }
+}
+function _readRemembered(){
+  try{
+    const r = JSON.parse(localStorage.getItem(_REMEMBER_KEY) || 'null');
+    if(!r || !r.session || !r.until) return null;
+    if(Date.now() > r.until){ localStorage.removeItem(_REMEMBER_KEY); return null; }
+    return r;
+  }catch(e){ return null; }
+}
+function _rememberSession(session, fresh){
+  try{
+    if(_jwtAal(session.access_token) !== 'aal2') return;
+    const cur = _readRemembered();
+    // 期限は、ログインしたときから数える。トークンの更新では延ばさない
+    const until = (!fresh && cur && cur.session.user_id === session.user_id) ? cur.until : Date.now() + _REMEMBER_HOURS * 3600 * 1000;
+    localStorage.setItem(_REMEMBER_KEY, JSON.stringify({ session, until }));
+  }catch(e){}
+}
+function _forgetRemembered(){ try{ localStorage.removeItem(_REMEMBER_KEY); }catch(e){} }
+// 別のタブでログアウトした（または12時間たった）ときは、このタブもログアウトする
+window.addEventListener('storage', e => {
+  if(e.key !== _REMEMBER_KEY || e.newValue !== null) return;
+  if(sessionStorage.getItem('takao_session')){
+    _clearSession();
+    if(!/login\.html/.test(location.pathname)) location.href = 'login.html';
+  }
+});
+
+function _saveSession(data, fresh) {
   const session = {
     access_token:  data.access_token,
     refresh_token: data.refresh_token,
@@ -206,13 +242,24 @@ function _saveSession(data) {
     email:         data.user?.email || data.email,
   };
   sessionStorage.setItem('takao_session', JSON.stringify(session));
+  _rememberSession(session, fresh);
   return session;
 }
 
 function _getSession() {
-  try { return JSON.parse(sessionStorage.getItem('takao_session')); }
-  catch { return null; }
+  try {
+    let s = null;
+    try { s = JSON.parse(sessionStorage.getItem('takao_session')); } catch(e) {}
+    const r = _readRemembered();
+    // このタブにログインが無いときは、覚えているログインを使う。別のタブが更新した新しいものがあれば、そちらを使う
+    if (r && (!s || (r.session.user_id === s.user_id && (r.session.expires_at || 0) > (s.expires_at || 0)))) {
+      s = r.session;
+      sessionStorage.setItem('takao_session', JSON.stringify(s));
+    }
+    return s;
+  } catch { return null; }
 }
+try { _getSession(); } catch(e) {}   // ページの読み込みの最初に、覚えているログインをこのタブへ写す
 
 // --- ログイン自動更新（期限切れ防止）: 45分ごと＋タブ復帰時に更新。未ログイン時は何もしない ---
 async function refreshSession() {
@@ -326,6 +373,7 @@ async function signOut() {
       headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` },
     }).catch(() => {});
   }
+  _forgetRemembered();
   _clearSession();
   window.location.href = 'login.html';
 }
@@ -424,7 +472,7 @@ async function verifyTotpEnrollment(factorId, code) {
       body: JSON.stringify({ challenge_id: challengeId, code })
     });
     if (!vRes.ok) return { ok: false, error: 'コードが正しくありません。もう一度お試しください。' };
-    _saveSession(await vRes.json());
+    _saveSession(await vRes.json(), true);
     return { ok: true };
   } catch (e) {
     return { ok: false, error: 'ネットワークエラー: ' + e.message };
@@ -472,7 +520,7 @@ async function initAuth(allowedRoles) {
     if (!session) { _redirectLogin(); return false; }
     if (_isExpired(session)) {
       session = await _refresh(session);
-      if (!session) { _clearSession(); _redirectLogin(); return false; }
+      if (!session) { _forgetRemembered(); _clearSession(); _redirectLogin(); return false; }
     }
     const role = await _getRole(session.access_token);
     if (!role || !allowedRoles.includes(role)) {
