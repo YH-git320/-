@@ -846,8 +846,8 @@ function say(msg, ok){
 function fmtDT(iso){ if(!iso) return ''; const d = new Date(iso); return (d.getMonth()+1)+'/'+d.getDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
 function fmtD(iso){ if(!iso) return ''; const d = new Date(iso); return (d.getMonth()+1)+'月'+d.getDate()+'日'; }
 function kb(n){ return n >= 1048576 ? (n/1048576).toFixed(1)+'MB' : Math.max(1,Math.round(n/1024))+'KB'; }
-const CAT = { school_schedule:'学校予定表', hire_schedule:'雇上車運行予定表', crew_monthly:'添乗員月間勤務予定表' };
-const CATSHORT = { school_schedule:'学校予定表', hire_schedule:'雇上車', crew_monthly:'勤務予定表' };
+const CAT = { school_schedule:'学校予定表', hire_schedule:'雇上車運行予定表' };
+const CATSHORT = { school_schedule:'学校予定表', hire_schedule:'雇上車' };
 function slotName(s){ return (CATSHORT[s.category]||'') + '：' + s.label + (s.region ? '（'+s.region+'）' : ''); }
 function scanTag(st){
   return st === 'passed' ? '<span class="tag t-ok">検査合格</span>'
@@ -872,7 +872,6 @@ function guessFor(name, catHint){
   hits = hits.filter(h => h.sc === best);
   if(hireHint && hits.some(h => h.cat === 'hire_schedule')) hits = hits.filter(h => h.cat === 'hire_schedule');
   else if(schoolHint && hits.some(h => h.cat === 'school_schedule')) hits = hits.filter(h => h.cat === 'school_schedule');
-  if(!hits.length && (catHint === 'crew_monthly' || (!catHint && /勤務予定|勤務表/.test(nm)))) hits = D.slots.filter(s => s.category === 'crew_monthly').map(s => ({id:s.id, cat:s.category, sc:1}));
   const ids = hits.map(h => h.id);
   if(ids.length === 1) return { slot_ids: ids, candidates: [] };
   return { slot_ids: [], candidates: ids };
@@ -918,7 +917,7 @@ function calc(){
 /* ---- 画面 ---- */
 function slotOptions(selIds){
   let h = '<option value="">枠を選ぶ…</option>';
-  for(const c of ['school_schedule','hire_schedule','crew_monthly']){
+  for(const c of ['school_schedule','hire_schedule']){
     h += `<optgroup label="${esc(CAT[c])}">`;
     for(const s of D.slots.filter(x => x.category === c)){
       if(selIds.includes(s.id)) continue;
@@ -936,12 +935,13 @@ function render(){
     <p class="sub">${open ? '届いた書類を、まとめて選んで添付してください。全部の枠がそろうと、送信できます。途中で閉じても、添付した分は残ります。' : '送信済みです（' + esc(fmtDT(P.submitted_at)) + '）。検査の結果が、下に出ます。'}${P.expires_at ? '　このリンクの期限：' + esc(fmtD(P.expires_at)) + 'まで' : ''}</p>`;
 
   if(open){
-    h += `<div class="panel"><b>書類をまとめて添付する</b>
-      <div class="muted" style="margin:2px 0 10px;">種類ごとに、PDFをまとめてドラッグするか、「選ぶ」を押してください（1ファイル10MBまで）。学校の名前は、ファイル名から探して、枠の候補を出します。</div>
-      <div class="drops">
-        ${[['school_schedule','学校予定表'],['hire_schedule','雇上車運行予定表'],['crew_monthly','添乗員月間勤務予定表'],['','種類がまざっている書類']].map(([c,l]) => `<div class="drop" data-cat="${c}"><div style="font-weight:700;">${l}</div><div class="muted" style="margin:4px 0 8px;">ここにドラッグ</div><button type="button" class="primary pickbtn" data-cat="${c}">選ぶ</button></div>`).join('')}
-      </div>
+    h += `<div class="panel"><b>学校予定表と雇上車運行予定表を、まとめて添付する</b>
+      <div class="muted" style="margin:2px 0 10px;">月のフォルダ（例：令和8年12月）を、そのままドラッグしてください。フォルダの名前から、学校予定表か雇上車かを判断します。PDFだけをドラッグしてもかまいません。1ファイル10MBまでです。</div>
+      <div class="drop" id="drop"><div style="font-weight:700;font-size:15px;">ここに、フォルダまたはPDFをドラッグ</div>
+        <div class="muted" style="margin:6px 0 10px;">または、次のボタンで選びます</div>
+        <button type="button" class="primary" id="pickDir">フォルダを選ぶ</button> <button type="button" id="pickFiles">PDFを選ぶ</button></div>
       <input type="file" id="fileIn" accept="application/pdf,.pdf" multiple style="display:none">
+      <input type="file" id="dirIn" webkitdirectory multiple style="display:none">
       <div id="prog" class="muted" style="margin-top:8px;"></div></div>`;
   }
 
@@ -949,9 +949,11 @@ function render(){
   h += `<div class="panel"><div class="row" style="justify-content:space-between;"><b>枠の進み具合</b><span>${c.done} / ${c.total} 枠</span></div>
         <div class="bar"><i style="width:${pct}%"></i></div></div>`;
 
+  const amb = D.files.filter(f => !f.slot_ids.length && ((f.guess && f.guess.candidates) || []).length).length;
   if(D.files.length){
     h += `<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:8px;"><b>添付した書類（${D.files.length}枚）</b>
       ${open ? `<button type="button" class="primary" data-act="confirmAll" ${c.unconf ? '' : 'disabled'}>候補どおりにすべて決定（${c.unconf}件）</button>` : ''}</div>
+      ${open && amb ? `<div class="warnbox" style="margin:0 0 8px;">学校予定表か雇上車か、迷っている書類が ${amb} 枚あります。まとめて決める：<button type="button" class="mini" data-act="bulkCat" data-c="school_schedule">すべて学校予定表にする</button> <button type="button" class="mini" data-act="bulkCat" data-c="hire_schedule">すべて雇上車にする</button></div>` : ''}
       <table class="list"><thead><tr><th>ファイル</th><th>どの枠か</th><th>検査</th>${open ? '<th></th>' : ''}</tr></thead><tbody>`;
     for(const f of D.files){
       const mine = f.slot_ids.map(id => D.slots.find(s => s.id === id)).filter(Boolean);
@@ -975,7 +977,7 @@ function render(){
   }
 
   h += `<div class="panel"><b>枠ごとの状態</b><div class="muted" style="margin:2px 0 8px;">学校から書類が届かない枠は、「今月は書類なし」を、理由をつけて選べます。</div>`;
-  for(const cat of ['school_schedule','hire_schedule','crew_monthly']){
+  for(const cat of ['school_schedule','hire_schedule']){
     const list = D.slots.filter(s => s.category === cat);
     if(!list.length) continue;
     h += `<div class="sec">${esc(CAT[cat])}　${list.filter(c.covered).length}/${list.length}</div><table class="list"><tbody>`;
@@ -1033,16 +1035,34 @@ function adminHtml(){
 
 /* ---- 操作 ---- */
 function wire(){
-  const fin = document.getElementById('fileIn');
-  if(!fin) return;
-  let pendingCat = '';
-  document.querySelectorAll('.pickbtn').forEach(b => b.onclick = () => { pendingCat = b.dataset.cat; fin.click(); });
-  fin.onchange = () => { handleFiles(fin.files, pendingCat); fin.value = ''; };
-  document.querySelectorAll('.drop').forEach(drop => {
-    ['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('on'); }));
-    ['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('on'); }));
-    drop.addEventListener('drop', e => handleFiles(e.dataTransfer.files, drop.dataset.cat));
-  });
+  const drop = document.getElementById('drop'), fin = document.getElementById('fileIn'), din = document.getElementById('dirIn');
+  if(!drop) return;
+  document.getElementById('pickFiles').onclick = () => fin.click();
+  document.getElementById('pickDir').onclick = () => din.click();
+  fin.onchange = () => { handleFiles([...fin.files].map(f => ({ file: f, path: '' }))); fin.value = ''; };
+  din.onchange = () => { handleFiles([...din.files].map(f => ({ file: f, path: f.webkitRelativePath || '' }))); din.value = ''; };
+  ['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('on'); }));
+  drop.addEventListener('dragleave', e => { e.preventDefault(); drop.classList.remove('on'); });
+  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('on'); const p = collectDropped(e.dataTransfer); p.then(handleFiles); });
+}
+// 枠の外にドロップしても、ブラウザがPDFを開いてしまわないようにする
+['dragover','drop'].forEach(ev => window.addEventListener(ev, e => { if(!e.target.closest || !e.target.closest('#drop')) e.preventDefault(); }));
+// ドロップされたフォルダの中身を、フォルダの名前つきで集める（PDFの中身は開かない）
+async function collectDropped(dt){
+  const out = [];
+  const items = [...(dt.items || [])];
+  const entries = items.map(i => i.webkitGetAsEntry ? i.webkitGetAsEntry() : null).filter(Boolean);
+  if(entries.length){
+    const walk = async (en) => {
+      if(en.isFile){ const f = await new Promise((res, rej) => en.file(res, rej)); out.push({ file: f, path: en.fullPath || '' }); }
+      else if(en.isDirectory){
+        const rd = en.createReader(); let batch;
+        do { batch = await new Promise((res, rej) => rd.readEntries(res, rej)); for(const x of batch) await walk(x); } while(batch.length);
+      }
+    };
+    for(const en of entries) await walk(en);
+  } else { for(const f of (dt.files || [])) out.push({ file: f, path: '' }); }
+  return out;
 }
 document.addEventListener('click', async e => {
   const t = e.target.closest('[data-act]'); if(!t || t.tagName === 'SELECT') return;
@@ -1062,6 +1082,15 @@ async function act(a, ds){
     else if(a === 'pickCand' || a === 'assign'){
       const f = D.files.find(x => x.id === ds.f); const ids = (f.slot_ids || []).concat([Number(ds.s)]);
       await rpc('doc_assign', {...P, p_file: ds.f, p_slots: ids}); await load();
+    }
+    else if(a === 'bulkCat'){
+      const todo = D.files.filter(f => !f.slot_ids.length && ((f.guess && f.guess.candidates) || []).length);
+      let n = 0;
+      for(const f of todo){
+        const sid = f.guess.candidates.find(id => (D.slots.find(s => s.id === id) || {}).category === ds.c);
+        if(sid){ await rpc('doc_assign', {...P, p_file: f.id, p_slots: [sid]}); n++; }
+      }
+      await load(); say(n + '枚を決めました。', true);
     }
     else if(a === 'unassign'){
       const f = D.files.find(x => x.id === ds.f); const ids = f.slot_ids.filter(i => i !== Number(ds.s));
@@ -1118,14 +1147,23 @@ async function act(a, ds){
 
 /* ---- 一括アップロード（PDFの中身は開かず、そのまま保管場所へ送る） ---- */
 function hex(buf){ return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2,'0')).join(''); }
-async function handleFiles(fl, cat){
-  if(BUSY || !fl || !fl.length) return;
+function catFromPath(p){
+  const s = String(p || '');
+  if(/学校予定表/.test(s)) return 'school_schedule';
+  if(/雇上車/.test(s)) return 'hire_schedule';
+  if(/勤務予定表|添乗員/.test(s)) return 'skip';
+  return null;
+}
+async function handleFiles(items){
+  if(BUSY || !items || !items.length) return;
   BUSY = true;
-  const arr = [...fl], fails = [], prog = document.getElementById('prog'); let ok = 0;
+  const fails = [], prog = document.getElementById('prog'); let ok = 0, skipped = 0;
   try{
-    for(let i = 0; i < arr.length; i++){
-      const f = arr[i];
-      if(prog) prog.textContent = `送信中 ${i+1}/${arr.length}：${f.name}`;
+    for(let i = 0; i < items.length; i++){
+      const f = items[i].file, cat = catFromPath(items[i].path);
+      if(/^(\.|thumbs\.db$|desktop\.ini$|~\$)/i.test(f.name)) continue;   // フォルダの中の、見えないファイル
+      if(cat === 'skip'){ skipped++; continue; }                          // 添乗員の予定表は、この画面では受け付けない
+      if(prog) prog.textContent = `送信中 ${i+1}/${items.length}：${f.name}`;
       try{
         if(!/\.pdf$/i.test(f.name)) throw new Error('PDFのファイルではありません');
         if(f.size < 1) throw new Error('空のファイルです');
@@ -1138,14 +1176,15 @@ async function handleFiles(fl, cat){
         const r = await fetch(`${SUPA}/storage/v1/object/docs-incoming/${path}`, { method:'POST',
           headers: { 'apikey': ANON_KEY, 'Authorization': 'Bearer ' + s.access_token, 'Content-Type': 'application/pdf', 'x-upsert': 'false' }, body: buf });
         if(!r.ok) throw new Error('保管場所に送れませんでした（' + r.status + '）');
-        await rpc('doc_register_file', { p_token: TOKEN, p_period: PERIOD_ID, p_path: path, p_orig: f.name, p_size: f.size, p_sha: sha, p_guess: guessFor(f.name, cat || null) });
+        await rpc('doc_register_file', { p_token: TOKEN, p_period: PERIOD_ID, p_path: path, p_orig: f.name, p_size: f.size, p_sha: sha, p_guess: guessFor(f.name, cat) });
         ok++;
       }catch(e){ fails.push(f.name + '：' + errMsg(e)); }
     }
   } finally { BUSY = false; }
   await load();
-  if(fails.length) say(`${ok}枚を受け付けました。次の${fails.length}枚は受け付けられませんでした：<br>` + fails.map(esc).join('<br>'));
-  else say(`${ok}枚を受け付けました。下の「どの枠か」を確認してください。`, true);
+  const note = skipped ? `（添乗員の予定表 ${skipped}枚は、この画面では受け付けないため、飛ばしました）` : '';
+  if(fails.length) say(`${ok}枚を受け付けました。次の${fails.length}枚は受け付けられませんでした：<br>` + fails.map(esc).join('<br>') + note);
+  else say(`${ok}枚を受け付けました。下の「どの枠か」を確認してください。${note}`, true);
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
