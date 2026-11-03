@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>月次書類の受付 — 高尾輸送サービス</title>
+<style>
+:root{--g:#4d7a5e;--g2:#2d4a38;--bg:#f5f8f4;--line:#e0e6e0;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:'Noto Sans JP','Hiragino Kaku Gothic Pro','Meiryo',sans-serif;background:var(--bg);color:#2d3b35;}
+header{background:#fff;border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+header .brand{font-size:16px;font-weight:700;color:var(--g2);}
+header nav a{color:var(--g);text-decoration:none;font-size:13px;margin-right:12px;}
+main{max-width:1280px;margin:0 auto;padding:16px;}
+main.wide{max-width:none;padding:16px 24px;}
+h1{font-size:19px;color:var(--g2);margin:0 0 4px;}
+.sub{font-size:13px;color:#6b7d72;margin:0 0 16px;line-height:1.6;}
+.panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px;}
+select,input,textarea{font-family:inherit;font-size:15px;padding:9px 10px;border:1px solid #c9d3cc;border-radius:8px;background:#fff;color:#2d3b35;}
+input[type=text]{width:100%;}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+button{font-family:inherit;font-size:14px;padding:9px 14px;border:1px solid var(--g);background:#fff;color:var(--g);border-radius:8px;cursor:pointer;}
+button.primary{background:var(--g);color:#fff;}
+button.mini{font-size:12px;padding:6px 10px;}
+button:disabled{opacity:.5;cursor:default;}
+.muted{color:#7d9186;font-size:12px;}
+#status{font-size:13px;padding:9px 12px;border-radius:8px;margin-bottom:12px;display:none;line-height:1.7;}
+#status.ok{display:block;background:#eef7ef;color:#2f7d32;border:1px solid #bfe3c0;}
+#status.err{display:block;background:#fdeceb;color:#b5453a;border:1px solid #f3c3bf;}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
+.tab{font-size:14px;padding:8px 16px;border:1px solid #c9d3cc;border-radius:8px;background:#fff;color:#6b7d72;cursor:pointer;}
+.tab.active{border:2px solid var(--g);color:var(--g2);background:#eef4ef;font-weight:700;}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:5px;white-space:nowrap;}
+.t-ok{background:#e3f3e8;color:#1f7a43;} .t-no{background:#fef3e2;color:#b7770a;} .t-warn{background:#fdeceb;color:#b5453a;} .t-gray{background:#eceff0;color:#5a6b62;}
+.kpi{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+.kpi .box{flex:1;min-width:130px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px;}
+.kpi .box .lb{font-size:11px;color:#6b7d72;}
+.kpi .box .vl{font-size:20px;font-weight:700;color:var(--g2);margin-top:2px;}
+table.list{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;}
+table.list th{background:#eef4ef;border:1px solid #d7e2da;padding:6px 8px;font-size:12px;color:#2d4a38;text-align:left;white-space:nowrap;}
+table.list td{border:1px solid #e2ede6;padding:6px 8px;vertical-align:middle;}
+table.list tr:hover td{background:#f7faf8;}
+.warnbox{margin-top:10px;padding:9px 12px;border-radius:8px;background:#fdf7ee;border:1px solid #e8d9b0;font-size:12px;line-height:1.8;}
+/* 一覧表 */
+.gwrap{overflow:auto;max-height:78vh;border:1px solid var(--line);border-radius:8px;background:#fff;}
+table.grid{border-collapse:separate;border-spacing:0;font-size:14px;width:100%;table-layout:fixed;}
+table.grid th,table.grid td{border-right:1px solid #e2ede6;border-bottom:1px solid #e2ede6;padding:0;text-align:center;}
+table.grid th{background:#eef4ef;position:sticky;top:0;z-index:3;font-weight:700;color:#2d4a38;}
+table.grid thead th{height:30px;line-height:1.2;}
+table.grid th.lab,table.grid td.lab{position:sticky;left:140px;z-index:4;background:#fff;width:42px;font-size:12px;font-weight:500;color:#4a6357;white-space:nowrap;border-right:2px solid #c9d3cc;}
+table.grid th.lab{background:#eef4ef;z-index:5;}
+table.grid tr.h1 th{height:40px;}
+table.grid tr.h2 th{top:40px;}
+table.grid .mo{display:block;font-size:10px;font-weight:500;line-height:12px;height:12px;color:#6b7d72;}
+
+table.grid td.nm,table.grid th.nm{position:sticky;left:0;z-index:4;background:#fff;text-align:left;padding:4px 10px;width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-right:1px solid #e2ede6;}
+table.grid th.nm{background:#eef4ef;z-index:5;}
+table.grid th.dsat,table.grid td.dsat{background:#e6f1fb;}
+table.grid th.dsun,table.grid td.dsun{background:#fceaea;}
+table.grid td.c{height:32px;font-size:17px;font-weight:700;color:#1f6fb5;}
+table.grid td.c.ng{color:#a82d24;}
+table.grid tr.s2 td,table.grid tr.s2 th{border-bottom:2px solid #c9d3cc;}
+table.grid tr.tot td{background:#fbf6e6;font-weight:700;color:#5a4a10;}
+table.grid tr.tot td.nm,table.grid tr.tot td.lab{background:#fbf6e6;}
+table.grid tr.none td{color:#9aa8a0;background:#fafafa;}
+table.grid tr.none td.nm{background:#fafafa;}
+.notes{margin-top:12px;font-size:13px;line-height:1.7;}
+.notes li{margin-bottom:4px;}
+#nwWrap{display:none;}
+@media print{
+  @page{size:A3 landscape;margin:8mm;}
+  header,.noprint,#status,.tabs{display:none !important;}
+  body{background:#fff;}
+  main{max-width:none;padding:0;}
+  .gwrap{max-height:none;overflow:visible;border:none;}
+  table.grid{font-size:9px;}
+  table.grid th,table.grid td.nm{position:static;}
+  table.grid td.c{height:15px;font-size:10px;}
+  table.grid{min-width:0 !important;}
+  table.grid th.lab,table.grid td.lab{position:static;width:28px;font-size:8px;}
+  main.wide{padding:0;}
+  table.grid td.nm,table.grid th.nm{width:90px;padding:1px 4px;}
+  #tab1{display:none !important;}
+  #tab2{display:block !important;}
+}
+
+.drops{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;}
+.drop{border:2px dashed #b4d4c0;border-radius:12px;padding:22px 14px;text-align:center;background:#f9fcfa;}
+.drop.on{background:#e4f0e8;border-color:var(--g);}
+.bar{height:8px;border-radius:4px;background:#e6ede8;overflow:hidden;margin:8px 0 2px;}
+.bar i{display:block;height:100%;background:#2e7d52;transition:width .2s;}
+.chip{display:inline-block;font-size:12px;padding:2px 8px;border-radius:6px;margin:1px 0;word-break:break-all;}
+.chip.ok{background:#e3f3e8;color:#1f5e3a;} .chip.unc{background:#fef3e2;color:#9a5f12;}
+.chip a{color:inherit;text-decoration:none;font-weight:700;margin-left:4px;}
+.sec{font-size:13px;font-weight:700;color:#2d4a38;margin:14px 0 4px;}
+.sendbar{position:sticky;bottom:0;z-index:5;display:flex;align-items:center;flex-wrap:wrap;gap:6px;}
+button.big{font-size:17px;padding:12px 22px;font-weight:700;}
+.admin{border-style:dashed;}
+select{max-width:100%;}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">📄 月次書類の受付</div>
+  <nav>
+    <a href="index.html">ホーム</a>
+    <a href="haichi.html">配置管理</a>
+    <a href="yotei.html">月間予定</a>
+  </nav>
+</header>
+<main>
+  <div id="status"></div>
+  <div id="app"><p class="sub">読み込み中…</p></div>
+</main>
+<script>
+// ===== 高尾輸送サービス 管理システム 共通認証モジュール =====
+// initAuth(['admin', 'staff'])  → 管理者・事務員どちらも可
+// initAuth(['admin'])           → 管理者のみ
+
+const AUTH_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/auth/v1';
+const REST_URL  = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/rest/v1';
+const FUNCTIONS_URL = 'https://wxdyqkyqtizhtkwtpvru.supabase.co/functions/v1';
+const ANON_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4ZHlxa3lxdGl6aHRrd3RwdnJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NzYxODEsImV4cCI6MjA5OTQ1MjE4MX0.yVbClXBk2JVeglevsBLY5sH2_m2ybCf71u4i_YYWyHE';
+
+const ROLE_LABEL = { super_admin: '権限付与者', admin: 'システム管理者', operator: '担当者', staff: '事務員' };
+
+/* ===================== セッション管理 ===================== */
+
+function _saveSession(data) {
+  const session = {
+    access_token:  data.access_token,
+    refresh_token: data.refresh_token,
+    expires_at:    data.expires_at || (Math.floor(Date.now() / 1000) + (data.expires_in || 3600)),
+    user_id:       data.user?.id || data.user_id,
+    email:         data.user?.email || data.email,
+  };
+  sessionStorage.setItem('takao_session', JSON.stringify(session));
+  return session;
+}
+
+function _getSession() {
+  try { return JSON.parse(sessionStorage.getItem('takao_session')); }
+  catch { return null; }
+}
+
+function _clearSession() {
+  sessionStorage.removeItem('takao_session');
+  sessionStorage.removeItem('takao_role');
+  sessionStorage.removeItem('takao_name');
+  sessionStorage.removeItem('takao_permissions');
+  sessionStorage.removeItem('takao_mfa_enforced');
+}
+
+// refresh_token でアクセストークンを更新する（成功=true）。長時間開いても保存が切れないように使う
+async function refreshSession() {
+  const s = _getSession();
+  if (!s || !s.refresh_token) return false;
+  try {
+    const res = await fetch(`${AUTH_URL}/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { 'apikey': ANON_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: s.refresh_token })
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (!data || !data.access_token) return false;
+    _saveSession(data);
+    return true;
+  } catch { return false; }
+}
+// 期限が近い/切れていれば先に更新
+async function ensureFreshToken() {
+  const s = _getSession();
+  if (s && s.expires_at && (s.expires_at - 60) < Math.floor(Date.now() / 1000)) {
+    await refreshSession();
+  }
+}
+
+function getPermissions() {
+  try { return JSON.parse(sessionStorage.getItem('takao_permissions')) || {}; }
+  catch { return {}; }
+}
+
+function isMfaEnforced() {
+  return sessionStorage.getItem('takao_mfa_enforced') === 'true';
+}
+
+function _isExpired(session) {
+  if (!session?.expires_at) return true;
+  return Math.floor(Date.now() / 1000) > session.expires_at - 60;
+}
+
+function _authHeaders(token) {
+  return {
+    'Content-Type': 'application/json',
+    'apikey': ANON_KEY,
+    'Authorization': `Bearer ${token || ANON_KEY}`
+  };
+}
+
+/* ===================== Supabase Auth API ===================== */
+
+async function _refresh(session) {
+  try {
+    const res = await fetch(`${AUTH_URL}/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': ANON_KEY },
+      body: JSON.stringify({ refresh_token: session.refresh_token }),
+    });
+    if (!res.ok) return null;
+    return _saveSession(await res.json());
+  } catch { return null; }
+}
+
+async function _getRole(accessToken) {
+  const cached = sessionStorage.getItem('takao_role');
+  if (cached) return cached;
+  try {
+    const res = await fetch(`${REST_URL}/user_roles?select=role,display_name,permissions,mfa_enforced`, {
+      headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${accessToken}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const row = data[0];
+    if (!row) return null;
+    sessionStorage.setItem('takao_role', row.role);
+    if (row.display_name) sessionStorage.setItem('takao_name', row.display_name);
+    if (row.permissions) sessionStorage.setItem('takao_permissions', JSON.stringify(row.permissions));
+    if (row.mfa_enforced != null) sessionStorage.setItem('takao_mfa_enforced', String(row.mfa_enforced));
+    return row.role;
+  } catch { return null; }
+}
+
+/* ===================== 公開 API ===================== */
+
+/**
+ * ログアウト
+ */
+async function signOut() {
+  const session = _getSession();
+  if (session?.access_token) {
+    fetch(`${AUTH_URL}/logout`, {
+      method: 'POST',
+      headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` },
+    }).catch(() => {});
+  }
+  _clearSession();
+  window.location.href = 'login.html';
+}
+
+/**
+ * パスワード変更（ログイン中のユーザー自身）
+ */
+async function changePassword(newPassword) {
+  const session = _getSession();
+  if (!session?.access_token) return { ok: false, error: 'セッションが無効です' };
+  try {
+    const res = await fetch(`${AUTH_URL}/user`, {
+      method: 'PUT',
+      headers: _authHeaders(session.access_token),
+      body: JSON.stringify({ password: newPassword })
+    });
+    if (res.ok) return { ok: true };
+    const d = await res.json();
+    return { ok: false, error: d.msg || d.message || 'パスワード変更に失敗しました' };
+  } catch (e) {
+    return { ok: false, error: 'ネットワークエラー: ' + e.message };
+  }
+}
+
+/**
+ * TOTP登録開始（QRコードURIを返す）
+ */
+async function enrollTotp() {
+  let session = _getSession();
+  if (!session?.access_token) return { ok: false, error: 'セッションが無効です' };
+
+  // セッションの有効期限が近い場合はリフレッシュ
+  if (_isExpired(session)) {
+    session = await _refresh(session);
+    if (!session) return { ok: false, error: 'セッションの更新に失敗しました。再ログインしてください。' };
+  }
+
+  try {
+    // 未確認（unverified）のTOTPファクターのみ削除（確認済みのものは絶対に削除しない）
+    const listRes = await fetch(`${AUTH_URL}/factors`, {
+      headers: _authHeaders(session.access_token)
+    });
+    if (listRes.ok) {
+      const factors = await listRes.json();
+      if (Array.isArray(factors)) {
+        // 確認済みファクターが既にある場合はエラーを返す
+        const verified = factors.find(f => f.factor_type === 'totp' && f.status === 'verified');
+        if (verified) {
+          return { ok: false, error: '二段階認証はすでに設定済みです。一度「解除する」してから再設定してください。' };
+        }
+        // 未確認ファクターのみ削除
+        for (const f of factors) {
+          if (f.factor_type === 'totp' && f.status === 'unverified') {
+            await fetch(`${AUTH_URL}/factors/${f.id}`, {
+              method: 'DELETE',
+              headers: _authHeaders(session.access_token)
+            });
+          }
+        }
+      }
+    }
+
+    const res = await fetch(`${AUTH_URL}/factors`, {
+      method: 'POST',
+      headers: _authHeaders(session.access_token),
+      body: JSON.stringify({ factor_type: 'totp', friendly_name: '高尾輸送サービス', issuer: '高尾輸送サービス' })
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const msg = errData.msg || errData.message || errData.error_description || errData.code || `エラー(${res.status})`;
+      return { ok: false, error: 'QRコードの生成に失敗しました: ' + msg };
+    }
+    const d = await res.json();
+    return { ok: true, factorId: d.id, totpUri: d.totp?.uri, secret: d.totp?.secret };
+  } catch (e) {
+    return { ok: false, error: 'ネットワークエラー: ' + e.message };
+  }
+}
+
+/**
+ * TOTP登録確認（初回コード検証）
+ */
+async function verifyTotpEnrollment(factorId, code) {
+  const session = _getSession();
+  if (!session?.access_token) return { ok: false, error: 'セッションが無効です' };
+  try {
+    const chRes = await fetch(`${AUTH_URL}/factors/${factorId}/challenge`, {
+      method: 'POST', headers: _authHeaders(session.access_token), body: JSON.stringify({})
+    });
+    if (!chRes.ok) return { ok: false, error: 'チャレンジ作成に失敗しました' };
+    const { id: challengeId } = await chRes.json();
+
+    const vRes = await fetch(`${AUTH_URL}/factors/${factorId}/verify`, {
+      method: 'POST',
+      headers: _authHeaders(session.access_token),
+      body: JSON.stringify({ challenge_id: challengeId, code })
+    });
+    if (!vRes.ok) return { ok: false, error: 'コードが正しくありません。もう一度お試しください。' };
+    _saveSession(await vRes.json());
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: 'ネットワークエラー: ' + e.message };
+  }
+}
+
+/**
+ * 登録済みTOTPファクター一覧
+ */
+async function getEnrolledFactors() {
+  const session = _getSession();
+  if (!session?.access_token) return [];
+  try {
+    const res = await fetch(`${AUTH_URL}/factors`, {
+      headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
+    });
+    if (!res.ok) return [];
+    const factors = await res.json();
+    return Array.isArray(factors) ? factors.filter(f => f.factor_type === 'totp' && f.status === 'verified') : [];
+  } catch { return []; }
+}
+
+/**
+ * TOTP解除
+ */
+async function unenrollTotp(factorId) {
+  const session = _getSession();
+  if (!session?.access_token) return { ok: false };
+  try {
+    const res = await fetch(`${AUTH_URL}/factors/${factorId}`, {
+      method: 'DELETE',
+      headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
+    });
+    return { ok: res.ok };
+  } catch { return { ok: false }; }
+}
+
+/**
+ * 認証チェック（各ページのDOMContentLoaded前に呼ぶ）
+ */
+async function initAuth(allowedRoles) {
+  document.documentElement.style.visibility = 'hidden';
+  try {
+    let session = _getSession();
+    if (!session) { _redirectLogin(); return false; }
+    if (_isExpired(session)) {
+      session = await _refresh(session);
+      if (!session) { _clearSession(); _redirectLogin(); return false; }
+    }
+    const role = await _getRole(session.access_token);
+    if (!role || !allowedRoles.includes(role)) {
+      _showDenied(role);
+      document.documentElement.style.visibility = 'visible';
+      return false;
+    }
+    _injectUserInfo(session.email, role);
+    _injectModals();
+    document.documentElement.style.visibility = 'visible';
+    return true;
+  } catch (err) {
+    console.error('[auth.js] initAuth error:', err);
+    document.documentElement.style.visibility = 'visible';
+    return false;
+  }
+}
+
+/* ===================== 内部ヘルパー ===================== */
+
+function _redirectLogin() {
+  document.documentElement.style.visibility = 'visible';
+  window.location.href = 'login.html?redirect=' + encodeURIComponent(location.href);
+}
+
+function _showDenied(role) {
+  document.body.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;
+      background:#f5f8f4;font-family:'Noto Sans JP','Hiragino Kaku Gothic Pro',sans-serif;">
+      <div style="background:white;border-radius:18px;padding:44px 40px;text-align:center;
+        box-shadow:0 4px 24px rgba(77,122,94,0.13);max-width:400px;">
+        <div style="font-size:52px;margin-bottom:16px;">🔒</div>
+        <h2 style="color:#b5453a;font-size:18px;margin-bottom:10px;">アクセス権限がありません</h2>
+        <p style="color:#5c7066;font-size:13px;line-height:1.7;margin-bottom:28px;">
+          この画面は表示できません。<br>権限については管理者にお問い合わせください。
+        </p>
+        <div style="display:flex;gap:10px;justify-content:center;">
+          <a href="index.html" style="background:#4d7a5e;color:white;padding:10px 22px;
+            border-radius:9px;text-decoration:none;font-size:13px;font-weight:700;">🏠 トップへ</a>
+          <button onclick="signOut()" style="background:#eef7f1;color:#4d7a5e;border:1px solid #b4d4c0;
+            padding:10px 22px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">
+            ログアウト
+          </button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function _injectUserInfo(email, role) {
+  const header = document.querySelector('header');
+  if (!header) return;
+
+  const name = sessionStorage.getItem('takao_name') || email;
+  const label = (function(){var p={};try{p=JSON.parse(sessionStorage.getItem('takao_permissions')||'{}')}catch(e){}if(p.title)return p.title;if(role==='super_admin')return '権限付与者';if(role==='admin')return 'システム管理者';if(role==='staff')return '事務員';if(role==='operator'){if(p.staff_edit&&p.export)return '情報取扱責任者';if(p.staff_edit)return '情報取扱者';return '操作担当者';}return role;})();
+  const badgeColor = role === 'super_admin' ? '#c0392b'
+    : role === 'admin'    ? '#9b7eb8'
+    : role === 'operator' ? '#2980b9'
+    : '#6b9e7e';
+  const badgeBg    = 'transparent';
+  const badgeBorder = 'transparent';
+
+  const menuId = '_takao_usermenu';
+  const html = `
+    <span style="display:inline-block;width:1px;height:18px;background:rgba(77,122,94,0.25);
+      margin:0 4px;vertical-align:middle;"></span>
+    <div style="position:relative;display:inline-block;">
+      <button id="_takao_menubtn" onclick="_toggleUserMenu()" style="background:rgba(77,122,94,0.10);
+        color:#2d4a38;border:1px solid rgba(77,122,94,0.45);padding:5px 12px;border-radius:9px;
+        font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;
+        display:flex;align-items:center;gap:6px;">
+        <span style="background:${badgeColor};color:white;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:700;letter-spacing:0.03em;">${label}</span>
+        ${name} ▾
+      </button>
+      <div id="${menuId}" style="display:none;position:absolute;right:0;top:calc(100% + 6px);
+        background:white;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.15);
+        min-width:160px;z-index:9999;overflow:hidden;">
+        <button onclick="_closeUserMenu();showPasswordChangeModal();" style="${_menuItemStyle()}">
+          🔑 パスワード変更
+        </button>
+        <button onclick="_closeUserMenu();showTotpSetupModal();" style="${_menuItemStyle()}">
+          🛡️ 二段階認証設定
+        </button>
+        <hr style="margin:0;border:none;border-top:1px solid #eee;">
+        <button onclick="signOut()" style="${_menuItemStyle('danger')}">
+          ログアウト
+        </button>
+      </div>
+    </div>`;
+
+  const divs = header.querySelectorAll(':scope > div');
+  if (divs.length >= 2) {
+    const navDiv = divs[divs.length - 1];
+    navDiv.style.display = 'flex';
+    navDiv.style.alignItems = 'center';
+    navDiv.style.gap = '8px';
+    navDiv.insertAdjacentHTML('beforeend', html);
+  } else {
+    header.style.display = 'flex';
+    header.style.alignItems = 'center';
+    header.style.justifyContent = 'space-between';
+    header.style.flexWrap = 'wrap';
+    const div = document.createElement('div');
+    div.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;';
+    div.innerHTML = html;
+    header.appendChild(div);
+  }
+
+  // メニュー外クリックで閉じる
+  document.addEventListener('click', e => {
+    const btn = document.getElementById('_takao_menubtn');
+    const menu = document.getElementById(menuId);
+    if (btn && menu && !btn.contains(e.target) && !menu.contains(e.target)) {
+      menu.style.display = 'none';
+    }
+  });
+}
+
+function _menuItemStyle(type) {
+  const base = 'width:100%;text-align:left;padding:10px 16px;border:none;background:none;font-size:13px;cursor:pointer;font-family:inherit;display:block;';
+  if (type === 'danger') return base + 'color:#b5453a;';
+  return base + 'color:#2d3b35;';
+}
+
+function _toggleUserMenu() {
+  const menu = document.getElementById('_takao_usermenu');
+  if (menu) menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+function _closeUserMenu() {
+  const menu = document.getElementById('_takao_usermenu');
+  if (menu) menu.style.display = 'none';
+}
+
+/* ===================== モーダル注入 ===================== */
+
+function _injectModals() {
+  if (document.getElementById('_takao_modals')) return;
+  const div = document.createElement('div');
+  div.id = '_takao_modals';
+  div.innerHTML = `
+  <style>
+    ._tm-overlay {
+      display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:10000;
+      align-items:center;justify-content:center;
+    }
+    ._tm-overlay.open { display:flex; }
+    ._tm-box {
+      background:white;border-radius:20px;padding:36px 32px;width:100%;max-width:420px;
+      box-shadow:0 8px 40px rgba(0,0,0,0.18);font-family:'Noto Sans JP','Hiragino Kaku Gothic Pro',sans-serif;
+      position:relative;
+    }
+    ._tm-title { font-size:17px;font-weight:700;color:#2d4a36;margin-bottom:6px; }
+    ._tm-sub { font-size:13px;color:#5c7066;margin-bottom:20px;line-height:1.6; }
+    ._tm-label { font-size:12px;font-weight:700;color:#4d7a5e;margin-bottom:5px;display:block; }
+    ._tm-input {
+      width:100%;padding:10px 14px;border:1.5px solid #c8d8cc;border-radius:9px;
+      font-size:14px;font-family:inherit;color:#2d4a36;background:#f9fbfa;outline:none;
+      margin-bottom:14px;
+    }
+    ._tm-input:focus { border-color:#4d7a5e;box-shadow:0 0 0 3px rgba(77,122,94,0.12); }
+    ._tm-btn {
+      width:100%;padding:12px;background:linear-gradient(135deg,#4d7a5e,#3d6a4e);color:white;
+      border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;
+    }
+    ._tm-btn:disabled { opacity:0.6;cursor:default; }
+    ._tm-btn-sub {
+      width:100%;padding:10px;background:#eef7f1;color:#4d7a5e;border:1px solid #b4d4c0;
+      border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px;
+    }
+    ._tm-err { background:#fdf2f2;color:#b5453a;border:1px solid #eeaaa4;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px;display:none; }
+    ._tm-ok  { background:#eef7f1;color:#2e7d52;border:1px solid #95d0aa;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px;display:none; }
+    ._tm-close { position:absolute;top:14px;right:16px;background:none;border:none;font-size:20px;cursor:pointer;color:#aaa;line-height:1; }
+    ._tm-qr { text-align:center;margin:16px 0; }
+    ._tm-secret { background:#f5f8f4;border:1px solid #c8d8cc;border-radius:8px;padding:8px 12px;font-size:12px;color:#4d7a5e;word-break:break-all;text-align:center;margin-bottom:14px; }
+    ._tm-step { display:none; }
+    ._tm-step.active { display:block; }
+    ._tm-otp { letter-spacing:0.3em;font-size:22px;text-align:center; }
+  </style>
+
+  <!-- パスワード変更モーダル -->
+  <div id="_tm_pw" class="_tm-overlay" onclick="if(event.target===this)closePasswordChangeModal()">
+    <div class="_tm-box">
+      <button class="_tm-close" onclick="closePasswordChangeModal()">×</button>
+      <div class="_tm-title">🔑 パスワード変更</div>
+      <div class="_tm-sub">新しいパスワードを設定します（8文字以上）</div>
+      <div id="_tm_pw_err" class="_tm-err"></div>
+      <div id="_tm_pw_ok" class="_tm-ok">✅ パスワードを変更しました</div>
+      <label class="_tm-label">新しいパスワード</label>
+      <input id="_tm_pw_new" class="_tm-input" type="password" placeholder="新しいパスワード（8文字以上）">
+      <label class="_tm-label">確認（再入力）</label>
+      <input id="_tm_pw_conf" class="_tm-input" type="password" placeholder="もう一度入力">
+      <button id="_tm_pw_btn" class="_tm-btn" onclick="_doChangePassword()">変更する</button>
+      <button class="_tm-btn-sub" onclick="closePasswordChangeModal()">キャンセル</button>
+    </div>
+  </div>
+
+  <!-- 二段階認証設定モーダル -->
+  <div id="_tm_totp" class="_tm-overlay" onclick="if(event.target===this)closeTotpSetupModal()">
+    <div class="_tm-box">
+      <button class="_tm-close" onclick="closeTotpSetupModal()">×</button>
+      <div class="_tm-title">🛡️ 二段階認証設定</div>
+      <div id="_tm_totp_err" class="_tm-err"></div>
+      <div id="_tm_totp_ok" class="_tm-ok"></div>
+
+      <!-- ステップ0: 現在の状態 -->
+      <div id="_tm_totp_s0" class="_tm-step active">
+        <div class="_tm-sub" id="_tm_totp_status">状態を確認中...</div>
+        <button id="_tm_totp_start_btn" class="_tm-btn" onclick="_startTotpSetup()" style="display:none;">QRコードを表示して設定開始</button>
+        <button id="_tm_totp_disable_btn" class="_tm-btn-sub" onclick="_disableTotp()" style="display:none;background:#fdf2f2;color:#b5453a;border-color:#eeaaa4;">二段階認証を解除する</button>
+        <div id="_tm_totp_lock_note" style="display:none;font-size:12px;color:#888;background:#f5f8f4;border-radius:8px;padding:8px 12px;margin-top:8px;">🔒 組織のポリシーにより二段階認証の解除は制限されています。</div>
+        <button class="_tm-btn-sub" onclick="closeTotpSetupModal()" style="margin-top:8px;">閉じる</button>
+      </div>
+
+      <!-- ステップ1: QRコード表示 -->
+      <div id="_tm_totp_s1" class="_tm-step">
+        <div class="_tm-sub">① Google Authenticator または Microsoft Authenticator でQRコードを読み取ってください</div>
+        <div class="_tm-qr" id="_tm_qr_canvas"></div>
+        <div style="font-size:12px;color:#888;margin-bottom:6px;text-align:center;">QRコードが読めない場合はこのコードを手動入力</div>
+        <div class="_tm-secret" id="_tm_totp_secret"></div>
+        <button class="_tm-btn" onclick="_showTotpStep2()">次へ（コード入力）→</button>
+        <button class="_tm-btn-sub" onclick="_showTotpStep0()">キャンセル</button>
+      </div>
+
+      <!-- ステップ2: コード確認 -->
+      <div id="_tm_totp_s2" class="_tm-step">
+        <div class="_tm-sub">② アプリに表示されている6桁のコードを入力して設定を完了します</div>
+        <label class="_tm-label">6桁のコード</label>
+        <input id="_tm_totp_code" class="_tm-input _tm-otp" type="text" inputmode="numeric" maxlength="6" placeholder="000000">
+        <button id="_tm_totp_verify_btn" class="_tm-btn" onclick="_verifyTotpSetup()">設定を完了する</button>
+        <button class="_tm-btn-sub" onclick="_showTotpStep1()">← QRコードに戻る</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(div);
+}
+
+/* ===================== パスワード変更 ===================== */
+
+function showPasswordChangeModal() {
+  _injectModals();
+  document.getElementById('_tm_pw_new').value = '';
+  document.getElementById('_tm_pw_conf').value = '';
+  document.getElementById('_tm_pw_err').style.display = 'none';
+  document.getElementById('_tm_pw_ok').style.display = 'none';
+  document.getElementById('_tm_pw').classList.add('open');
+  setTimeout(() => document.getElementById('_tm_pw_new').focus(), 100);
+}
+
+function closePasswordChangeModal() {
+  document.getElementById('_tm_pw').classList.remove('open');
+}
+
+async function _doChangePassword() {
+  const np   = document.getElementById('_tm_pw_new').value;
+  const conf = document.getElementById('_tm_pw_conf').value;
+  const err  = document.getElementById('_tm_pw_err');
+  const ok   = document.getElementById('_tm_pw_ok');
+  const btn  = document.getElementById('_tm_pw_btn');
+  err.style.display = 'none';
+  ok.style.display = 'none';
+  if (np.length < 8) { err.textContent = 'パスワードは8文字以上で設定してください'; err.style.display = 'block'; return; }
+  if (np !== conf)   { err.textContent = 'パスワードが一致しません'; err.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = '変更中…';
+  const result = await changePassword(np);
+  btn.disabled = false; btn.textContent = '変更する';
+  if (result.ok) {
+    ok.style.display = 'block';
+    document.getElementById('_tm_pw_new').value = '';
+    document.getElementById('_tm_pw_conf').value = '';
+    setTimeout(() => closePasswordChangeModal(), 2000);
+  } else {
+    err.textContent = result.error; err.style.display = 'block';
+  }
+}
+
+/* ===================== 二段階認証設定 ===================== */
+
+let _totpFactorId = null;
+
+async function showTotpSetupModal() {
+  _injectModals();
+  _showTotpStep0();
+  document.getElementById('_tm_totp_err').style.display = 'none';
+  document.getElementById('_tm_totp_ok').style.display = 'none';
+  document.getElementById('_tm_totp').classList.add('open');
+
+  const status = document.getElementById('_tm_totp_status');
+  const startBtn  = document.getElementById('_tm_totp_start_btn');
+  const disableBtn = document.getElementById('_tm_totp_disable_btn');
+  status.textContent = '状態を確認中...';
+  startBtn.style.display = 'none';
+  disableBtn.style.display = 'none';
+
+  const factors = await getEnrolledFactors();
+  const role = sessionStorage.getItem('takao_role');
+  const canDisable = !isMfaEnforced() || role === 'super_admin';
+  if (factors.length > 0) {
+    _totpFactorId = factors[0].id;
+    if (canDisable) {
+      status.textContent = '✅ 二段階認証は有効です。認証アプリが設定されています。';
+      disableBtn.style.display = 'block';
+    } else {
+      status.textContent = '✅ 二段階認証は有効です（組織の設定により解除できません）。';
+      disableBtn.style.display = 'none';
+      const lockNote = document.getElementById('_tm_totp_lock_note');
+      if (lockNote) lockNote.style.display = 'block';
+    }
+  } else {
+    status.textContent = '二段階認証は現在無効です。設定するとログイン時にアプリのコード入力が必要になります。';
+    startBtn.style.display = 'block';
+  }
+}
+
+function closeTotpSetupModal() {
+  document.getElementById('_tm_totp').classList.remove('open');
+}
+
+function _showTotpStep0() {
+  ['_tm_totp_s0','_tm_totp_s1','_tm_totp_s2'].forEach((id, i) => {
+    document.getElementById(id).classList.toggle('active', i === 0);
+  });
+}
+function _showTotpStep1() {
+  ['_tm_totp_s0','_tm_totp_s1','_tm_totp_s2'].forEach((id, i) => {
+    document.getElementById(id).classList.toggle('active', i === 1);
+  });
+}
+function _showTotpStep2() {
+  document.getElementById('_tm_totp_code').value = '';
+  ['_tm_totp_s0','_tm_totp_s1','_tm_totp_s2'].forEach((id, i) => {
+    document.getElementById(id).classList.toggle('active', i === 2);
+  });
+  setTimeout(() => document.getElementById('_tm_totp_code').focus(), 100);
+}
+
+async function _startTotpSetup() {
+  const startBtn = document.getElementById('_tm_totp_start_btn');
+  const err = document.getElementById('_tm_totp_err');
+  err.style.display = 'none';
+  startBtn.disabled = true; startBtn.textContent = 'QRコード生成中…';
+
+  const result = await enrollTotp();
+  startBtn.disabled = false; startBtn.textContent = 'QRコードを表示して設定開始';
+  if (!result.ok) { err.textContent = result.error; err.style.display = 'block'; return; }
+
+  _totpFactorId = result.factorId;
+  document.getElementById('_tm_totp_secret').textContent = result.secret || '';
+
+  // QRコード描画
+  const canvas = document.getElementById('_tm_qr_canvas');
+  canvas.innerHTML = '';
+  _loadQRLib(() => {
+    new QRCode(canvas, { text: result.totpUri, width: 200, height: 200,
+      colorDark: '#2d4a36', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  });
+
+  _showTotpStep1();
+}
+
+async function _verifyTotpSetup() {
+  const code = document.getElementById('_tm_totp_code').value.replace(/\D/g, '');
+  const err  = document.getElementById('_tm_totp_err');
+  const ok   = document.getElementById('_tm_totp_ok');
+  const btn  = document.getElementById('_tm_totp_verify_btn');
+  err.style.display = 'none';
+  if (code.length !== 6) { err.textContent = '6桁のコードを入力してください'; err.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = '確認中…';
+  const result = await verifyTotpEnrollment(_totpFactorId, code);
+  btn.disabled = false; btn.textContent = '設定を完了する';
+  if (result.ok) {
+    ok.textContent = '✅ 二段階認証の設定が完了しました！次回ログインからコード入力が必要になります。';
+    ok.style.display = 'block';
+    _showTotpStep0();
+    document.getElementById('_tm_totp_status').textContent = '✅ 二段階認証は有効です。認証アプリが設定されています。';
+    document.getElementById('_tm_totp_start_btn').style.display = 'none';
+    document.getElementById('_tm_totp_disable_btn').style.display = 'block';
+  } else {
+    err.textContent = result.error; err.style.display = 'block';
+  }
+}
+
+async function _disableTotp() {
+  const role = sessionStorage.getItem('takao_role');
+  if (isMfaEnforced() && role !== 'super_admin') {
+    alert('組織のポリシーにより二段階認証は解除できません。');
+    return;
+  }
+  if (!confirm('二段階認証を解除しますか？\nログイン時のコード入力が不要になります。')) return;
+  const result = await unenrollTotp(_totpFactorId);
+  const err = document.getElementById('_tm_totp_err');
+  const ok  = document.getElementById('_tm_totp_ok');
+  if (result.ok) {
+    ok.textContent = '二段階認証を解除しました。';
+    ok.style.display = 'block';
+    document.getElementById('_tm_totp_status').textContent = '二段階認証は現在無効です。';
+    document.getElementById('_tm_totp_start_btn').style.display = 'block';
+    document.getElementById('_tm_totp_disable_btn').style.display = 'none';
+  } else {
+    err.textContent = '解除に失敗しました。'; err.style.display = 'block';
+  }
+}
+
+function _loadQRLib(cb) {
+  if (window.QRCode) { cb(); return; }
+  const s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+  s.onload = cb;
+  document.head.appendChild(s);
+}
+
+
+
+
+
+</script>
+<script>
+/* ===== 月次書類の受付（段階1：受付・割り当て・送信）===== */
+function _redirectLogin(){
+  document.documentElement.style.visibility = 'visible';
+  window.location.href = 'login.html?redirect=' + encodeURIComponent(location.pathname + location.hash);
+}
+const SUPA = 'https://wxdyqkyqtizhtkwtpvru.supabase.co';
+let TOKEN = null, PERIOD_ID = null, D = null, ADMIN_LIST = null, BUSY = false;
+(function(){ const m = /^#t=([0-9a-f]{64})$/.exec(location.hash || ''); if(m) TOKEN = m[1]; })();
+
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function getH(){
+  const s = _getSession();
+  return { 'apikey': ANON_KEY, 'Authorization': 'Bearer ' + ((s && s.access_token) || ANON_KEY), 'Content-Type': 'application/json' };
+}
+async function rpc(name, args){
+  await ensureFreshToken();
+  const res = await fetch(`${REST_URL}/rpc/${name}`, { method:'POST', headers:getH(), body: JSON.stringify(args || {}) });
+  const txt = await res.text();
+  if(!res.ok){ let m = txt; try{ m = JSON.parse(txt).message || txt; }catch(e){} throw new Error(m); }
+  return txt ? JSON.parse(txt) : null;
+}
+function errMsg(e){
+  const m = String((e && e.message) || e || '');
+  if(/Permission denied/.test(m)) return 'この画面を使う権限がありません。管理者にご相談ください。';
+  if(/MFA required/.test(m)) return '二段階認証を済ませたログインが必要です。いちど「ログアウト」して、ログインし直してください。';
+  if(/link expired/.test(m)) return 'このリンクは期限が切れています。新しい案内メールが必要ですので、八重樫までご連絡ください。';
+  if(/invalid token/.test(m)) return 'リンクが正しくありません。案内メールのボタンから開いてください。';
+  return m;
+}
+function say(msg, ok){
+  const el = document.getElementById('status');
+  el.className = ok ? 'ok' : 'err'; el.innerHTML = msg;
+  if(ok) setTimeout(() => { if(el.innerHTML === msg) el.className = ''; }, 7000);
+  else window.scrollTo({top:0, behavior:'smooth'});
+}
+function fmtDT(iso){ if(!iso) return ''; const d = new Date(iso); return (d.getMonth()+1)+'/'+d.getDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+function fmtD(iso){ if(!iso) return ''; const d = new Date(iso); return (d.getMonth()+1)+'月'+d.getDate()+'日'; }
+function kb(n){ return n >= 1048576 ? (n/1048576).toFixed(1)+'MB' : Math.max(1,Math.round(n/1024))+'KB'; }
+const CAT = { school_schedule:'学校予定表', hire_schedule:'雇上車運行予定表', crew_monthly:'添乗員月間勤務予定表' };
+const CATSHORT = { school_schedule:'学校予定表', hire_schedule:'雇上車', crew_monthly:'勤務予定表' };
+function slotName(s){ return (CATSHORT[s.category]||'') + '：' + s.label + (s.region ? '（'+s.region+'）' : ''); }
+function scanTag(st){
+  return st === 'passed' ? '<span class="tag t-ok">検査合格</span>'
+       : st === 'review' ? '<span class="tag t-no">要確認</span>'
+       : st === 'rejected' ? '<span class="tag t-warn">不合格</span>'
+       : '<span class="tag t-gray">検査待ち</span>';
+}
+
+/* ---- 名前からの候補（ファイル名だけを見る。PDFの中身は、この画面では開かない） ---- */
+function norm(s){ return String(s).replace(/\.pdf$/i,'').replace(/[\s　()（）【】\[\]「」・_\-－―]/g,'').replace(/[ヶケ]/g,'ケ').toLowerCase(); }
+function guessFor(name, catHint){
+  const nm = norm(name);
+  const hireHint = /依頼書|報告書|共通様式|雇上/.test(nm), schoolHint = /学校予定|行事予定|時刻表|全コース共通|月間予定/.test(nm);
+  let best = 0, hits = [];
+  for(const s of D.slots){
+    if(s.category === 'crew_monthly') continue;
+    if(catHint && s.category !== catHint) continue;
+    let sc = 0;
+    for(const a of (s.aliases || [])){ const na = norm(a); if(na && nm.includes(na)) sc = Math.max(sc, na.length); }
+    if(sc > 0){ hits.push({id:s.id, cat:s.category, sc}); best = Math.max(best, sc); }
+  }
+  hits = hits.filter(h => h.sc === best);
+  if(hireHint && hits.some(h => h.cat === 'hire_schedule')) hits = hits.filter(h => h.cat === 'hire_schedule');
+  else if(schoolHint && hits.some(h => h.cat === 'school_schedule')) hits = hits.filter(h => h.cat === 'school_schedule');
+  if(!hits.length && (catHint === 'crew_monthly' || (!catHint && /勤務予定|勤務表/.test(nm)))) hits = D.slots.filter(s => s.category === 'crew_monthly').map(s => ({id:s.id, cat:s.category, sc:1}));
+  const ids = hits.map(h => h.id);
+  if(ids.length === 1) return { slot_ids: ids, candidates: [] };
+  return { slot_ids: [], candidates: ids };
+}
+
+/* ---- 読み込み ---- */
+async function load(){
+  try{
+    D = await rpc('doc_open', { p_token: TOKEN, p_period: PERIOD_ID });
+    PERIOD_ID = D.period.id;
+    if(D.is_admin && !ADMIN_LIST){ try{ ADMIN_LIST = await rpc('doc_admin_periods'); }catch(e){ ADMIN_LIST = []; } }
+    render();
+  }catch(e){
+    // リンクなしで開いた管理者は、期間の一覧から選ぶ
+    if(!TOKEN && !PERIOD_ID && /invalid token/.test(String(e.message))){
+      try{
+        ADMIN_LIST = await rpc('doc_admin_periods');
+        D = { is_admin: true, period: null, slots: [], files: [] };
+        renderAdminOnly();
+        return;
+      }catch(e2){ /* 管理者ではない */ }
+    }
+    document.getElementById('app').innerHTML = '';
+    say(errMsg(e));
+  }
+}
+function renderAdminOnly(){
+  document.getElementById('app').innerHTML = '<h1>月次書類の受付</h1><p class="sub">管理者として開いています。受付をつくる、リンクを作り直す、案内メールを送る、ができます。</p>' + adminHtml();
+}
+function rerender(){ if(D && D.period) render(); else renderAdminOnly(); }
+function calc(){
+  const slots = D.slots, files = D.files;
+  const covered = s => s.no_doc_reason || s.files.some(f => f.confirmed);
+  return {
+    missing: slots.filter(s => !covered(s)).length,
+    unconf: files.reduce((n,f) => n + Number(f.unconfirmed||0), 0),
+    orphan: files.filter(f => !f.slot_ids.length).length,
+    rejected: files.filter(f => f.scan_status === 'rejected').length,
+    done: slots.filter(covered).length, total: slots.length, covered
+  };
+}
+
+/* ---- 画面 ---- */
+function slotOptions(selIds){
+  let h = '<option value="">枠を選ぶ…</option>';
+  for(const c of ['school_schedule','hire_schedule','crew_monthly']){
+    h += `<optgroup label="${esc(CAT[c])}">`;
+    for(const s of D.slots.filter(x => x.category === c)){
+      if(selIds.includes(s.id)) continue;
+      const mark = s.files.some(f => f.confirmed) ? '✓ ' : '';
+      h += `<option value="${s.id}">${mark}${esc(s.label + (s.region ? '（'+s.region+'）' : ''))}</option>`;
+    }
+    h += '</optgroup>';
+  }
+  return h;
+}
+function render(){
+  const P = D.period, open = P.status === 'open', c = calc();
+  const ym = String(P.target_month).slice(0,4) + '年' + Number(String(P.target_month).slice(5,7)) + '月分';
+  let h = `<h1>${esc(ym)}の書類 ${P.is_test ? '<span class="tag t-no">テスト用</span>' : ''}</h1>
+    <p class="sub">${open ? '届いた書類を、まとめて選んで添付してください。全部の枠がそろうと、送信できます。途中で閉じても、添付した分は残ります。' : '送信済みです（' + esc(fmtDT(P.submitted_at)) + '）。検査の結果が、下に出ます。'}${P.expires_at ? '　このリンクの期限：' + esc(fmtD(P.expires_at)) + 'まで' : ''}</p>`;
+
+  if(open){
+    h += `<div class="panel"><b>書類をまとめて添付する</b>
+      <div class="muted" style="margin:2px 0 10px;">種類ごとに、PDFをまとめてドラッグするか、「選ぶ」を押してください（1ファイル10MBまで）。学校の名前は、ファイル名から探して、枠の候補を出します。</div>
+      <div class="drops">
+        ${[['school_schedule','学校予定表'],['hire_schedule','雇上車運行予定表'],['crew_monthly','添乗員月間勤務予定表'],['','種類がまざっている書類']].map(([c,l]) => `<div class="drop" data-cat="${c}"><div style="font-weight:700;">${l}</div><div class="muted" style="margin:4px 0 8px;">ここにドラッグ</div><button type="button" class="primary pickbtn" data-cat="${c}">選ぶ</button></div>`).join('')}
+      </div>
+      <input type="file" id="fileIn" accept="application/pdf,.pdf" multiple style="display:none">
+      <div id="prog" class="muted" style="margin-top:8px;"></div></div>`;
+  }
+
+  const pct = c.total ? Math.round(c.done / c.total * 100) : 0;
+  h += `<div class="panel"><div class="row" style="justify-content:space-between;"><b>枠の進み具合</b><span>${c.done} / ${c.total} 枠</span></div>
+        <div class="bar"><i style="width:${pct}%"></i></div></div>`;
+
+  if(D.files.length){
+    h += `<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:8px;"><b>添付した書類（${D.files.length}枚）</b>
+      ${open ? `<button type="button" class="primary" data-act="confirmAll" ${c.unconf ? '' : 'disabled'}>候補どおりにすべて決定（${c.unconf}件）</button>` : ''}</div>
+      <table class="list"><thead><tr><th>ファイル</th><th>どの枠か</th><th>検査</th>${open ? '<th></th>' : ''}</tr></thead><tbody>`;
+    for(const f of D.files){
+      const mine = f.slot_ids.map(id => D.slots.find(s => s.id === id)).filter(Boolean);
+      const cands = ((f.guess && f.guess.candidates) || []).map(id => D.slots.find(s => s.id === id)).filter(s => s && !f.slot_ids.includes(s.id));
+      h += `<tr><td style="max-width:260px;word-break:break-all;">${esc(f.name)}<div class="muted">${esc(kb(f.size))}　${esc(fmtDT(f.uploaded_at))}</div></td><td>`;
+      for(const s of mine){
+        const sl = s.files.find(x => x.id === f.id);
+        const ok = sl && sl.confirmed;
+        h += `<span class="chip ${ok ? 'ok' : 'unc'}">${esc(slotName(s))}${ok ? '' : '（未確認）'}${open ? ` <a href="#" data-act="unassign" data-f="${f.id}" data-s="${s.id}" title="この枠から外す">×</a>` : ''}</span> `;
+      }
+      if(!mine.length && open && cands.length){
+        h += '<div class="muted" style="margin-bottom:4px;">候補（押すと決まります）：</div>' + cands.map(s => `<button type="button" class="mini" data-act="pickCand" data-f="${f.id}" data-s="${s.id}">${esc(slotName(s))}</button>`).join(' ') + '<br>';
+      }
+      if(!mine.length && !cands.length) h += '<span class="muted">候補がありません。枠を選んでください</span><br>';
+      if(open) h += `<select data-act="addSlot" data-f="${f.id}" style="margin-top:4px;font-size:13px;padding:5px 6px;">${slotOptions(f.slot_ids)}</select>`;
+      h += `</td><td>${scanTag(f.scan_status)}</td>`;
+      if(open) h += `<td><button type="button" class="mini" data-act="detach" data-f="${f.id}">取り消す</button></td>`;
+      h += '</tr>';
+    }
+    h += '</tbody></table></div>';
+  }
+
+  h += `<div class="panel"><b>枠ごとの状態</b><div class="muted" style="margin:2px 0 8px;">学校から書類が届かない枠は、「今月は書類なし」を、理由をつけて選べます。</div>`;
+  for(const cat of ['school_schedule','hire_schedule','crew_monthly']){
+    const list = D.slots.filter(s => s.category === cat);
+    if(!list.length) continue;
+    h += `<div class="sec">${esc(CAT[cat])}　${list.filter(c.covered).length}/${list.length}</div><table class="list"><tbody>`;
+    for(const s of list){
+      const fs = s.files;
+      h += `<tr><td style="width:34%;">${esc(s.label)}${s.region ? '<span class="muted">（'+esc(s.region)+'）</span>' : ''}</td><td>`;
+      if(fs.length) h += fs.map(f => `<span class="chip ${f.confirmed ? 'ok' : 'unc'}">${esc(f.name)}${f.confirmed ? '' : '（未確認）'}</span>`).join(' ');
+      else if(s.no_doc_reason) h += `<span class="tag t-no">書類なし</span> ${esc(s.no_doc_reason)}`;
+      else h += '<span class="tag t-gray">未提出</span>';
+      h += '</td>';
+      if(open){
+        h += '<td style="text-align:right;white-space:nowrap;">';
+        if(s.no_doc_reason) h += `<button type="button" class="mini" data-act="nodocClear" data-s="${s.id}">取り消す</button>`;
+        else if(!fs.length) h += `<button type="button" class="mini" data-act="nodoc" data-s="${s.id}">今月は書類なし</button>`;
+        h += '</td>';
+      }
+      h += '</tr>';
+    }
+    h += '</tbody></table>';
+  }
+  h += '</div>';
+
+  if(open){
+    const msgs = [];
+    if(c.missing) msgs.push(`枠が埋まっていないところが ${c.missing} 枠あります`);
+    if(c.unconf) msgs.push(`決定していない割り当てが ${c.unconf} 件あります`);
+    if(c.orphan) msgs.push(`枠が決まっていない書類が ${c.orphan} 枚あります`);
+    if(c.rejected) msgs.push(`検査に通らなかった書類が ${c.rejected} 枚あります`);
+    h += `<div class="panel sendbar"><button type="button" class="primary big" data-act="submit" ${msgs.length ? 'disabled' : ''}>この内容で送信する</button>
+      <span class="muted" style="margin-left:10px;">${msgs.length ? esc(msgs.join('。')) + '。' : 'すべてそろいました。送信すると、検査が始まります。'}</span></div>`;
+  }
+
+  if(D.is_admin) h += adminHtml();
+  document.getElementById('app').innerHTML = h;
+  wire();
+}
+function adminHtml(){
+  let h = `<div class="panel admin"><b>管理者用</b><div class="muted" style="margin:2px 0 8px;">受付の作成、リンクの作り直し、案内メールの送信ができます。リンクは、作り直すと前のものが使えなくなります。</div>
+    <table class="list"><thead><tr><th>月</th><th>状態</th><th>枠／書類</th><th>案内メール</th><th></th></tr></thead><tbody>`;
+  for(const p of (ADMIN_LIST || [])){
+    const ym = String(p.target_month).slice(0,4) + '年' + Number(String(p.target_month).slice(5,7)) + '月分';
+    h += `<tr><td>${esc(ym)} ${p.is_test ? '<span class="tag t-no">テスト</span>' : ''}</td><td>${p.status === 'open' ? '受付中' : p.status === 'submitted' ? '送信済み' : '終了'}</td><td>${p.slots}／${p.files}</td>
+      <td>${p.mail_sent_at ? esc(fmtDT(p.mail_sent_at)) + ' 送信' : '未送信'}</td>
+      <td style="white-space:nowrap;"><button type="button" class="mini" data-act="adminOpen" data-p="${p.id}">開く</button>
+      <button type="button" class="mini" data-act="adminLink" data-p="${p.id}">リンクを作り直す</button>
+      ${p.status === 'submitted' ? `<button type="button" class="mini" data-act="adminReopen" data-p="${p.id}">受付を再開</button>` : ''}
+      <button type="button" class="mini" data-act="adminMail" data-m="${esc(String(p.target_month).slice(0,10))}" data-t="${p.is_test ? 1 : 0}">案内メール</button></td></tr>`;
+  }
+  h += `</tbody></table><div id="adminOut" class="muted" style="margin-top:8px;word-break:break-all;"></div>
+    <div class="row" style="margin-top:10px;"><label class="muted">新しい受付</label><input type="month" id="newMonth"><label style="font-size:13px;"><input type="checkbox" id="newTest" style="width:auto;"> テスト用</label>
+    <button type="button" data-act="adminCreate">つくる</button></div>
+    <div class="row" style="margin-top:8px;"><label class="muted">案内メールのテスト送信先</label><input type="text" id="mailTest" value="${esc((_getSession() || {}).email || '')}" style="width:260px;"></div></div>`;
+  return h;
+}
+
+/* ---- 操作 ---- */
+function wire(){
+  const fin = document.getElementById('fileIn');
+  if(!fin) return;
+  let pendingCat = '';
+  document.querySelectorAll('.pickbtn').forEach(b => b.onclick = () => { pendingCat = b.dataset.cat; fin.click(); });
+  fin.onchange = () => { handleFiles(fin.files, pendingCat); fin.value = ''; };
+  document.querySelectorAll('.drop').forEach(drop => {
+    ['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('on'); }));
+    ['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('on'); }));
+    drop.addEventListener('drop', e => handleFiles(e.dataTransfer.files, drop.dataset.cat));
+  });
+}
+document.addEventListener('click', async e => {
+  const t = e.target.closest('[data-act]'); if(!t || t.tagName === 'SELECT') return;
+  if(t.tagName === 'A') e.preventDefault();
+  await act(t.dataset.act, t.dataset);
+});
+document.addEventListener('change', async e => {
+  const t = e.target; if(t.tagName !== 'SELECT' || t.dataset.act !== 'addSlot' || !t.value) return;
+  const f = D.files.find(x => x.id === t.dataset.f); if(!f) return;
+  await act('assign', { f: f.id, s: String(t.value) });
+});
+async function safe(fn){ if(BUSY) return; BUSY = true; try{ await fn(); }catch(e){ say(errMsg(e) + '（元の内容は変わっていません）'); } finally{ BUSY = false; } }
+async function act(a, ds){
+  await safe(async () => {
+    const P = {p_token: TOKEN, p_period: PERIOD_ID};
+    if(a === 'confirmAll'){ await rpc('doc_confirm_all', P); await load(); say('候補どおりに決定しました。', true); }
+    else if(a === 'pickCand' || a === 'assign'){
+      const f = D.files.find(x => x.id === ds.f); const ids = (f.slot_ids || []).concat([Number(ds.s)]);
+      await rpc('doc_assign', {...P, p_file: ds.f, p_slots: ids}); await load();
+    }
+    else if(a === 'unassign'){
+      const f = D.files.find(x => x.id === ds.f); const ids = f.slot_ids.filter(i => i !== Number(ds.s));
+      await rpc('doc_assign', {...P, p_file: ds.f, p_slots: ids}); await load();
+    }
+    else if(a === 'detach'){
+      if(!confirm('この書類を取り消します。（保管場所には記録が残ります）よろしいですか？')) return;
+      await rpc('doc_detach_file', {...P, p_file: ds.f}); await load();
+    }
+    else if(a === 'nodoc'){
+      const why = prompt('今月は書類がない理由を書いてください（例：学校から届いていない）');
+      if(why === null) return;
+      if(!why.trim()){ say('理由を入力してください。'); return; }
+      await rpc('doc_set_no_doc', {...P, p_slot: Number(ds.s), p_reason: why.trim()}); await load();
+    }
+    else if(a === 'nodocClear'){ await rpc('doc_set_no_doc', {...P, p_slot: Number(ds.s), p_reason: null}); await load(); }
+    else if(a === 'submit'){
+      if(!confirm(`この内容で送信します。\n書類 ${D.files.length} 枚／書類なし ${D.slots.filter(s => s.no_doc_reason).length} 枠\n送信すると、検査が始まり、内容は直せなくなります。よろしいですか？`)) return;
+      await rpc('doc_submit', P); await load(); say('送信しました。検査の結果が出るまで、お待ちください。', true);
+    }
+    else if(a === 'adminOpen'){ TOKEN = null; PERIOD_ID = Number(ds.p); history.replaceState(null,'',location.pathname); await load(); window.scrollTo(0,0); }
+    else if(a === 'adminLink'){
+      if(!confirm('リンクを作り直します。前のリンクは使えなくなります。よろしいですか？')) return;
+      const r = await rpc('doc_issue_link', {p_period: Number(ds.p)});
+      const out = document.getElementById('adminOut');
+      out.innerHTML = `新しいリンク（${esc(fmtD(r.expires_at))}まで）：<br><input type="text" id="linkOut" readonly value="${esc(r.url)}" style="width:100%;font-size:12px;"><br><button type="button" class="mini" data-act="copyLink">コピー</button>`;
+      ADMIN_LIST = await rpc('doc_admin_periods');
+    }
+    else if(a === 'copyLink'){ const el = document.getElementById('linkOut'); el.select(); try{ await navigator.clipboard.writeText(el.value); say('リンクをコピーしました。他の人には渡さないでください。', true); }catch(e){ document.execCommand('copy'); say('コピーしました。', true); } }
+    else if(a === 'adminReopen'){ if(!confirm('受付を再開します（書類を追加・取り消しできるようになります）。よろしいですか？')) return; await rpc('doc_reopen', {p_period: Number(ds.p)}); ADMIN_LIST = await rpc('doc_admin_periods'); await load(); }
+    else if(a === 'adminCreate'){
+      const m = document.getElementById('newMonth').value; if(!m){ say('月を選んでください。'); return; }
+      await rpc('doc_open_period', {p_target: m + '-01', p_test: document.getElementById('newTest').checked});
+      ADMIN_LIST = await rpc('doc_admin_periods'); rerender(); say('受付をつくりました。', true);
+    }
+    else if(a === 'adminMail'){
+      const isTestPeriod = ds.t === '1';
+      const to = document.getElementById('mailTest').value.trim();
+      const real = !isTestPeriod && confirm('【本番】案内メールを、設定された宛先（曾木さん）に送ります。\n同じ月に送信済みのときは、送りません。よろしいですか？\n\n（テスト送信にするときは「キャンセル」を押して、下の宛先欄に自分のメールを入れて、もう一度押してください）');
+      if(!real){
+        if(!to){ say('テスト送信の宛先を入れてください。'); return; }
+        if(!confirm(`テスト送信：${to} に、案内メールを送ります。（曾木さんには送りません）よろしいですか？`)) return;
+      }
+      await ensureFreshToken();
+      const res = await fetch(`${FUNCTIONS_URL}/docs-request-mail`, { method:'POST', headers: getH(), body: JSON.stringify({ target_month: ds.m, ...(real ? {} : { test_to: to }), force: false }) });
+      const j = await res.json().catch(() => ({}));
+      if(!res.ok) { say('送信できませんでした：' + esc(j.error || res.status)); return; }
+      if(j.skipped) say('送りませんでした（' + esc(j.skipped === 'already_sent' ? 'この月は送信済みです' : j.skipped) + '）。', true);
+      else say('案内メールを送りました（' + esc((j.to || []).join('、')) + '）。', true);
+      ADMIN_LIST = await rpc('doc_admin_periods'); rerender();
+    }
+  });
+}
+
+/* ---- 一括アップロード（PDFの中身は開かず、そのまま保管場所へ送る） ---- */
+function hex(buf){ return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2,'0')).join(''); }
+async function handleFiles(fl, cat){
+  if(BUSY || !fl || !fl.length) return;
+  BUSY = true;
+  const arr = [...fl], fails = [], prog = document.getElementById('prog'); let ok = 0;
+  try{
+    for(let i = 0; i < arr.length; i++){
+      const f = arr[i];
+      if(prog) prog.textContent = `送信中 ${i+1}/${arr.length}：${f.name}`;
+      try{
+        if(!/\.pdf$/i.test(f.name)) throw new Error('PDFのファイルではありません');
+        if(f.size < 1) throw new Error('空のファイルです');
+        if(f.size > 10 * 1024 * 1024) throw new Error('10MBを超えています');
+        const buf = await f.arrayBuffer();
+        if(String.fromCharCode(...new Uint8Array(buf.slice(0,5))) !== '%PDF-') throw new Error('PDFの形式ではありません');
+        const sha = hex(await crypto.subtle.digest('SHA-256', buf));
+        const path = `${D.period.id}/${crypto.randomUUID()}.pdf`;
+        await ensureFreshToken(); const s = _getSession();
+        const r = await fetch(`${SUPA}/storage/v1/object/docs-incoming/${path}`, { method:'POST',
+          headers: { 'apikey': ANON_KEY, 'Authorization': 'Bearer ' + s.access_token, 'Content-Type': 'application/pdf', 'x-upsert': 'false' }, body: buf });
+        if(!r.ok) throw new Error('保管場所に送れませんでした（' + r.status + '）');
+        await rpc('doc_register_file', { p_token: TOKEN, p_period: PERIOD_ID, p_path: path, p_orig: f.name, p_size: f.size, p_sha: sha, p_guess: guessFor(f.name, cat || null) });
+        ok++;
+      }catch(e){ fails.push(f.name + '：' + errMsg(e)); }
+    }
+  } finally { BUSY = false; }
+  await load();
+  if(fails.length) say(`${ok}枚を受け付けました。次の${fails.length}枚は受け付けられませんでした：<br>` + fails.map(esc).join('<br>'));
+  else say(`${ok}枚を受け付けました。下の「どの枠か」を確認してください。`, true);
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
+  const okAuth = await initAuth(['super_admin','admin','operator']);
+  if(!okAuth) return;
+  await load();
+});
+
+</script>
+</body>
+</html>
