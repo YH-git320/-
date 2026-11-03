@@ -176,10 +176,8 @@ table.grid tr.none td.nm{background:#fafafa;}
         期間：<span id="xlPeriod">（上で、期間を選んでください）</span><br>
         1. 曾木さんのExcelを、<b>保存してから</b>、下のボタンで選びます。（Excelは開いたままで構いません。ファイルは、このパソコンの中だけで読み、どこにも送りません）<br>
         2. シートが自動で選ばれます。違うときは、右の欄で選び直します。<br>
-        3. 「貼り付け用のファイル（CSV）を保存」を押して、保存したファイルを開きます。<br>
-        4. 開いた表全体をコピーします。（Ctrl＋A、続けて Ctrl＋C）<br>
-        5. 曾木さんの表で、画面に出る「貼り付け先」のセルを選び、「ホーム」の「貼り付け」の下の矢印から<b>「形式を選択して貼り付け」</b>を開きます。<b>「値」</b>を選んで、<b>「空白セルを無視する」</b>にチェックを入れて、OKを押します。<br>
-        6. 貼り付けたあと、内容を目で確かめます。（間違えたときは、Ctrl＋Z で戻せます）
+        3. 「<b>反映したExcelを保存</b>」を押します。希望が書き込まれた、新しい名前のExcelが保存されます。（元のファイルは、変わりません）<br>
+        4. 保存されたExcelを開いて、内容を確かめます。問題がなければ、これからは、こちらのファイルを使います。
       </div>
       <div class="row">
         <input type="file" id="xlFile" accept=".xlsx,.xlsm" onchange="xlPick(this.files[0])" style="width:auto;max-width:360px;">
@@ -1277,23 +1275,27 @@ function tAddrTyped(){
   try{ localStorage.setItem('kibou_test_addr', v); }catch(e){}
 }
 
-/* ---------- ③ 曾木さんのExcelへ反映（貼り付け用のCSVを作る） ----------
+/* ---------- ③ 曾木さんのExcelへ反映 ----------
    曾木さんのExcelは、この画面を開いたパソコンの中だけで読む。どこにも送らない。
-   出すのは、日付の列だけの表（CSV）。曾木さんが「形式を選択して貼り付け」の「値」＋「空白セルを無視する」で貼る。 */
+   ・主な方法：曾木さんのExcelをコピーして、希望のセルだけを書き込んだ新しいファイルを保存する（書式・数式・ほかのシートは、そのまま）
+   ・別の方法：貼り付け用のCSVを保存する */
 let XL = null;
-function xlLoadLib(){
+function xlLoadScript(src, test){
   return new Promise((res, rej) => {
-    if(window.XLSX) return res();
-    const s = document.createElement('script'); s.src = 'xlsx.full.min.js';
-    s.onload = () => res(); s.onerror = () => rej(new Error('Excelを読む部品を読み込めませんでした'));
+    if(test()) return res();
+    const s = document.createElement('script'); s.src = src;
+    s.onload = () => res(); s.onerror = () => rej(new Error('部品（' + src + '）を読み込めませんでした'));
     document.head.appendChild(s);
   });
 }
+const xlLoadLib = () => xlLoadScript('xlsx.full.min.js', () => !!window.XLSX);
+const xlLoadZip = () => xlLoadScript('jszip.min.js', () => !!window.JSZip);
 function xlCol(c0){ let n = c0 + 1, s = ''; while(n > 0){ const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; }
 function xlSerial(d){ const p = String(d).slice(0,10).split('-').map(Number); return Math.round((Date.UTC(p[0], p[1]-1, p[2]) - Date.UTC(1899, 11, 30)) / 86400000); }
 function xlNorm(s){
   return String(s || '').replace(/[\s　]/g, '').replace(/髙/g,'高').replace(/﨑/g,'崎').replace(/國/g,'国').replace(/廣/g,'広').replace(/冨/g,'富').replace(/濵/g,'浜').replace(/栁/g,'柳').replace(/邊/g,'辺').replace(/嶋/g,'島').replace(/榮/g,'栄');
 }
+const XL_MARKS = ['✖','✕','✗','✘','×','○','△'];      // 上書きしてよい、希望の記号
 function xlReset(){
   XL = null;
   const o = document.getElementById('xlOut'); if(o) o.innerHTML = '';
@@ -1315,12 +1317,12 @@ async function xlPick(file){
     XL = { buf, names, file: file.name };
     const s = GRID.period.start, e = GRID.period.end;
     const key = `${Number(s.slice(5,7))}.${Number(s.slice(8,10))}-${Number(e.slice(5,7))}.${Number(e.slice(8,10))}`;
-    const guess = names.find(n => n.includes(key)) || '';
+    const guess = names.find(n => n.includes(key) && n.includes('人ごと')) || names.find(n => n.includes(key)) || '';
     const sel = document.getElementById('xlSheet');
     sel.innerHTML = '<option value="">シートを選んでください</option>' + names.map(n => `<option value="${esc(n)}"${n === guess ? ' selected' : ''}>${esc(n)}</option>`).join('');
     sel.style.display = '';
     if(guess) await xlBuild();
-    else out.innerHTML = `<div class="warnbox">期間「${esc(key)}」を含む名前のシートが見つかりません。上の欄で、シートを選んでください。</div>`;
+    else out.innerHTML = `<div class="warnbox">期間「${esc(key)}」を含む名前のシートが見つかりません。<br>新しい期間のシートを、前の期間のシートをコピーして作ってから、もう一度ファイルを選んでください。（すでにあるときは、右の欄でシートを選びます）</div>`;
   }catch(err){ XL = null; out.innerHTML = `<div class="warnbox">Excelを読めませんでした：${esc(err && err.message || err)}<br>ファイルがパスワード付き、または、Excelの形式（.xlsx）ではない可能性があります。</div>`; }
 }
 async function xlBuild(){
@@ -1345,12 +1347,11 @@ async function xlBuild(){
     // システムIDの列
     let idCol = -1;
     for(let c = startCol + nd; c <= Math.min(ref.e.c, startCol + nd + 6); c++){ const v = val(9, c); if(v != null && String(v).includes('システムID')){ idCol = c; break; } }
-    // 人の行：11行目から。A列に名前のある行が、登校の行（下校はその次の行）
+    // 人の行：11行目から。A列に名前のある行が、登校の行（下校はその次の行）。A列から右へ結合した見出しの帯は、人の行ではない
     const rows = ws['!rows'] || [];
-    const people = [];
-    // 見出しの行（A列から右へ結合してある行。たとえば「舘山さん管理の添乗員」の帯）は、人の行ではない
     const banner = new Set();
     for(const mg of (ws['!merges'] || [])){ if(mg.s.c === 0 && mg.e.c > 0) for(let r = mg.s.r; r <= mg.e.r; r++) banner.add(r); }
+    const people = [];
     for(let r = 10; r <= ref.e.r; ){
       const nm = val(r, 0);
       if(banner.has(r)){ r += 1; continue; }
@@ -1366,19 +1367,24 @@ async function xlBuild(){
     const used = new Set(people.filter(p => p.staff).map(p => p.staff.staff_id));
     const notInSheet = GRID.staff.filter(s => s.submitted_at && !used.has(s.staff_id));
     const unknown = people.filter(p => !p.staff);
+    // いま入っている中身（上書きしてよいか、確かめるため）
+    for(const p of people){
+      p.ex = [0, 1].map(k => Array.from({ length: nd }, (_, i) => { const x = at(p.r + k, startCol + i); return x ? { v: x.v === undefined ? '' : String(x.v), f: !!x.f } : { v: '', f: false }; }));
+    }
     // ✖の文字：表の中にすでにある記号を使う（なければ ✖）
     const cnt = new Map();
-    for(const p of people){ for(const dr of [0, 1]){ for(let i = 0; i < nd; i++){ const v = val(p.r + dr, startCol + i); if(typeof v === 'string' && v.length === 1 && !'○△'.includes(v)) cnt.set(v, (cnt.get(v) || 0) + 1); } } }
+    for(const p of people){ for(const k of [0, 1]) for(const e of p.ex[k]) if(e.v.length === 1 && !'○△'.includes(e.v)) cnt.set(e.v, (cnt.get(e.v) || 0) + 1); }
     let X = '✖'; let best = 0; for(const [k, n] of cnt){ if('✖✕✗✘×xX'.includes(k) && n > best){ best = n; X = k; } }
     XL.model = { name, startCol, nd, people, X, warns, notInSheet, unknown, idCol, r0: people[0].r, r1: people[people.length - 1].r + 1 };
     xlRender();
   }catch(err){ out.innerHTML = `<div class="warnbox">シートを調べられませんでした：${esc(err && err.message || err)}</div>`; }
 }
+// 書き込む内容の計画：空欄のセルと、すでに同じ記号のセルは、書かない。別の内容（コース名など）や数式が入っているセルは、上書きしない
 function xlMatrix(){
   const M = XL.model, G = GRID, x = !!G.period.x_mode;
   const writeO = document.getElementById('xlO').checked, skipW = document.getElementById('xlW').checked;
   const nRows = M.r1 - M.r0 + 1, mat = Array.from({ length: nRows }, () => Array(M.nd).fill(''));
-  let nPeople = 0;
+  const conflicts = []; let nPeople = 0, willWrite = 0, same = 0;
   for(const p of M.people){
     const s = p.staff; if(!s || !s.submitted_at) continue;
     nPeople++;
@@ -1390,36 +1396,45 @@ function xlMatrix(){
         let t = '';
         if(x){ t = o ? (writeO ? '○' : '') : ng ? M.X : (off && skipW ? '' : '△'); }
         else { t = o ? (writeO ? '○' : '') : M.X; }
-        mat[p.r - M.r0 + k][i] = t;
+        if(t === '') continue;
+        const ex = p.ex[k][i];
+        if(ex.f){ conflicts.push({ p, k, i, ex: '（数式）', t }); continue; }
+        if(ex.v === t){ same++; continue; }
+        if(ex.v !== '' && !XL_MARKS.includes(ex.v)){ conflicts.push({ p, k, i, ex: ex.v, t }); continue; }
+        mat[p.r - M.r0 + k][i] = t; willWrite++;
       }
     }
   }
-  return { mat, nPeople };
+  return { mat, nPeople, conflicts, willWrite, same };
 }
 function xlRender(){
   const out = document.getElementById('xlOut'), M = XL.model;
-  const { mat, nPeople } = xlMatrix();
+  const { mat, nPeople, conflicts, willWrite, same } = xlMatrix();
   const dest = `${xlCol(M.startCol)}${M.r0 + 1}`;
   const submitted = GRID.staff.filter(s => s.submitted_at).length;
-  const cntMark = (m) => mat.reduce((n, r) => n + r.filter(v => v === m).length, 0);
-  let h = `<div class="panel"><b>貼り付け用の表ができました</b>
+  let h = `<div class="panel"><b>反映の準備ができました</b>
     <div class="kpi" style="margin-top:8px;">
       <div class="box"><div class="lb">希望票を出した方</div><div class="vl">${submitted}</div></div>
       <div class="box"><div class="lb">この表に載っている方</div><div class="vl">${nPeople}</div></div>
-      <div class="box"><div class="lb">${esc(M.X)} の数</div><div class="vl">${cntMark(M.X)}</div></div>
-      ${GRID.period.x_mode ? `<div class="box"><div class="lb">△ の数</div><div class="vl">${cntMark('△')}</div></div>` : ''}
+      <div class="box"><div class="lb">書き込むセル</div><div class="vl">${willWrite}</div></div>
+      <div class="box"><div class="lb">すでに同じ（書かない）</div><div class="vl">${same}</div></div>
+      <div class="box"><div class="lb">上書きしない（別の内容あり）</div><div class="vl">${conflicts.length}</div></div>
     </div>
-    <div class="row"><button type="button" class="primary" onclick="xlSave()">📄 貼り付け用のファイル（CSV）を保存</button>
-      <span class="muted">貼り付け先：「${esc(M.name)}」シートの <b>${esc(dest)}</b> のセル</span></div></div>`;
+    <div class="row"><button type="button" class="primary" onclick="xlSaveBook()">💾 反映したExcelを保存</button>
+      <span class="muted">「${esc(M.name)}」シートの、${esc(jp(GRID.period.start))}から${esc(jp(GRID.period.end))}までの列に書き込みます。元のファイルは、変えません。新しい名前のファイルになります。</span></div></div>`;
   if(M.warns.length) h += `<div class="warnbox">${M.warns.map(esc).join('<br>')}</div>`;
+  if(conflicts.length){
+    h += `<div class="warnbox"><b>次のセルには、すでに別の内容（コース名など）が入っているので、上書きしません。</b>（${conflicts.length}個）<br>` +
+      conflicts.slice(0, 40).map(c => `${esc(c.p.name)}　${esc(md(GRID.days[c.i].d))}　${c.k ? '下校' : '登校'}　（いまの内容：${esc(c.ex)}／希望：${esc(c.t)}）`).join('<br>') + (conflicts.length > 40 ? `<br>ほか ${conflicts.length - 40} 個` : '') + '</div>';
+  }
   const hid = M.people.filter(p => p.hidden && p.staff && p.staff.submitted_at);
-  if(hid.length) h += `<div class="warnbox">次の方の行は、Excelの表で非表示になっています（貼り付けはされますが、見えません。行を表示してください）：<b>${hid.map(p => esc(p.name)).join('、')}</b></div>`;
-  if(M.notInSheet.length) h += `<div class="warnbox">希望票を出しましたが、この表にいない方（貼り付けられません）：<b>${M.notInSheet.map(s => esc(s.name)).join('、')}</b><br>表に行を足したあと、もう一度ファイルを選んでください。</div>`;
-  if(M.unknown.length) h += `<div class="warnbox">表の名前が、システムの添乗員と合わなかった行（反映していません）：<b>${M.unknown.map(p => esc(p.name)).join('、')}</b>${M.idCol < 0 ? '<br>この表には「システムID」の列がありません。名前で照合しています。' : ''}</div>`;
+  if(hid.length) h += `<div class="warnbox">次の方の行は、Excelの表で非表示になっています（書き込まれますが、見えません。行を表示してください）：<b>${hid.map(p => esc(p.name)).join('、')}</b></div>`;
+  if(M.notInSheet.length) h += `<div class="warnbox">希望票を出しましたが、この表にいない方（書き込めません）：<b>${M.notInSheet.map(s => esc(s.name)).join('、')}</b><br>表に行を足したあと、もう一度ファイルを選んでください。</div>`;
+  if(M.unknown.length) h += `<div class="warnbox">表の名前が、システムの添乗員と合わなかった行（反映していません）：<b>${M.unknown.map(p => esc(p.name)).join('、')}</b>${M.idCol < 0 ? '<br>この表には「システムID」の列がありません。名前で照合しています。表記が違う方は、名前をシステムの名前に直すか、「システムID」の列を足してください。' : ''}</div>`;
   const nameMatched = M.people.filter(p => p.staff && p.byName).length;
   if(M.idCol >= 0 && nameMatched) h += `<div class="warnbox">「システムID」が入っていない行は、名前で照合しました（${nameMatched}人）。</div>`;
   // プレビュー
-  h += `<div class="panel"><b>貼り付ける内容の見本</b><div class="muted" style="margin:2px 0 6px;">${esc(jp(GRID.period.start))}から。空欄のセルは、貼り付けても、いまの内容は変わりません。</div><div class="gwrap"><table class="grid" style="min-width:${182 + M.nd * 30}px"><thead><tr><th class="nm">氏名</th><th class="lab">便</th>`;
+  h += `<div class="panel"><b>書き込む内容の見本</b><div class="muted" style="margin:2px 0 6px;">${esc(jp(GRID.period.start))}から。空欄のセルは、書き込みません。</div><div class="gwrap"><table class="grid" style="min-width:${182 + M.nd * 30}px"><thead><tr><th class="nm">氏名</th><th class="lab">便</th>`;
   GRID.days.forEach(d => { h += `<th class="${dayCls(d)}">${Number(d.d.slice(8,10))}</th>`; });
   h += '</tr></thead><tbody>';
   for(const p of M.people){
@@ -1431,19 +1446,106 @@ function xlRender(){
   }
   h += '</tbody></table></div></div>';
   const notes = GRID.staff.filter(s => s.submitted_at && s.note);
-  if(notes.length) h += `<div class="panel"><b>備考（確認メモの列には、貼り付けません）</b><ul style="margin:6px 0 0;padding-left:20px;font-size:13px;">${notes.map(s => `<li>${esc(s.name)}：${esc(s.note)}</li>`).join('')}</ul></div>`;
+  if(notes.length) h += `<div class="panel"><b>備考（確認メモの列には、書き込みません）</b><ul style="margin:6px 0 0;padding-left:20px;font-size:13px;">${notes.map(s => `<li>${esc(s.name)}：${esc(s.note)}</li>`).join('')}</ul></div>`;
+  h += `<details class="panel"><summary style="cursor:pointer;font-weight:700;">別の方法：貼り付け用のファイル（CSV）を使う</summary>
+    <div class="muted" style="margin:8px 0;line-height:1.8;">Excelを書き換えずに、自分で貼り付けたいときの方法です。<br>
+    1. 下のボタンでCSVを保存して、Excelで開きます。 2. 左上のセル（A1）を選び、<b>Ctrl＋Shift＋End</b> を押して表の範囲を選び、コピーします。（Ctrl＋Aは使えません） 3. 貼り付け先（<b>${esc(dest)}</b>）のセルで、「形式を選択して貼り付け」の<b>「値」</b>＋<b>「空白セルを無視する」</b>で貼ります。</div>
+    <button type="button" onclick="xlSave()">📄 貼り付け用のファイル（CSV）を保存</button></details>`;
   out.innerHTML = h;
 }
 function xlSave(){
   if(!XL || !XL.model || !GRID) return;
   const { mat } = xlMatrix();
   const q = v => /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
-  const csv = '\uFEFF' + mat.map(r => r.map(q).join(',')).join('\r\n') + '\r\n';
+  const csv = '﻿' + mat.map(r => r.map(q).join(',')).join('\r\n') + '\r\n';
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   a.download = `Excel貼り付け用_${GRID.period.start}_${GRID.period.end}.csv`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  say(`貼り付け用のファイルを保存しました。保存したファイルを開き、表全体をコピーして、「${XL.model.name}」シートの ${xlCol(XL.model.startCol)}${XL.model.r0 + 1} のセルに、「形式を選択して貼り付け」の「値」＋「空白セルを無視する」で貼り付けてください。`, true);
+  say(`貼り付け用のファイルを保存しました。開いて、左上のセル（A1）を選び、Ctrl＋Shift＋End で範囲を選んでコピーし、「${XL.model.name}」シートの ${xlCol(XL.model.startCol)}${XL.model.r0 + 1} のセルに、「値」＋「空白セルを無視する」で貼り付けてください。`, true);
+}
+
+/* ---- 曾木さんのExcelに、希望のセルだけを書き込んだ新しいファイルを作る ----
+   Excelの中身（ZIPの中のXML）の、対象のセルだけを書き換える。書式・数式・ほかのシートには触れない。 */
+function xlXmlEsc(s){ return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function xlXmlUnesc(s){ return String(s).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&'); }
+function xlColNum(letters){ let n = 0; for(const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64); return n - 1; }
+function xlSetCells(xml, edits){
+  // edits: { 行番号(1始まり) : [ {col0, text} ] }
+  let wrote = 0, noStyle = 0, skippedFormula = 0;
+  for(const rowStr of Object.keys(edits)){
+    const rowNum = Number(rowStr);
+    const m = new RegExp('<row r="' + rowNum + '"[ >/]').exec(xml);
+    if(!m) throw new Error(rowNum + '行目が、シートの中に見つかりません');
+    const tagEnd = xml.indexOf('>', m.index);
+    if(xml[tagEnd - 1] === '/') throw new Error(rowNum + '行目に、セルがありません');
+    const rowEnd = xml.indexOf('</row>', tagEnd);
+    let seg = xml.slice(tagEnd + 1, rowEnd);
+    for(const e of edits[rowStr]){
+      const ref = xlCol(e.col0) + rowNum;
+      const idx = seg.indexOf('<c r="' + ref + '"');
+      const newBody = (s) => `<c r="${ref}"${s ? ` s="${s}"` : ''} t="inlineStr"><is><t>${xlXmlEsc(e.text)}</t></is></c>`;
+      if(idx >= 0){
+        const cTagEnd = seg.indexOf('>', idx);
+        const self = seg[cTagEnd - 1] === '/';
+        const cEnd = self ? cTagEnd + 1 : seg.indexOf('</c>', cTagEnd) + 4;
+        const cell = seg.slice(idx, cEnd);
+        if(/<f[ >\/]/.test(cell)){ skippedFormula++; continue; }
+        const sm = /\ss="(\d+)"/.exec(seg.slice(idx, cTagEnd));
+        seg = seg.slice(0, idx) + newBody(sm ? sm[1] : '') + seg.slice(cEnd);
+      } else {
+        // セルがないとき：列の順に、正しい場所へ入れる（書式は付かない）
+        const re = /<c r="([A-Z]+)\d+"/g; let mm, at = seg.length;
+        while((mm = re.exec(seg))){ if(xlColNum(mm[1]) > e.col0){ at = mm.index; break; } }
+        seg = seg.slice(0, at) + newBody('') + seg.slice(at); noStyle++;
+      }
+      wrote++;
+    }
+    xml = xml.slice(0, tagEnd + 1) + seg + xml.slice(rowEnd);
+  }
+  return { xml, wrote, noStyle, skippedFormula };
+}
+async function xlSaveBook(){
+  if(!XL || !XL.model || !GRID) return;
+  const M = XL.model;
+  try{
+    await xlLoadZip();
+    const { mat, conflicts, willWrite } = xlMatrix();
+    if(!willWrite){ say('書き込むセルがありません（すでに反映ずみ、または、希望のセルがありません）。'); return; }
+    const zip = await JSZip.loadAsync(XL.buf, { createFolders: false });
+    const wbXml = await zip.file('xl/workbook.xml').async('string');
+    const relXml = await zip.file('xl/_rels/workbook.xml.rels').async('string');
+    let rid = null;
+    for(const m of wbXml.matchAll(/<sheet\b[^>]*>/g)){
+      const nm = /\sname="([^"]*)"/.exec(m[0]), ri = /\sr:id="([^"]*)"/.exec(m[0]);
+      if(nm && ri && xlXmlUnesc(nm[1]) === M.name){ rid = ri[1]; break; }
+    }
+    if(!rid) throw new Error('シート「' + M.name + '」を、ファイルの中で見つけられませんでした');
+    let target = null;
+    for(const m of relXml.matchAll(/<Relationship\b[^>]*>/g)){
+      if(new RegExp('\\sId="' + rid + '"').test(m[0])){ const t = /\sTarget="([^"]*)"/.exec(m[0]); if(t) target = t[1]; }
+    }
+    if(!target) throw new Error('シートの場所を、ファイルの中で見つけられませんでした');
+    const path = target.startsWith('/') ? target.slice(1) : 'xl/' + target;
+    const f = zip.file(path); if(!f) throw new Error('シートのデータ（' + path + '）が見つかりません');
+    let xml = await f.async('string');
+    const edits = {};
+    for(let r = 0; r < mat.length; r++){
+      for(let i = 0; i < M.nd; i++){
+        if(mat[r][i] === '') continue;
+        (edits[M.r0 + r + 1] = edits[M.r0 + r + 1] || []).push({ col0: M.startCol + i, text: mat[r][i] });
+      }
+    }
+    const res = xlSetCells(xml, edits);
+    zip.file(path, res.xml, { createFolders: false });
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const now = new Date(), p2 = n => String(n).padStart(2, '0');
+    const base = String(XL.file).replace(/\.(xlsx|xlsm)$/i, '');
+    const fname = `${base}_希望反映_${p2(now.getMonth() + 1)}${p2(now.getDate())}-${p2(now.getHours())}${p2(now.getMinutes())}.xlsx`;
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fname;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    say(`「${esc(fname)}」を保存しました。${res.wrote}個のセルに書き込みました。元のファイルは、変えていません。保存したファイルを開いて、内容を確かめてください。${conflicts.length ? `（別の内容が入っていて、上書きしなかったセルが ${conflicts.length} 個あります）` : ''}${res.noStyle ? `（${res.noStyle}個のセルは、書式のない場所に書き込みました）` : ''}${res.skippedFormula ? `（数式のセル ${res.skippedFormula} 個は、書き込みませんでした）` : ''}`, true);
+  }catch(err){ say('Excelを保存できませんでした（元のファイルは変わっていません）：' + esc(err && err.message || err)); }
 }
 
 /* ---------- 起動 ---------- */
