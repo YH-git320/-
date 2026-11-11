@@ -58,7 +58,7 @@ table.list tr:hover td{background:#f7faf8;}
 </header>
 <main>
   <h1>クリスマスケーキ 申込の集計</h1>
-  <p class="sub">閲覧できるのは、システム管理者と情報取扱者のみです。従業員の方は、メールのリンク（回答ページ）から社員番号と姓で申し込みます。届いた回答はここにまとまります。住所などの個人情報を含むため、出力したCSVの取り扱いにご注意ください。</p>
+  <p class="sub">閲覧できるのは、システム管理者と情報取扱者のみです。従業員の方は、メールで届く本人専用のリンクから申し込みます（メールのない方は、姓と生年月日で申し込みます）。届いた回答はここにまとまります。住所などの個人情報を含むため、出力したCSVの取り扱いにご注意ください。</p>
   <div id="status"></div>
 
   <div class="panel">
@@ -79,7 +79,7 @@ table.list tr:hover td{background:#f7faf8;}
   <div class="panel" id="mgrPanel">
     <div class="row" style="justify-content:space-between;">
       <b style="color:var(--g2);">管理者へ先行送信</b>
-      <span class="muted">送信元：高尾輸送サービス（nippo@takao599.com）。1人ずつ、本人の社員番号入りで送ります。</span>
+      <span class="muted">送信元：高尾輸送サービス（nippo@takao599.com）。1人ずつ、本人専用のリンク（名前が入った申込ページ）を送ります。</span>
     </div>
     <div class="twrap" style="margin-top:10px;"><div id="mgrTbl"><div class="empty">読み込み中…</div></div></div>
     <div class="row" style="margin-top:10px;">
@@ -987,19 +987,19 @@ function exportCsv(){
 /* ---------- 管理者へ先行送信 ---------- */
 const MGR_GRP = 'managers';
 let MGR = [];
-const MGR_SUBJECT = '【先行のお願い】クリスマスケーキ申込ページのお試しと本申込（11/13まで）【AI】';
+const MGR_SUBJECT = '【先行のお願い】クリスマスケーキ申込ページのお試しと本申込（11/13まで）';
 function pubUrl(){ return new URL('cake.html', location.href).href; }
-function mgrHtml(name, code, fb){
-  const link = pubUrl() + (fb ? '?fb=' + encodeURIComponent(fb) : '');
+function mgrHtml(name, tok){
+  const link = pubUrl() + (tok ? '?t=' + encodeURIComponent(tok) : '');
   return `<div style="font-family:'Hiragino Kaku Gothic ProN','Yu Gothic','Meiryo',sans-serif;font-size:15px;line-height:1.8;color:#2d3b35;max-width:560px;">
-<p>${esc(name)} 様（社員番号 <b>${esc(code)}</b>）</p>
+<p>${esc(name)} 様</p>
 <p>お疲れさまです。八重樫です。</p>
 <p>今年のクリスマスケーキは、希望者のご自宅へ冷凍便で送ります。全従業員へご案内する前に、管理者の皆さんに申込ページを先に使っていただき、使い勝手を確かめたいと考えています。</p>
 <p><b>ご自身の回答は試験ではなく、本番の申込として受け付けます。</b>ケーキ・ケーキ以外の食品・不要のいずれかを、実際のご希望でお選びください。</p>
 <p style="background:#fbeaea;border-radius:8px;padding:8px 12px;"><b>回答期限：11月13日（金）</b></p>
 <p style="margin:20px 0;"><a href="${link}" style="display:inline-block;background:#4d7a5e;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 26px;border-radius:10px;">申込ページを開く</a></p>
-<p>申込ページでは、上の<b>社員番号</b>と<b>姓（苗字）</b>を入力してください。</p>
-<p style="background:#eef4fb;border-radius:8px;padding:8px 12px;"><b>お申し込みのあとに、評価の欄が出てきます。</b>申込ページの使い勝手（5段階）と改善してほしい点、企画そのものの評価と改善すべき点、その他のご意見をお聞かせください。このリンクは管理者の方専用です。ほかの方へは転送しないでください。</p>
+<p>このボタンは<b>${esc(name)} 様専用</b>です。開くと、お名前が入った状態の申込ページが表示されます。</p>
+<p style="background:#eef4fb;border-radius:8px;padding:8px 12px;"><b>お申し込みのあとに、評価の欄が出てきます。</b>申込ページの使い勝手（5段階）と改善してほしい点、企画そのものの評価と改善すべき点、その他のご意見をお聞かせください。ほかの方へは転送しないでください。</p>
 <p>このメールに返信しても届きません。ご質問は<b>八重樫（yaegashi@kk-tus.co.jp）</b>までお願いします。</p>
 <p style="font-size:12px;color:#888;">※ボタンが開かないときは、次のアドレスを<b>全部</b>コピーして、ブラウザに貼ってください。<br><span style="word-break:break-all;">${esc(link)}</span></p>
 <p>八重樫</p>
@@ -1023,7 +1023,7 @@ async function mgrLoad(){
       ${f.plan_comment ? `<div style="margin-top:4px;"><span class="tag t-gray">企画の改善点</span> ${esc(f.plan_comment).replace(/\n/g,'<br>')}</div>` : ''}
       ${f.other ? `<div style="margin-top:4px;"><span class="tag t-gray">その他</span> ${esc(f.other).replace(/\n/g,'<br>')}</div>` : ''}</div>`; }).join('')
       : '<div class="muted">まだ評価は届いていません。</div>';
-    document.getElementById('mgrPreview').innerHTML = `<div class="muted">件名：${esc(MGR_SUBJECT)}</div>` + mgrHtml(MGR[0].name, MGR[0].employee_code, MGR[0].fb_token);
+    document.getElementById('mgrPreview').innerHTML = `<div class="muted">件名：${esc(MGR_SUBJECT)}</div>` + mgrHtml(MGR[0].name, MGR[0].token);
   }catch(e){ document.getElementById('mgrTbl').innerHTML = `<div class="empty">読み込めませんでした：${esc(e.message)}</div>`; }
 }
 async function mgrMail(m, to, subject, log){
@@ -1031,7 +1031,7 @@ async function mgrMail(m, to, subject, log){
   try{
     await ensureFreshToken();
     const res = await fetch(`${FUNCTIONS_URL}/send-email`, { method:'POST', headers:getH(),
-      body: JSON.stringify({ to, subject, html: mgrHtml(m.name, m.employee_code, m.fb_token) }) });
+      body: JSON.stringify({ to, subject, html: mgrHtml(m.name, m.token) }) });
     const r = await res.json().catch(() => ({}));
     ok = res.ok && r.ok; if(!ok) err = r.error || ('HTTP ' + res.status);
   }catch(e){ err = e.message; }
