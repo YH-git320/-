@@ -103,8 +103,8 @@
       <li>直径12cm（4号）以上のケーキです。<b>種類・メーカーは人によって異なり、選ぶことはできません。</b></li>
       <li>写真はイメージです。<b>冷凍のため、生イチゴが付かない商品もあります。</b></li>
       <li>ご家族が多いなど、<b>できるだけ大きいケーキをご希望の方は下でお選びください</b>（ご希望に添えない場合もあります）。</li>
-      <li>ケーキが苦手な方は、代わりの食品（おまかせ）も選べます。</li>
-      <li>お届けは<b>12月中旬以降</b>です。受け取りやすい日を伺いますが、お店の都合があるため<b>確定はできません</b>。冷凍庫の空きをご用意ください。</li>
+      <li>ケーキが苦手な方は、代わりに<b>チキン・ローストビーフ・焼き菓子</b>から選べます。</li>
+      <li>お届けは<b>12月中旬以降</b>です。ケーキは受け取りやすい日を伺いますが、お店の都合があるため<b>確定はできません</b>（食品は日にちのご希望を伺いません）。冷凍庫の空きをご用意ください。</li>
     </ul>
     <span class="dl" id="dl"></span>
   </div>
@@ -134,7 +134,7 @@
       <h2>お届けの希望<span class="req">必須</span></h2>
       <div class="opts" id="choiceOpts">
         <label class="opt"><input type="radio" name="choice" value="cake"><span><span class="t">ケーキを希望する</span></span></label>
-        <label class="opt"><input type="radio" name="choice" value="food"><span><span class="t">ケーキ以外の食品を希望する</span><span class="d">内容はおまかせです</span></span></label>
+        <label class="opt"><input type="radio" name="choice" value="food"><span><span class="t">ケーキ以外の食品を希望する</span><span class="d">チキン・ローストビーフ・焼き菓子から選べます</span></span></label>
         <label class="opt"><input type="radio" name="choice" value="none"><span><span class="t">今回は不要</span></span></label>
       </div>
     </div>
@@ -147,6 +147,18 @@
       </div>
       <label class="f" for="eat" style="margin-top:16px;">何人で召し上がる予定ですか<small>任意</small></label>
       <input type="number" id="eat" inputmode="numeric" min="1" max="30" placeholder="例：4">
+    </div>
+
+    <div class="card hide" id="foodBox">
+      <h2>食品の種類<span class="req">必須</span></h2>
+      <div class="opts">
+        <label class="opt"><input type="radio" name="food" value="chicken"><span><span class="t">チキン</span><span class="d">人数に合わせて、骨付きチキンや丸ごと一羽などをお届けします</span></span></label>
+        <label class="opt"><input type="radio" name="food" value="beef"><span><span class="t">ローストビーフ</span></span></label>
+        <label class="opt"><input type="radio" name="food" value="sweets"><span><span class="t">焼き菓子</span></span></label>
+      </div>
+      <label class="f" for="foodN" style="margin-top:16px;">何人で召し上がる予定ですか<span class="req">必須</span></label>
+      <div class="bd"><select id="foodN" aria-label="召し上がる人数"></select><span>人</span></div>
+      <div class="hint">人数に合わせて、できるだけ量を調整します。ただし量には上限があるため、ご希望に添えない場合もあります。</div>
     </div>
 
     <div class="card hide" id="addrBox">
@@ -165,9 +177,12 @@
       <input type="text" id="recip" maxlength="60" autocomplete="name">
       <label class="f" for="phone">電話番号<span class="req">必須</span><small>配送会社から連絡がつく番号</small></label>
       <input type="tel" id="phone" maxlength="15" autocomplete="tel">
+      <div id="prefBox">
       <label class="f">受け取りやすい日<small>任意・いくつでも</small></label>
       <div class="hint" style="margin-top:0;">お店の都合があるため、<b>お届け日は確定できません。</b>目安として伺い、できる範囲で調整します。</div>
       <div class="dates" id="dates"></div>
+      </div>
+      <div id="foodDateNote" class="hint hide" style="margin-top:14px;">食品は、お店から順次発送するため、<b>お届け日のご希望は伺っていません。</b>12月中旬以降に届きます。</div>
       <div style="margin-top:16px;">
         <label class="agree"><input type="checkbox" id="agree"><span>商品の種類・メーカーは選べないこと、お届け日は確定できないこと、不在で保管期限を過ぎると再送できないことを了承しました。</span></label>
       </div>
@@ -269,6 +284,7 @@ const digits = s => z2h(s).replace(/[^0-9]/g, '');
     paint();
   }));
 })();
+$('foodN').innerHTML = '<option value="">選ぶ</option>' + Array.from({length: 10}, (_, i) => `<option value="${i+1}">${i+1}</option>`).join('') + '<option value="11">11人以上</option>';
 function birth(){
   const y = $('by').value, m = $('bm').value, d = $('bdd').value;
   if(!y || !m || !d) return null;
@@ -279,6 +295,9 @@ function birth(){
 function refresh(){
   const ch = radio('choice');
   $('cakeBox').classList.toggle('hide', ch !== 'cake');
+  $('foodBox').classList.toggle('hide', ch !== 'food');
+  $('prefBox').classList.toggle('hide', ch !== 'cake');
+  $('foodDateNote').classList.toggle('hide', ch !== 'food');
   $('addrBox').classList.toggle('hide', !ch || ch === 'none');
   $('otherAddr').classList.toggle('hide', radio('amode') !== 'other');
   $('sendBtn').textContent = ch === 'none' ? '内容を確認する（不要で回答）' : '内容を確認する';
@@ -291,12 +310,13 @@ function collect(){
   const v = {
     p_campaign: CAMPAIGN, p_token: LINK ? TOKEN : null, p_surname: LINK ? null : $('sei').value.trim(), p_birth: LINK ? null : birth(), p_choice: ch,
     p_large: ch === 'cake' ? (radio('size') === 'large' ? true : radio('size') === 'std' ? false : null) : null,
-    p_eat_count: ch === 'cake' && $('eat').value ? Number(digits($('eat').value)) || null : null,
+    p_eat_count: ch === 'cake' ? ($('eat').value ? Number(digits($('eat').value)) || null : null) : ch === 'food' ? (Number($('foodN').value) || null) : null,
+    p_food_item: ch === 'food' ? radio('food') : null,
     p_addr_mode: radio('amode'),
     p_postal: digits($('postal').value), p_address: $('addr').value.trim(), p_recipient: $('recip').value.trim(),
     p_phone: digits($('phone').value), p_agreed: $('agree').checked,
-    p_pref_dates: [...document.querySelectorAll('#dates input:checked')].filter(c => c.id !== 'anyDay').map(c => c.value),
-    p_pref_any: $('anyDay').checked
+    p_pref_dates: ch === 'cake' ? [...document.querySelectorAll('#dates input:checked')].filter(c => c.id !== 'anyDay').map(c => c.value) : [],
+    p_pref_any: ch === 'cake' ? $('anyDay').checked : false
   };
   if(!LINK){
     if(!v.p_surname) return [null, '姓（苗字）を入力してください。'];
@@ -304,6 +324,8 @@ function collect(){
   }
   if(!ch) return [null, 'お届けの希望を選んでください。'];
   if(ch === 'cake' && v.p_large === null) return [null, 'ケーキの大きさを選んでください。'];
+  if(ch === 'food' && !v.p_food_item) return [null, '食品の種類を選んでください。'];
+  if(ch === 'food' && !v.p_eat_count) return [null, '召し上がる人数を選んでください。'];
   if(ch !== 'none'){
     if(!v.p_addr_mode) return [null, 'お届け先（自宅か、別の住所か）を選んでください。'];
     if(v.p_addr_mode === 'other'){
@@ -327,11 +349,12 @@ $('frm').addEventListener('submit', e => {
   const label = {cake:'ケーキを希望', food:'ケーキ以外の食品を希望', none:'今回は不要'}[v.p_choice];
   let h = LINK ? `<dt>お名前</dt><dd>${esc(LINK.name)} 様</dd>` : `<dt>姓・生年月日</dt><dd>${esc(v.p_surname)}　${esc(v.p_birth.replace(/-/g,'/'))}</dd>`;
   h += `<dt>お届けの希望</dt><dd>${label}</dd>`;
+  if(v.p_choice === 'food') h += `<dt>食品の種類</dt><dd>${{chicken:'チキン', beef:'ローストビーフ', sweets:'焼き菓子'}[v.p_food_item]}（${v.p_eat_count >= 11 ? '11人以上' : v.p_eat_count + '人'}）</dd>`;
   if(v.p_choice === 'cake') h += `<dt>大きさ</dt><dd>${v.p_large ? 'できるだけ大きいケーキを希望' : '標準の大きさでよい'}${v.p_eat_count ? `（${v.p_eat_count}人）` : ''}</dd>`;
   if(v.p_choice !== 'none'){
     const where = v.p_addr_mode === 'home' ? `会社に登録している自宅${LINK && LINK.home_hint ? '<br>' + esc(LINK.home_hint) : ''}` : `〒${esc(v.p_postal.slice(0,3)+'-'+v.p_postal.slice(3))}<br>${esc(v.p_address)}`;
     h += `<dt>お届け先</dt><dd>${where}<br>${esc(v.p_recipient)} 様<br>${esc(v.p_phone)}</dd>`;
-    h += `<dt>受け取りやすい日（確定ではありません）</dt><dd>${v.p_pref_any ? 'いつでもよい' : v.p_pref_dates.length ? v.p_pref_dates.map(d => Number(d.slice(5,7)) + '/' + Number(d.slice(8))).join('、') : '指定なし'}</dd>`;
+    if(v.p_choice === 'cake') h += `<dt>受け取りやすい日（確定ではありません）</dt><dd>${v.p_pref_any ? 'いつでもよい' : v.p_pref_dates.length ? v.p_pref_dates.map(d => Number(d.slice(5,7)) + '/' + Number(d.slice(8))).join('、') : '指定なし'}</dd>`;
   }
   $('conf').innerHTML = h;
   $('ov').classList.add('show');
