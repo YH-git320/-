@@ -31,6 +31,8 @@
   .msg{margin-top:12px;padding:12px 14px;background:#f7faf6;border-left:4px solid var(--brand);border-radius:8px;font-size:15px;}
   .msg p{margin:0 0 8px;}
   .msg p:last-child{margin:0;}
+  .contact{margin-top:10px;font-size:15px;}
+  .contact a{color:var(--brand-dark);font-weight:700;}
   .dl{display:inline-block;margin-top:8px;font-weight:700;color:var(--danger);}
   label.f{display:block;font-size:15px;font-weight:700;margin:14px 0 6px;}
   label.f:first-of-type{margin-top:0;}
@@ -115,6 +117,7 @@
       <p>以上のことをご理解いただき、皆様が気持ちよく素敵な年末をお過ごしできますよう、ご協力ください。</p>
     </div>
     <span class="dl" id="dl"></span>
+    <div class="contact">お問い合わせ・申込内容の変更：<b>岩﨑・梨本</b>　<a href="tel:0426690960">042-669-0960</a></div>
   </div>
 
   <div id="closedBox" class="card closed hide"></div>
@@ -122,7 +125,7 @@
   <form id="frm" autocomplete="on" novalidate>
     <div class="card hide" id="nameBox">
       <div class="who"><span id="whoName"></span> 様</div>
-      <div class="hint" style="margin-top:2px;">あなた専用の申込ページです。お名前が違うときは、送信せずに担当者へご連絡ください。</div>
+      <div class="hint" style="margin-top:2px;">あなた専用の申込ページです。お名前が違うときは、送信せずに担当（岩﨑・梨本　042-669-0960）へご連絡ください。</div>
     </div>
 
     <div class="card" id="idBox">
@@ -199,7 +202,7 @@
 
     <div id="err" class="err hide"></div>
     <button type="submit" class="send" id="sendBtn">内容を確認する</button>
-    <div class="foot">ご記入いただいた住所等は、本件の配送手配のみに使用します。</div>
+    <div class="foot">ご記入いただいた住所等は、本件の配送手配のみに使用します。<br>お問い合わせ：岩﨑・梨本　<a href="tel:0426690960">042-669-0960</a></div>
   </form>
 
   <div id="doneBox" class="card done hide">
@@ -425,7 +428,7 @@ $('fbBtn').onclick = async () => {
         if(FB_OK) $('fbNote').classList.remove('hide');
         if(LINK.applied){
           $('frm').classList.add('hide');
-          $('closedBox').textContent = `${LINK.name} 様のお申し込みは、すでに受け付けています。内容を変更したい場合は担当者へご連絡ください。`;
+          $('closedBox').textContent = `${LINK.name} 様のお申し込みは、すでに受け付けています。内容を変更したい場合は担当（岩﨑・梨本　042-669-0960）へご連絡ください。`;
           $('closedBox').classList.remove('hide');
           if(FB_OK) showFb();
         }
@@ -438,7 +441,7 @@ $('fbBtn').onclick = async () => {
     $('ttl').textContent = info.title;
     document.title = info.title;
     if(info.deadline){ const p = info.deadline.split('-'); $('dl').textContent = `回答期限：${Number(p[1])}月${Number(p[2])}日`; }
-    if(!info.open){ if(FB_OK) showFb(); $('frm').classList.add('hide'); $('closedBox').textContent = '受付は終了しました。ご不明な点は担当者へお問い合わせください。'; $('closedBox').classList.remove('hide'); }
+    if(!info.open){ if(FB_OK) showFb(); $('frm').classList.add('hide'); $('closedBox').textContent = '受付は終了しました。ご不明な点は担当（岩﨑・梨本　042-669-0960）へお問い合わせください。'; $('closedBox').classList.remove('hide'); }
   }catch(e){ showErr(e.message); }
 })();
 </script>
