@@ -888,6 +888,7 @@ function fmtDT(iso){
 const CH = { cake:'ケーキ', food:'食品', none:'不要' };
 const zip = z => z ? String(z).slice(0,3)+'-'+String(z).slice(3) : '';
 const pdates = a => (a && a.length) ? a.map(d => Number(String(d).slice(5,7)) + '/' + Number(String(d).slice(8,10))).join('、') : '';
+const pref = r => r.pref_any ? 'いつでもよい' : pdates(r.pref_dates);
 const asrc = r => r.addr_source === 'home' ? '自宅（登録）' : r.addr_source === 'other' ? '別の住所' : '';
 
 let STAFF = [], REQ = [], TAB = 'all';
@@ -938,7 +939,7 @@ function render(){
         <td class="nw"><span class="tag t-${r.choice}">${CH[r.choice]}</span></td>
         <td class="nw">${r.choice === 'cake' ? (r.large_size ? '<span class="tag t-big">大きめ希望</span>' : '標準') : ''}</td>
         <td class="nw">${r.eat_count || ''}</td><td class="nw">${esc(asrc(r))}</td><td class="nw">${esc(zip(r.postal_code))}</td><td>${esc(r.address || '')}</td>
-        <td class="nw">${esc(r.recipient || '')}</td><td class="nw">${esc(r.phone || '')}</td><td>${esc(pdates(r.pref_dates))}</td><td class="nw">${fmtDT(r.submitted_at)}</td>
+        <td class="nw">${esc(r.recipient || '')}</td><td class="nw">${esc(r.phone || '')}</td><td>${esc(pref(r))}</td><td class="nw">${fmtDT(r.submitted_at)}</td>
         <td class="nw"><button type="button" class="mini danger" onclick="undo(${r.id})">取消</button></td></tr>`; }).join('') + '</tbody></table>';
   }
   document.getElementById('tbl').innerHTML = list.length ? h : '<div class="empty">該当する回答はありません</div>';
@@ -976,7 +977,7 @@ function exportCsv(){
   }else{
     head = ['社員番号','氏名','所属','希望','大きさ','人数','届け先','郵便番号','住所','宛名','電話番号','受け取りやすい日（目安）','回答日時'];
     body = list.map(r => { const s = staffOf(r.staff_id); return [s.employee_code, s.name, s.department, CH[r.choice],
-      r.choice === 'cake' ? (r.large_size ? '大きめ希望' : '標準') : '', r.eat_count || '', asrc(r), zip(r.postal_code), r.address, r.recipient, r.phone, pdates(r.pref_dates), fmtDT(r.submitted_at)]; });
+      r.choice === 'cake' ? (r.large_size ? '大きめ希望' : '標準') : '', r.eat_count || '', asrc(r), zip(r.postal_code), r.address, r.recipient, r.phone, pref(r), fmtDT(r.submitted_at)]; });
   }
   const csv = '﻿' + [head].concat(body).map(a => a.map(q).join(',')).join('\r\n');
   const name = { all:'回答一覧', cake:'ケーキ発送リスト', food:'食品発送リスト', none:'不要', todo:'未回答者' }[TAB];

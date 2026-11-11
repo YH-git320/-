@@ -80,6 +80,7 @@
   .dates label small{display:block;font-size:12px;font-weight:500;}
   .dates label.sat small{color:#0c447c;} .dates label.sun small{color:#8f2222;}
   .dates input{display:none;}
+  .dates label.any{grid-column:1 / -1;padding:10px 0;font-size:16px;}
   .dates label.on{border-color:var(--brand-dark);background:var(--brand-tint);}
   .closed{text-align:center;padding:30px 16px;color:var(--ink-soft);}
   .foot{text-align:center;font-size:12px;color:var(--ink-soft);margin-top:18px;}
@@ -253,12 +254,20 @@ const digits = s => z2h(s).replace(/[^0-9]/g, '');
 })();
 (function(){
   const W = ['日','月','火','水','木','金','土'];
-  $('dates').innerHTML = Array.from({length: 11}, (_, i) => {
+  $('dates').innerHTML = '<label class="any"><input type="checkbox" id="anyDay">いつでもよい</label>' + Array.from({length: 11}, (_, i) => {
     const d = new Date(2026, 11, 15 + i), w = d.getDay();
     const v = `2026-12-${String(15 + i).padStart(2,'0')}`;
     return `<label class="${w === 6 ? 'sat' : w === 0 ? 'sun' : ''}"><input type="checkbox" value="${v}">12/${15 + i}<small>（${W[w]}）</small></label>`;
   }).join('');
-  $('dates').querySelectorAll('input').forEach(c => c.addEventListener('change', () => c.parentElement.classList.toggle('on', c.checked)));
+  const all = [...$('dates').querySelectorAll('input')];
+  const paint = () => all.forEach(c => c.parentElement.classList.toggle('on', c.checked));
+  all.forEach(c => c.addEventListener('change', () => {
+    if(c.checked){
+      if(c.id === 'anyDay') all.forEach(x => { if(x !== c) x.checked = false; });
+      else $('anyDay').checked = false;
+    }
+    paint();
+  }));
 })();
 function birth(){
   const y = $('by').value, m = $('bm').value, d = $('bdd').value;
@@ -286,7 +295,8 @@ function collect(){
     p_addr_mode: radio('amode'),
     p_postal: digits($('postal').value), p_address: $('addr').value.trim(), p_recipient: $('recip').value.trim(),
     p_phone: digits($('phone').value), p_agreed: $('agree').checked,
-    p_pref_dates: [...document.querySelectorAll('#dates input:checked')].map(c => c.value)
+    p_pref_dates: [...document.querySelectorAll('#dates input:checked')].filter(c => c.id !== 'anyDay').map(c => c.value),
+    p_pref_any: $('anyDay').checked
   };
   if(!LINK){
     if(!v.p_surname) return [null, '姓（苗字）を入力してください。'];
@@ -321,7 +331,7 @@ $('frm').addEventListener('submit', e => {
   if(v.p_choice !== 'none'){
     const where = v.p_addr_mode === 'home' ? `会社に登録している自宅${LINK && LINK.home_hint ? '<br>' + esc(LINK.home_hint) : ''}` : `〒${esc(v.p_postal.slice(0,3)+'-'+v.p_postal.slice(3))}<br>${esc(v.p_address)}`;
     h += `<dt>お届け先</dt><dd>${where}<br>${esc(v.p_recipient)} 様<br>${esc(v.p_phone)}</dd>`;
-    h += `<dt>受け取りやすい日（確定ではありません）</dt><dd>${v.p_pref_dates.length ? v.p_pref_dates.map(d => Number(d.slice(5,7)) + '/' + Number(d.slice(8))).join('、') : '指定なし'}</dd>`;
+    h += `<dt>受け取りやすい日（確定ではありません）</dt><dd>${v.p_pref_any ? 'いつでもよい' : v.p_pref_dates.length ? v.p_pref_dates.map(d => Number(d.slice(5,7)) + '/' + Number(d.slice(8))).join('、') : '指定なし'}</dd>`;
   }
   $('conf').innerHTML = h;
   $('ov').classList.add('show');
