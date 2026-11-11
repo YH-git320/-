@@ -65,6 +65,12 @@
   .done .big{font-size:54px;line-height:1;}
   .done h2{font-size:22px;color:var(--brand-dark);margin:12px 0 8px;}
   .done p{font-size:16px;color:var(--ink-soft);margin:6px 0;}
+  .fbnote{background:#eef4fb;border:1px solid #c9dcef;border-radius:12px;padding:10px 14px;margin-top:14px;font-size:15px;color:#1f4a72;}
+  .score{display:flex;gap:6px;}
+  .score label{flex:1;text-align:center;border:2px solid var(--line);border-radius:10px;padding:8px 0;cursor:pointer;font-weight:800;font-size:18px;background:#fff;}
+  .score input{display:none;}
+  .score label.on{border-color:var(--brand-dark);background:var(--brand-dark);color:#fff;}
+  .scale{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-soft);margin-top:4px;}
   .closed{text-align:center;padding:30px 16px;color:var(--ink-soft);}
   .foot{text-align:center;font-size:12px;color:var(--ink-soft);margin-top:18px;}
 </style>
@@ -76,6 +82,8 @@
 </div>
 
 <div class="wrap" id="app">
+  <div id="fbNote" class="fbnote hide"><b>管理者の方へ：</b>お申し込みのあとに、このページと企画についての評価をお願いします。申込を送ると、評価の欄が出てきます。</div>
+
   <img src="cake-image.jpg" alt="クリスマスケーキのイメージ写真" class="hero">
   <div class="card notice">
     <h2>はじめにお読みください</h2>
@@ -145,6 +153,32 @@
     <div class="big">🎄</div>
     <h2>お申し込みを受け付けました</h2>
     <p id="doneMsg"></p>
+    <p id="doneClose">このページは閉じてかまいません。</p>
+  </div>
+
+  <div id="fbBox" class="card hide">
+    <h2>管理者の方へ：評価のお願い</h2>
+    <div class="hint" style="margin-top:0;">全従業員へご案内する前に直すため、率直なご意見をお聞かせください。ここで送った内容は、申込とは別に扱います。</div>
+    <label class="f" style="margin-top:14px;">① 申込ページの使い勝手<span class="req">必須</span></label>
+    <div class="score" data-name="ui"></div>
+    <div class="scale"><span>1 使いにくい</span><span>5 使いやすい</span></div>
+    <label class="f" for="uiCmt">改善してほしい点・伝えたいこと<small>任意</small></label>
+    <textarea id="uiCmt" maxlength="2000" placeholder="例：〇〇の意味がわかりにくかった、文字が小さい など"></textarea>
+    <label class="f">② 企画（冷凍ケーキの郵送）の評価<small>任意</small></label>
+    <div class="score" data-name="plan"></div>
+    <div class="scale"><span>1 よくない</span><span>5 とてもよい</span></div>
+    <label class="f" for="planCmt">企画として改善すべき点<small>任意</small></label>
+    <textarea id="planCmt" maxlength="2000" placeholder="例：選べる品物、お届けの時期、案内の方法 など"></textarea>
+    <label class="f" for="otherCmt">③ その他のご意見<small>任意</small></label>
+    <textarea id="otherCmt" maxlength="2000"></textarea>
+    <div id="fbErr" class="err hide"></div>
+    <button type="button" class="send" id="fbBtn">評価を送る</button>
+  </div>
+
+  <div id="fbDone" class="card done hide">
+    <div class="big">🙏</div>
+    <h2>評価を受け付けました</h2>
+    <p>ご協力ありがとうございました。内容を直したいときは、もう一度送れば上書きされます。</p>
     <p>このページは閉じてかまいません。</p>
   </div>
 </div>
@@ -164,6 +198,8 @@
 const SUPABASE_URL = "https://wxdyqkyqtizhtkwtpvru.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4ZHlxa3lxdGl6aHRrd3RwdnJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NzYxODEsImV4cCI6MjA5OTQ1MjE4MX0.yVbClXBk2JVeglevsBLY5sH2_m2ybCf71u4i_YYWyHE";
 const CAMPAIGN = new URLSearchParams(location.search).get('c') || 'xmas2026';
+const FB = new URLSearchParams(location.search).get('fb') || '';
+let FB_OK = false;
 
 const $ = id => document.getElementById(id);
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -232,24 +268,54 @@ $('okBtn').onclick = async () => {
   try{
     const r = await rpc('gift_submit', pending);
     $('ov').classList.remove('show');
-    if(!r || !r.ok){ showErr((r && r.message) || '送信できませんでした。'); return; }
+    if(!r || !r.ok){
+      showErr((r && r.message) || '送信できませんでした。');
+      if(FB_OK && r && /すでに/.test(r.message || '')) showFb();
+      return;
+    }
     $('frm').classList.add('hide');
     $('doneMsg').textContent = `${r.name} 様のお申し込みを受け付けました。` + (r.choice === 'none' ? '' : 'お届けは12月中旬以降です。');
     $('doneBox').classList.remove('hide');
+    if(FB_OK){ $('doneClose').textContent = '続けて、下の評価にご協力ください。'; showFb(); }
     window.scrollTo(0, 0);
   }catch(err){
     $('ov').classList.remove('show'); showErr(err.message);
   }finally{ b.disabled = false; b.textContent = '送信する'; }
 };
 
+/* ---------- 管理者の評価 ---------- */
+document.querySelectorAll('.score').forEach(box => {
+  const n = box.dataset.name;
+  box.innerHTML = [1,2,3,4,5].map(v => `<label><input type="radio" name="sc_${n}" value="${v}">${v}</label>`).join('');
+  box.querySelectorAll('input').forEach(i => i.addEventListener('change', () =>
+    box.querySelectorAll('label').forEach(l => l.classList.toggle('on', l.querySelector('input').checked))));
+});
+function showFb(){ $('fbNote').classList.add('hide'); $('fbBox').classList.remove('hide'); }
+$('fbBtn').onclick = async () => {
+  const ui = radio('sc_ui'), plan = radio('sc_plan');
+  const e = $('fbErr');
+  if(!ui){ e.textContent = '申込ページの使い勝手を、5段階で選んでください。'; e.classList.remove('hide'); return; }
+  e.classList.add('hide');
+  const b = $('fbBtn'); b.disabled = true; b.textContent = '送信中…';
+  try{
+    const r = await rpc('gift_fb_submit', { p_token: FB, p_ui_score: Number(ui), p_ui_comment: $('uiCmt').value,
+      p_plan_score: plan ? Number(plan) : null, p_plan_comment: $('planCmt').value, p_other: $('otherCmt').value });
+    if(!r || !r.ok){ e.textContent = (r && r.message) || '送信できませんでした。'; e.classList.remove('hide'); return; }
+    $('fbBox').classList.add('hide'); $('doneBox').classList.add('hide'); $('fbDone').classList.remove('hide');
+    window.scrollTo(0, 0);
+  }catch(err){ e.textContent = err.message; e.classList.remove('hide'); }
+  finally{ b.disabled = false; b.textContent = '評価を送る'; }
+};
+
 (async () => {
   try{
+    if(FB){ try{ const f = await rpc('gift_fb_info', { p_token: FB }); FB_OK = !!(f && f.ok); }catch(e){} if(FB_OK) $('fbNote').classList.remove('hide'); }
     const info = await rpc('gift_info', { p_campaign: CAMPAIGN });
     if(!info || !info.ok){ $('frm').classList.add('hide'); $('closedBox').textContent = '受付が見つかりません。リンクをご確認ください。'; $('closedBox').classList.remove('hide'); return; }
     $('ttl').textContent = info.title;
     document.title = info.title;
     if(info.deadline){ const p = info.deadline.split('-'); $('dl').textContent = `回答期限：${Number(p[1])}月${Number(p[2])}日`; }
-    if(!info.open){ $('frm').classList.add('hide'); $('closedBox').textContent = '受付は終了しました。ご不明な点は担当者へお問い合わせください。'; $('closedBox').classList.remove('hide'); }
+    if(!info.open){ if(FB_OK) showFb(); $('frm').classList.add('hide'); $('closedBox').textContent = '受付は終了しました。ご不明な点は担当者へお問い合わせください。'; $('closedBox').classList.remove('hide'); }
   }catch(e){ showErr(e.message); }
 })();
 </script>
