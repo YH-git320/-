@@ -88,6 +88,7 @@ table.list tr:hover td{background:#f7faf8;}
       <button type="button" onclick="mgrTest()">1通だけテスト送信</button>
       <button type="button" class="primary" onclick="mgrSendAll()">まだ送っていない人に送信</button>
     </div>
+    <div id="mgrMsg" style="display:none;margin-top:10px;padding:10px 12px;border-radius:8px;font-size:14px;font-weight:700;line-height:1.7;"></div>
     <div style="margin-top:12px;"><b style="color:var(--g2);font-size:14px;">管理者からの評価</b><div id="mgrFb" style="font-size:13px;line-height:1.7;margin-top:4px;"></div></div>
     <details style="margin-top:10px;"><summary class="muted" style="cursor:pointer;">送る文面を見る</summary>
       <div id="mgrPreview" style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:8px;background:#fafcfa;"></div>
@@ -1026,6 +1027,13 @@ async function mgrLoad(){
     document.getElementById('mgrPreview').innerHTML = `<div class="muted">件名：${esc(MGR_SUBJECT)}</div>` + mgrHtml(MGR[0].name, MGR[0].token);
   }catch(e){ document.getElementById('mgrTbl').innerHTML = `<div class="empty">読み込めませんでした：${esc(e.message)}</div>`; }
 }
+function mgrSay(msg, kind){
+  const el = document.getElementById('mgrMsg');
+  const c = { ok:['#eef7ef','#2f7d32','#bfe3c0'], err:['#fdeceb','#b5453a','#f3c3bf'], run:['#eef4fb','#1f4a72','#c9dcef'] }[kind];
+  el.style.display = 'block'; el.style.background = c[0]; el.style.color = c[1]; el.style.border = '1px solid ' + c[2];
+  el.innerHTML = msg;
+}
+function mgrBusy(on){ document.querySelectorAll('#mgrPanel button').forEach(b => b.disabled = on); }
 async function mgrMail(m, to, subject, log){
   let ok = false, err = null;
   try{
@@ -1043,28 +1051,33 @@ async function mgrTest(){
   if(!/^[^@\s]+@[^@\s]+$/.test(to) || !MGR.length){ say('テスト送信の宛先を入力してください。'); return; }
   const m = MGR[0];
   if(!confirm(`${m.name} さんあての内容を、テストとして ${to} に1通だけ送ります。よろしいですか？`)) return;
+  mgrBusy(true); mgrSay('テスト送信しています…', 'run');
   const r = await mgrMail(m, to, `[テスト｜本来の宛先：${m.name}] ` + MGR_SUBJECT, false);
-  r.ok ? say(`${esc(to)} にテスト送信しました。届いたメールの見え方をご確認ください。`, true) : say('テスト送信に失敗しました：' + esc(r.err));
+  mgrBusy(false);
+  r.ok ? mgrSay(`✓ ${esc(to)} にテスト送信しました。届いたメールの見え方をご確認ください。`, 'ok') : mgrSay('× テスト送信に失敗しました：' + esc(r.err), 'err');
 }
 async function mgrSendOne(id){
   const m = MGR.find(x => x.staff_id === id); if(!m) return;
   if(!confirm(`${m.name} さん（${m.email}）に送ります。よろしいですか？`)) return;
+  mgrBusy(true); mgrSay(`${esc(m.name)} さんへ送信しています…`, 'run');
   const r = await mgrMail(m, m.email, MGR_SUBJECT, true);
-  r.ok ? say(`${esc(m.name)} さんへ送りました。`, true) : say(`${esc(m.name)} さんへの送信に失敗しました：${esc(r.err)}`);
-  await mgrLoad();
+  await mgrLoad(); mgrBusy(false);
+  r.ok ? mgrSay(`✓ ${esc(m.name)} さんへ送りました。`, 'ok') : mgrSay(`× ${esc(m.name)} さんへの送信に失敗しました：${esc(r.err)}`, 'err');
 }
 async function mgrSendAll(){
   const list = MGR.filter(m => !m.last_sent);
-  if(!list.length){ say('全員に送信済みです。個別に送り直すときは、各行の「再送」を押してください。', true); return; }
+  if(!list.length){ mgrSay('全員に送信済みです。個別に送り直すときは、各行の「再送」を押してください。', 'ok'); return; }
   if(!confirm(`まだ送っていない ${list.length} 人に送ります。\n\n${list.map(m => m.name).join('、')}\n\nよろしいですか？`)) return;
   let okN = 0; const ng = [];
-  for(const m of list){
+  mgrBusy(true);
+  for(const [i, m] of list.entries()){
+    mgrSay(`送信しています… ${i + 1}／${list.length}人（${esc(m.name)} さん）<br>この画面を閉じずにお待ちください。`, 'run');
     const r = await mgrMail(m, m.email, MGR_SUBJECT, true);
     r.ok ? okN++ : ng.push(`${m.name}（${r.err}）`);
     await new Promise(res => setTimeout(res, 600));
   }
-  ng.length ? say(`${okN}人に送りました。送れなかった人：${esc(ng.join('、'))}`) : say(`${okN}人に送りました。`, true);
-  await mgrLoad();
+  await mgrLoad(); mgrBusy(false);
+  ng.length ? mgrSay(`${okN}人に送りました。× 送れなかった人：${esc(ng.join('、'))}`, 'err') : mgrSay(`✓ ${okN}人全員に送りました。表の「送信」の欄に時刻が入っています。`, 'ok');
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
