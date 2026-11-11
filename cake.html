@@ -117,15 +117,21 @@
       <p>以上のことをご理解いただき、皆様が気持ちよく素敵な年末をお過ごしできますよう、ご協力ください。</p>
     </div>
     <span class="dl" id="dl"></span>
-    <div class="contact">お問い合わせ・申込内容の変更：<b>岩﨑・梨本</b>　<a href="tel:0426690960">042-669-0960</a></div>
+    <div class="contact">お問い合わせ・申込内容の変更：<b>岩﨑・梨本・曾木・小林</b>　<a href="tel:0426690960">042-669-0960</a></div>
   </div>
 
   <div id="closedBox" class="card closed hide"></div>
 
   <form id="frm" autocomplete="on" novalidate>
+    <div class="card hide" id="nowBox" style="border-color:#e8c46a;background:#fffaf0;">
+      <h2 style="color:#8a5a00;">お申し込みは受け付け済みです</h2>
+      いまの内容：<b id="nowWhat"></b>
+      <div class="hint">内容を変えたいときは、このページで入れ直して送信してください。<b>前の内容は上書きされます。</b>変更がなければ、このページは閉じてかまいません。</div>
+    </div>
+
     <div class="card hide" id="nameBox">
       <div class="who"><span id="whoName"></span> 様</div>
-      <div class="hint" style="margin-top:2px;">あなた専用の申込ページです。お名前が違うときは、送信せずに担当（岩﨑・梨本　042-669-0960）へご連絡ください。</div>
+      <div class="hint" style="margin-top:2px;">あなた専用の申込ページです。お名前が違うときは、送信せずに担当（岩﨑・梨本・曾木・小林　042-669-0960）へご連絡ください。</div>
     </div>
 
     <div class="card" id="idBox">
@@ -169,8 +175,8 @@
       </div>
       <div class="hint" style="margin-top:8px;font-weight:700;color:var(--ink);">チキン・ローストビーフ・焼き菓子は配送時期を選べません。</div>
       <label class="f" for="foodN" style="margin-top:16px;">何人で召し上がる予定ですか<span class="req">必須</span></label>
-      <div class="bd"><select id="foodN" aria-label="召し上がる人数"></select><span>人</span></div>
-      <div class="hint">人数に合わせて、できるだけ量を調整します。ただし量には上限があるため、ご希望に添えない場合もあります。</div>
+      <div class="bd"><select id="foodN" aria-label="召し上がる人数"></select></div>
+      <div class="hint">人数に合わせて量を調整します。<b>量は4人分程度までです。</b>5人以上のご家庭も、4人分程度のお届けとなります。</div>
     </div>
 
     <div class="card hide" id="addrBox">
@@ -202,7 +208,7 @@
 
     <div id="err" class="err hide"></div>
     <button type="submit" class="send" id="sendBtn">内容を確認する</button>
-    <div class="foot">ご記入いただいた住所等は、本件の配送手配のみに使用します。<br>お問い合わせ：岩﨑・梨本　<a href="tel:0426690960">042-669-0960</a></div>
+    <div class="foot">ご記入いただいた住所等は、本件の配送手配のみに使用します。<br>お問い合わせ：岩﨑・梨本・曾木・小林　<a href="tel:0426690960">042-669-0960</a></div>
   </form>
 
   <div id="doneBox" class="card done hide">
@@ -296,7 +302,7 @@ const digits = s => z2h(s).replace(/[^0-9]/g, '');
     paint();
   }));
 })();
-$('foodN').innerHTML = '<option value="">選ぶ</option>' + Array.from({length: 10}, (_, i) => `<option value="${i+1}">${i+1}</option>`).join('') + '<option value="11">11人以上</option>';
+$('foodN').innerHTML = '<option value="">選ぶ</option>' + Array.from({length: 4}, (_, i) => `<option value="${i+1}">${i+1}人</option>`).join('') + '<option value="5">5人以上</option>';
 function birth(){
   const y = $('by').value, m = $('bm').value, d = $('bdd').value;
   if(!y || !m || !d) return null;
@@ -361,7 +367,7 @@ $('frm').addEventListener('submit', e => {
   const label = {cake:'ケーキを希望', food:'ケーキ以外の食品を希望', none:'今回は不要'}[v.p_choice];
   let h = LINK ? `<dt>お名前</dt><dd>${esc(LINK.name)} 様</dd>` : `<dt>姓・生年月日</dt><dd>${esc(v.p_surname)}　${esc(v.p_birth.replace(/-/g,'/'))}</dd>`;
   h += `<dt>お届けの希望</dt><dd>${label}</dd>`;
-  if(v.p_choice === 'food') h += `<dt>食品の種類</dt><dd>${{chicken:'チキン', beef:'ローストビーフ', sweets:'焼き菓子'}[v.p_food_item]}（${v.p_eat_count >= 11 ? '11人以上' : v.p_eat_count + '人'}）</dd>`;
+  if(v.p_choice === 'food') h += `<dt>食品の種類</dt><dd>${{chicken:'チキン', beef:'ローストビーフ', sweets:'焼き菓子'}[v.p_food_item]}（${v.p_eat_count >= 5 ? '5人以上' : v.p_eat_count + '人'}）</dd>`;
   if(v.p_choice === 'cake') h += `<dt>大きさ</dt><dd>${v.p_large ? 'できるだけ大きいケーキを希望' : '標準の大きさでよい'}${v.p_eat_count ? `（${v.p_eat_count}人）` : ''}</dd>`;
   if(v.p_choice !== 'none'){
     const where = v.p_addr_mode === 'home' ? `会社に登録している自宅${LINK && LINK.home_hint ? '<br>' + esc(LINK.home_hint) : ''}` : `〒${esc(v.p_postal.slice(0,3)+'-'+v.p_postal.slice(3))}<br>${esc(v.p_address)}`;
@@ -383,7 +389,7 @@ $('okBtn').onclick = async () => {
       return;
     }
     $('frm').classList.add('hide');
-    $('doneMsg').textContent = `${r.name} 様のお申し込みを受け付けました。` + (r.choice === 'none' ? '' : 'お届けは12月中旬以降です。');
+    $('doneMsg').textContent = `${r.name} 様のお申し込み${r.replaced ? '内容を変更しました（前の内容は上書きされました）。' : 'を受け付けました。'}` + (r.choice === 'none' ? '' : 'お届けは12月中旬以降です。');
     $('doneBox').classList.remove('hide');
     if(FB_OK){ $('doneClose').textContent = '続けて、下の評価にご協力ください。'; showFb(); }
     window.scrollTo(0, 0);
@@ -427,10 +433,13 @@ $('fbBtn').onclick = async () => {
         FB_OK = !!LINK.feedback;
         if(FB_OK) $('fbNote').classList.remove('hide');
         if(LINK.applied){
-          $('frm').classList.add('hide');
-          $('closedBox').textContent = `${LINK.name} 様のお申し込みは、すでに受け付けています。内容を変更したい場合は担当（岩﨑・梨本　042-669-0960）へご連絡ください。`;
-          $('closedBox').classList.remove('hide');
-          if(FB_OK) showFb();
+          const c = LINK.current || {};
+          const F = {chicken:'チキン', beef:'ローストビーフ', sweets:'焼き菓子'};
+          const what = c.choice === 'cake' ? `ケーキ（${c.large_size ? 'できるだけ大きいもの' : '標準'}）`
+                     : c.choice === 'food' ? (c.food_item ? `${F[c.food_item]}（${c.eat_count >= 5 ? '5人以上' : c.eat_count + '人'}）` : '食品（品物はまだ選ばれていません）')
+                     : '今回は不要';
+          $('nowWhat').textContent = what;
+          $('nowBox').classList.remove('hide');
         }
       }else{
         showErr('リンクが正しくありません。お手数ですが、メールのボタンから開き直すか、下で姓と生年月日を入力してください。');
@@ -441,7 +450,7 @@ $('fbBtn').onclick = async () => {
     $('ttl').textContent = info.title;
     document.title = info.title;
     if(info.deadline){ const p = info.deadline.split('-'); $('dl').textContent = `回答期限：${Number(p[1])}月${Number(p[2])}日`; }
-    if(!info.open){ if(FB_OK) showFb(); $('frm').classList.add('hide'); $('closedBox').textContent = '受付は終了しました。ご不明な点は担当（岩﨑・梨本　042-669-0960）へお問い合わせください。'; $('closedBox').classList.remove('hide'); }
+    if(!info.open){ if(FB_OK) showFb(); $('frm').classList.add('hide'); $('closedBox').textContent = '受付は終了しました。ご不明な点は担当（岩﨑・梨本・曾木・小林　042-669-0960）へお問い合わせください。'; $('closedBox').classList.remove('hide'); }
   }catch(e){ showErr(e.message); }
 })();
 </script>

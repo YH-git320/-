@@ -87,6 +87,7 @@ table.list tr:hover td{background:#f7faf8;}
       <input type="text" id="tAddr" value="yaegashi@kk-tus.co.jp" style="width:260px;">
       <button type="button" onclick="mgrTest()">1通だけテスト送信</button>
       <button type="button" class="primary" onclick="mgrSendAll()">まだ送っていない人に送信</button>
+      <button type="button" class="primary" onclick="mgr2SendAll()">全員に「再度のお願い」を送信</button>
     </div>
     <div id="mgrMsg" style="display:none;margin-top:10px;padding:10px 12px;border-radius:8px;font-size:14px;font-weight:700;line-height:1.7;"></div>
     <div style="margin-top:12px;"><b style="color:var(--g2);font-size:14px;">管理者からの評価</b><div id="mgrFb" style="font-size:13px;line-height:1.7;margin-top:4px;"></div></div>
@@ -940,7 +941,7 @@ function render(){
         <td class="nw">${esc(s.employee_code || '')}</td><td class="nw">${esc(s.name || '')}</td><td>${esc(s.department || '')}</td>
         <td class="nw"><span class="tag t-${r.choice}">${CH[r.choice]}</span></td>
         <td class="nw">${r.choice === 'cake' && r.large_size ? '<span class="tag t-big">大きめ希望</span>' : esc(sizeOf(r))}</td>
-        <td class="nw">${r.eat_count || ''}</td><td class="nw">${esc(asrc(r))}</td><td class="nw">${esc(zip(r.postal_code))}</td><td>${esc(r.address || '')}</td>
+        <td class="nw">${(r.choice === 'food' && r.eat_count >= 5) ? '5人以上' : (r.eat_count || '')}</td><td class="nw">${esc(asrc(r))}</td><td class="nw">${esc(zip(r.postal_code))}</td><td>${esc(r.address || '')}</td>
         <td class="nw">${esc(r.recipient || '')}</td><td class="nw">${esc(r.phone || '')}</td><td>${esc(pref(r))}</td><td class="nw">${fmtDT(r.submitted_at)}</td>
         <td class="nw"><button type="button" class="mini danger" onclick="undo(${r.id})">取消</button></td></tr>`; }).join('') + '</tbody></table>';
   }
@@ -979,7 +980,7 @@ function exportCsv(){
   }else{
     head = ['社員番号','氏名','所属','希望','大きさ・品物','人数','届け先','郵便番号','住所','宛名','電話番号','受け取りやすい日（目安）','回答日時'];
     body = list.map(r => { const s = staffOf(r.staff_id); return [s.employee_code, s.name, s.department, CH[r.choice],
-      sizeOf(r), r.eat_count >= 11 ? '11人以上' : (r.eat_count || ''), asrc(r), zip(r.postal_code), r.address, r.recipient, r.phone, pref(r), fmtDT(r.submitted_at)]; });
+      sizeOf(r), (r.choice === 'food' && r.eat_count >= 5) ? '5人以上' : (r.eat_count || ''), asrc(r), zip(r.postal_code), r.address, r.recipient, r.phone, pref(r), fmtDT(r.submitted_at)]; });
   }
   const csv = '﻿' + [head].concat(body).map(a => a.map(q).join(',')).join('\r\n');
   const name = { all:'回答一覧', cake:'ケーキ発送リスト', food:'食品発送リスト', none:'不要', todo:'未回答者' }[TAB];
@@ -1083,6 +1084,59 @@ async function mgrSendAll(){
   }
   await mgrLoad(); mgrBusy(false);
   ng.length ? mgrSay(`${okN}人に送りました。× 送れなかった人：${esc(ng.join('、'))}`, 'err') : mgrSay(`✓ ${okN}人全員に送りました。表の「送信」の欄に時刻が入っています。`, 'ok');
+}
+
+/* ---------- 再度のお願い（新しい形での入れ直し） ---------- */
+function dlLabel(){
+  const v = document.getElementById('deadline').value;
+  if(!v) return '';
+  const d = new Date(v + 'T00:00:00'), W = ['日','月','火','水','木','金','土'];
+  return `${d.getMonth()+1}月${d.getDate()}日（${W[d.getDay()]}）`;
+}
+function mgr2Subject(){ return `【再度のお願い】クリスマスケーキ申込ページを新しくしました（${dlLabel() || '期限'}まで）`; }
+function mgr2Html(name, tok, answered){
+  const link = pubUrl() + (tok ? '?t=' + encodeURIComponent(tok) : '');
+  return `<div style="font-family:'Hiragino Kaku Gothic ProN','Yu Gothic','Meiryo',sans-serif;font-size:15px;line-height:1.8;color:#2d3b35;max-width:560px;">
+<p>${esc(name)} 様</p>
+<p>お疲れさまです。八重樫です。</p>
+<p>先日お願いしたクリスマスケーキの申込ページを、皆さんのご意見をもとに新しくしました。お手数ですが、<b>新しいページでもう一度お申し込みください。</b>${answered ? 'すでにお申し込みいただいた方も、新しい内容で入れ直していただくと、前の内容は上書きされます。' : ''}</p>
+<p><b>変わったところ</b></p>
+<ul style="margin:0 0 12px;padding-left:20px;">
+<li>お届け先は「会社に登録している自宅」か「別の住所」かを選ぶだけになりました（自宅なら住所の入力は不要です）</li>
+<li>ケーキ以外は<b>チキン・ローストビーフ・焼き菓子</b>から選べます（召し上がる人数もお聞きします。量は4人分程度までです）</li>
+<li>ケーキは<b>受け取りやすい日</b>をお聞きします（お店の都合があるため確定はできません）</li>
+<li>期限までは、ご自身で何度でも入れ直せます</li>
+</ul>
+${dlLabel() ? `<p style="background:#fbeaea;border-radius:8px;padding:8px 12px;"><b>回答期限：${dlLabel()}</b></p>` : ''}
+<p style="margin:20px 0;"><a href="${link}" style="display:inline-block;background:#4d7a5e;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 26px;border-radius:10px;">申込ページを開く</a></p>
+<p>このボタンは<b>${esc(name)} 様専用</b>です。ほかの方へは転送しないでください。新しいページの使い勝手についても、評価の欄でご意見をいただけると助かります。</p>
+<p>このメールに返信しても届きません。お問い合わせは、岩﨑・梨本・曾木・小林（042-669-0960）までお願いします。</p>
+<p style="font-size:12px;color:#888;">※ボタンが開かないときは、次のアドレスを<b>全部</b>コピーして、ブラウザに貼ってください。<br><span style="word-break:break-all;">${esc(link)}</span></p>
+<p>八重樫</p>
+</div>`;
+}
+async function mgr2SendAll(){
+  if(!MGR.length) return;
+  if(!dlLabel()){ mgrSay('先に、上の「回答期限」を設定して保存してください。', 'err'); return; }
+  if(!confirm(`管理者 ${MGR.length} 人全員に「再度のお願い」を送ります。\n件名：${mgr2Subject()}\n\n回答期限は ${dlLabel()} と書かれます。よろしいですか？`)) return;
+  let okN = 0; const ng = [];
+  mgrBusy(true);
+  for(const [i, m] of MGR.entries()){
+    mgrSay(`送信しています… ${i + 1}／${MGR.length}人（${esc(m.name)} さん）<br>この画面を閉じずにお待ちください。`, 'run');
+    let ok = false, err = null;
+    try{
+      await ensureFreshToken();
+      const res = await fetch(`${FUNCTIONS_URL}/send-email`, { method:'POST', headers:getH(),
+        body: JSON.stringify({ to: m.email, subject: mgr2Subject(), html: mgr2Html(m.name, m.token, m.answered) }) });
+      const r = await res.json().catch(() => ({}));
+      ok = res.ok && r.ok; if(!ok) err = r.error || ('HTTP ' + res.status);
+    }catch(e){ err = e.message; }
+    try{ await rpc('gift_admin_log_mail', { p_campaign: CAMPAIGN, p_grp: 'managers2', p_staff: m.staff_id, p_email: m.email, p_ok: ok, p_error: err }); }catch(e){}
+    ok ? okN++ : ng.push(`${m.name}（${err}）`);
+    await new Promise(res => setTimeout(res, 600));
+  }
+  await mgrLoad(); mgrBusy(false);
+  ng.length ? mgrSay(`${okN}人に送りました。× 送れなかった人：${esc(ng.join('、'))}`, 'err') : mgrSay(`✓ ${okN}人全員に「再度のお願い」を送りました。`, 'ok');
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
