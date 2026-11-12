@@ -85,7 +85,8 @@ table.list tr:hover td{background:#f7faf8;}
     <div class="row" style="margin-top:10px;">
       <span class="muted">テスト送信の宛先</span>
       <input type="text" id="tAddr" value="yaegashi@kk-tus.co.jp" style="width:260px;">
-      <button type="button" onclick="mgrTest()">1通だけテスト送信</button>
+      <button type="button" onclick="mgrTest()">最初のお願いをテスト送信</button>
+      <button type="button" onclick="mgr2Test()">「再度のお願い」をテスト送信</button>
       <button type="button" class="primary" onclick="mgrSendAll()">まだ送っていない人に送信</button>
       <button type="button" class="primary" onclick="mgr2SendAll()">全員に「再度のお願い」を送信</button>
     </div>
@@ -1115,6 +1116,24 @@ ${dlLabel() ? `<p style="background:#fbeaea;border-radius:8px;padding:8px 12px;"
 <p style="font-size:12px;color:#888;">※ボタンが開かないときは、次のアドレスを<b>全部</b>コピーして、ブラウザに貼ってください。<br><span style="word-break:break-all;">${esc(link)}</span></p>
 <p>八重樫</p>
 </div>`;
+}
+async function mgr2Test(){
+  const to = document.getElementById('tAddr').value.trim();
+  if(!/^[^@\s]+@[^@\s]+$/.test(to) || !MGR.length){ mgrSay('テスト送信の宛先を入力してください。', 'err'); return; }
+  if(!dlLabel()){ mgrSay('先に、上の「回答期限」を設定して保存してください。', 'err'); return; }
+  const m = MGR[0];
+  if(!confirm(`「再度のお願い」の文面（${m.name} さんあての内容）を、テストとして ${to} に1通だけ送ります。よろしいですか？`)) return;
+  mgrBusy(true); mgrSay('テスト送信しています…', 'run');
+  let ok = false, err = null;
+  try{
+    await ensureFreshToken();
+    const res = await fetch(`${FUNCTIONS_URL}/send-email`, { method:'POST', headers:getH(),
+      body: JSON.stringify({ to, subject: `[テスト｜本来の宛先：${m.name}] ` + mgr2Subject(), html: mgr2Html(m.name, m.token, m.answered) }) });
+    const r = await res.json().catch(() => ({}));
+    ok = res.ok && r.ok; if(!ok) err = r.error || ('HTTP ' + res.status);
+  }catch(e){ err = e.message; }
+  mgrBusy(false);
+  ok ? mgrSay(`✓ 「再度のお願い」を ${esc(to)} にテスト送信しました。届いたメールの文面をご確認ください。`, 'ok') : mgrSay('× テスト送信に失敗しました：' + esc(err), 'err');
 }
 async function mgr2SendAll(){
   if(!MGR.length) return;
