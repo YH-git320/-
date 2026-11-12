@@ -412,7 +412,7 @@ $('okBtn').onclick = async () => {
       return;
     }
     $('frm').classList.add('hide');
-    $('doneMsg').textContent = `${r.name} 様のお申し込み${r.replaced ? '内容を変更しました（前の内容は上書きされました）。' : 'を受け付けました。'}` + (r.choice === 'none' ? '' : 'お届けは12月中旬以降です。');
+    $('doneMsg').textContent = `${r.name} 様のお申し込み${r.replaced ? '内容を変更しました（前の内容は上書きされました）。' : 'を受け付けました。'}` + (r.choice === 'none' ? '' : 'お届けは12月中旬以降です。') + (r.mail === 'sent' ? '受付内容の確認メールを、会社に登録しているメールアドレスへお送りしました。' : '');
     $('doneBox').classList.remove('hide');
     if(FB_OK){ $('doneClose').textContent = '続けて、下の評価にご協力ください。'; showFb(); }
     window.scrollTo(0, 0);
