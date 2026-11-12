@@ -87,6 +87,15 @@
   .dates input{display:none;}
   .dates label.any{grid-column:1 / -1;padding:10px 0;font-size:16px;}
   .dates label.on{border-color:var(--brand-dark);background:var(--brand-tint);}
+  .gal{background:#fff;border:1px solid var(--line);border-radius:14px;margin-top:14px;overflow:hidden;}
+  .galnote{background:#8f2222;color:#fff;text-align:center;font-size:20px;font-weight:800;padding:10px 12px;line-height:1.4;}
+  .galnote b{font-size:24px;}
+  .galnote small{display:block;font-size:13px;font-weight:500;opacity:.95;}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px;}
+  .grid figure{margin:0;position:relative;}
+  .grid img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:10px;}
+  .grid figure::after{content:"イメージ";position:absolute;top:6px;left:6px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;font-weight:700;padding:1px 6px;border-radius:6px;}
+  .grid figcaption{text-align:center;font-size:13px;font-weight:700;margin-top:4px;}
   .closed{text-align:center;padding:30px 16px;color:var(--ink-soft);}
   .foot{text-align:center;font-size:12px;color:var(--ink-soft);margin-top:18px;}
 </style>
@@ -100,13 +109,23 @@
 <div class="wrap" id="app">
   <div id="fbNote" class="fbnote hide"><b>管理者の方へ：</b>お申し込みのあとに、このページと企画についての評価をお願いします。申込を送ると、評価の欄が出てきます。</div>
 
-  <img src="cake-image.jpg" alt="クリスマスケーキのイメージ写真" class="hero">
+  <div class="gal">
+    <div class="galnote">写真はすべて<b>イメージ</b>です<small>実際にお届けする商品とは、形・飾り・量が異なります</small></div>
+    <div class="grid">
+      <figure><img src="t-cake-fresh.jpg" alt="生クリームのケーキ（イメージ）"><figcaption>生クリーム</figcaption></figure>
+      <figure><img src="t-cake-choco.jpg" alt="チョコレートのケーキ（イメージ）"><figcaption>チョコレート</figcaption></figure>
+      <figure><img src="t-cake-cheese.jpg" alt="チーズケーキ（イメージ）"><figcaption>チーズ</figcaption></figure>
+      <figure><img src="t-food-chicken.jpg" alt="チキン（イメージ）"><figcaption>チキン</figcaption></figure>
+      <figure><img src="t-food-beef.jpg" alt="ローストビーフ（イメージ）"><figcaption>ローストビーフ</figcaption></figure>
+      <figure><img src="t-food-sweets.jpg" alt="焼き菓子（イメージ）"><figcaption>焼き菓子</figcaption></figure>
+    </div>
+  </div>
   <div class="card notice">
     <h2>はじめにお読みください</h2>
     今年は、ご希望の方のご自宅へ<b>冷凍便でお届け</b>します。
     <ul>
-      <li>直径12cm（4号）以上のケーキです。<b>種類・メーカーは人によって異なり、選ぶことはできません。</b></li>
-      <li>写真はイメージです。<b>冷凍のため、生イチゴが付かない商品もあります。</b></li>
+      <li>直径12cm（4号）以上のケーキです。<b>生クリーム・チョコレート・チーズの3種類から選べます。</b>メーカーは人によって異なり、選ぶことはできません。</li>
+      <li>上の写真はすべてイメージです。<b>冷凍のため、生イチゴが付かない商品もあります。</b></li>
       <li>ご家族が多いなど、<b>できるだけ大きいケーキをご希望の方は下でお選びください</b>（ご希望に添えない場合もあります）。</li>
       <li>ケーキが苦手な方は、代わりに<b>チキン・ローストビーフ・焼き菓子</b>から選べます。</li>
       <li>お届けは<b>12月中旬以降</b>です。ケーキは受け取りやすい日を伺いますが、お店の都合があるため<b>確定はできません</b>（食品は日にちのご希望を伺いません）。冷凍庫の空きをご用意ください。</li>
@@ -157,7 +176,13 @@
     </div>
 
     <div class="card hide" id="cakeBox">
-      <h2>ケーキの大きさ</h2>
+      <h2>ケーキの種類<span class="req">必須</span></h2>
+      <div class="opts">
+        <label class="opt"><input type="radio" name="ctype" value="fresh"><span><span class="t">生クリーム</span></span></label>
+        <label class="opt"><input type="radio" name="ctype" value="choco"><span><span class="t">チョコレート</span></span></label>
+        <label class="opt"><input type="radio" name="ctype" value="cheese"><span><span class="t">チーズ</span></span></label>
+      </div>
+      <h2 style="margin-top:18px;">ケーキの大きさ</h2>
       <div class="opts" id="sizeOpts">
         <label class="opt"><input type="radio" name="size" value="std"><span><span class="t">標準の大きさでよい</span></span></label>
         <label class="opt"><input type="radio" name="size" value="large"><span><span class="t">できるだけ大きいケーキを希望</span><span class="d">ご家族が多い場合など</span></span></label>
@@ -327,6 +352,7 @@ function collect(){
   const ch = radio('choice');
   const v = {
     p_campaign: CAMPAIGN, p_token: LINK ? TOKEN : null, p_surname: LINK ? null : $('sei').value.trim(), p_birth: LINK ? null : birth(), p_choice: ch,
+    p_cake_type: ch === 'cake' ? radio('ctype') : null,
     p_large: ch === 'cake' ? (radio('size') === 'large' ? true : radio('size') === 'std' ? false : null) : null,
     p_eat_count: ch === 'cake' ? ($('eat').value ? Number(digits($('eat').value)) || null : null) : ch === 'food' ? (Number($('foodN').value) || null) : null,
     p_food_item: ch === 'food' ? radio('food') : null,
@@ -341,6 +367,7 @@ function collect(){
     if(!v.p_birth) return [null, '生年月日を選んでください。'];
   }
   if(!ch) return [null, 'お届けの希望を選んでください。'];
+  if(ch === 'cake' && !v.p_cake_type) return [null, 'ケーキの種類を選んでください。'];
   if(ch === 'cake' && v.p_large === null) return [null, 'ケーキの大きさを選んでください。'];
   if(ch === 'food' && !v.p_food_item) return [null, '食品の種類を選んでください。'];
   if(ch === 'food' && !v.p_eat_count) return [null, '召し上がる人数を選んでください。'];
@@ -368,6 +395,7 @@ $('frm').addEventListener('submit', e => {
   let h = LINK ? `<dt>お名前</dt><dd>${esc(LINK.name)} 様</dd>` : `<dt>姓・生年月日</dt><dd>${esc(v.p_surname)}　${esc(v.p_birth.replace(/-/g,'/'))}</dd>`;
   h += `<dt>お届けの希望</dt><dd>${label}</dd>`;
   if(v.p_choice === 'food') h += `<dt>食品の種類</dt><dd>${{chicken:'チキン', beef:'ローストビーフ', sweets:'焼き菓子'}[v.p_food_item]}（${v.p_eat_count >= 5 ? '5人以上' : v.p_eat_count + '人'}）</dd>`;
+  if(v.p_choice === 'cake') h += `<dt>ケーキの種類</dt><dd>${{fresh:'生クリーム', choco:'チョコレート', cheese:'チーズ'}[v.p_cake_type]}</dd>`;
   if(v.p_choice === 'cake') h += `<dt>大きさ</dt><dd>${v.p_large ? 'できるだけ大きいケーキを希望' : '標準の大きさでよい'}${v.p_eat_count ? `（${v.p_eat_count}人）` : ''}</dd>`;
   if(v.p_choice !== 'none'){
     const where = v.p_addr_mode === 'home' ? `会社に登録している自宅${LINK && LINK.home_hint ? '<br>' + esc(LINK.home_hint) : ''}` : `〒${esc(v.p_postal.slice(0,3)+'-'+v.p_postal.slice(3))}<br>${esc(v.p_address)}`;
@@ -435,7 +463,8 @@ $('fbBtn').onclick = async () => {
         if(LINK.applied){
           const c = LINK.current || {};
           const F = {chicken:'チキン', beef:'ローストビーフ', sweets:'焼き菓子'};
-          const what = c.choice === 'cake' ? `ケーキ（${c.large_size ? 'できるだけ大きいもの' : '標準'}）`
+          const CT = {fresh:'生クリーム', choco:'チョコレート', cheese:'チーズ'};
+          const what = c.choice === 'cake' ? `ケーキ${c.cake_type ? '・' + CT[c.cake_type] : '（種類はまだ選ばれていません）'}（${c.large_size ? 'できるだけ大きいもの' : '標準'}）`
                      : c.choice === 'food' ? (c.food_item ? `${F[c.food_item]}（${c.eat_count >= 5 ? '5人以上' : c.eat_count + '人'}）` : '食品（品物はまだ選ばれていません）')
                      : '今回は不要';
           $('nowWhat').textContent = what;

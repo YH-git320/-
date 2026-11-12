@@ -889,7 +889,8 @@ function fmtDT(iso){
 }
 const CH = { cake:'ケーキ', food:'食品', none:'不要' };
 const FOOD = { chicken:'チキン', beef:'ローストビーフ', sweets:'焼き菓子' };
-const sizeOf = r => r.choice === 'cake' ? (r.large_size ? '大きめ希望' : '標準') : r.choice === 'food' ? (FOOD[r.food_item] || '（未選択）') : '';
+const CTYPE = { fresh:'生クリーム', choco:'チョコ', cheese:'チーズ' };
+const sizeOf = r => r.choice === 'cake' ? ((CTYPE[r.cake_type] || '種類未選択') + '・' + (r.large_size ? '大きめ希望' : '標準')) : r.choice === 'food' ? (FOOD[r.food_item] || '（未選択）') : '';
 const zip = z => z ? String(z).slice(0,3)+'-'+String(z).slice(3) : '';
 const pdates = a => (a && a.length) ? a.map(d => Number(String(d).slice(5,7)) + '/' + Number(String(d).slice(8,10))).join('、') : '';
 const pref = r => r.pref_any ? 'いつでもよい' : pdates(r.pref_dates);
@@ -926,7 +927,7 @@ function render(){
   const todo = STAFF.filter(s => !doneIds.has(s.id)).length;
   document.getElementById('kpi').innerHTML = [
     ['回答済み', `${REQ.length}<small>/ ${STAFF.length}人</small>`],
-    ['ケーキ', `${cake.length}<small>うち大きめ希望 ${big}</small>`],
+    ['ケーキ', `${cake.length}<small>生 ${cake.filter(r => r.cake_type === 'fresh').length}・チョコ ${cake.filter(r => r.cake_type === 'choco').length}・チーズ ${cake.filter(r => r.cake_type === 'cheese').length}／大きめ ${big}</small>`],
     ['食品', `${food}<small>チキン ${REQ.filter(r => r.food_item === 'chicken').length}・ビーフ ${REQ.filter(r => r.food_item === 'beef').length}・焼き菓子 ${REQ.filter(r => r.food_item === 'sweets').length}</small>`], ['不要', `${none}`], ['未回答', `${todo}`]
   ].map(([l,v]) => `<div class="box"><div class="lb">${l}</div><div class="vl">${v}</div></div>`).join('');
 
@@ -941,7 +942,7 @@ function render(){
       list.map(r => { const s = staffOf(r.staff_id); return `<tr>
         <td class="nw">${esc(s.employee_code || '')}</td><td class="nw">${esc(s.name || '')}</td><td>${esc(s.department || '')}</td>
         <td class="nw"><span class="tag t-${r.choice}">${CH[r.choice]}</span></td>
-        <td class="nw">${r.choice === 'cake' && r.large_size ? '<span class="tag t-big">大きめ希望</span>' : esc(sizeOf(r))}</td>
+        <td class="nw">${esc(sizeOf(r))}</td>
         <td class="nw">${(r.choice === 'food' && r.eat_count >= 5) ? '5人以上' : (r.eat_count || '')}</td><td class="nw">${esc(asrc(r))}</td><td class="nw">${esc(zip(r.postal_code))}</td><td>${esc(r.address || '')}</td>
         <td class="nw">${esc(r.recipient || '')}</td><td class="nw">${esc(r.phone || '')}</td><td>${esc(pref(r))}</td><td class="nw">${fmtDT(r.submitted_at)}</td>
         <td class="nw"><button type="button" class="mini danger" onclick="undo(${r.id})">取消</button></td></tr>`; }).join('') + '</tbody></table>';
