@@ -13,7 +13,7 @@ body{margin:0;font-family:'Noto Sans JP','Hiragino Kaku Gothic Pro','Meiryo',san
 header{background:#fff;border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
 header .brand{font-size:16px;font-weight:700;color:var(--g2);}
 header nav a{color:var(--g);text-decoration:none;font-size:13px;margin-right:12px;}
-main{max-width:1280px;margin:0 auto;padding:16px;}
+main{max-width:1680px;margin:0 auto;padding:16px;}
 h1{font-size:19px;color:var(--g2);margin:0 0 4px;}
 .sub{font-size:13px;color:#6b7d72;margin:0 0 16px;line-height:1.6;}
 .panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px;}
@@ -44,6 +44,8 @@ table.list{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;}
 table.list th{background:#eef4ef;border-bottom:1px solid #d7e2da;padding:7px 8px;font-size:12px;color:#2d4a38;text-align:left;white-space:nowrap;position:sticky;top:0;}
 table.list td{border-bottom:1px solid #e2ede6;padding:7px 8px;vertical-align:top;}
 table.list td.nw{white-space:nowrap;}
+table.list td.addr{min-width:240px;}
+table.list td.pref{min-width:90px;}
 table.list tr:hover td{background:#f7faf8;}
 .empty{padding:24px;text-align:center;color:#7d9186;}
 </style>
@@ -77,6 +79,22 @@ table.list tr:hover td{background:#f7faf8;}
     </div>
   </div>
 
+
+  <div class="panel" id="allPanel">
+    <div class="row" style="justify-content:space-between;">
+      <b style="color:var(--g2);">従業員への案内メール（本番）</b>
+      <span class="muted">送信元：高尾輸送サービス（nippo@takao599.com）。届かなかった方に、本人専用のリンクを送り直せます。</span>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <input type="text" id="allQ" placeholder="名前・フリガナ・社員番号・アドレスで検索" style="width:320px;" autocomplete="off">
+      <label class="muted" style="display:flex;align-items:center;gap:4px;"><input type="checkbox" id="allOnlyNg">送れていない人だけ</label>
+      <label class="muted" style="display:flex;align-items:center;gap:4px;"><input type="checkbox" id="allOnlyTodo">未申込の人だけ</label>
+      <span class="muted" id="allCount"></span>
+    </div>
+    <div class="twrap" style="margin-top:10px;max-height:420px;overflow:auto;"><div id="allTbl"><div class="empty">読み込み中…</div></div></div>
+    <div id="allMsg" style="display:none;margin-top:10px;padding:10px 12px;border-radius:8px;font-size:14px;font-weight:700;line-height:1.7;"></div>
+    <div class="muted" style="margin-top:6px;line-height:1.7;">「再送」を押すと、送り先を確かめる欄が出ます。別のアドレスに送りたいときは、そこで書き換えてください（登録アドレスは変わりません）。<br>知らないアドレスからのメールを受け取らない設定の方には、<b>takao599.com</b> からのメールを受け取れるよう設定してもらってから送り直してください。</div>
+  </div>
   <div class="panel" id="mgrPanel">
     <div class="row" style="justify-content:space-between;">
       <b style="color:var(--g2);">管理者へ先行送信</b>
@@ -937,15 +955,15 @@ function render(){
   let h;
   if(TAB === 'todo'){
     h = '<table class="list"><thead><tr><th>社員番号</th><th>氏名</th><th>所属</th></tr></thead><tbody>' +
-      list.map(s => `<tr><td class="nw">${esc(s.employee_code || '（未登録）')}</td><td class="nw">${esc(s.name)}</td><td>${esc(s.department || '')}</td></tr>`).join('') + '</tbody></table>';
+      list.map(s => `<tr><td class="nw">${esc(s.employee_code || '（未登録）')}</td><td class="nw">${esc(s.name)}</td><td class="nw">${esc(String(s.department || '').replace(/^\d+:/, ''))}</td></tr>`).join('') + '</tbody></table>';
   }else{
     h = '<table class="list"><thead><tr><th>社員番号</th><th>氏名</th><th>所属</th><th>希望</th><th>大きさ・品物</th><th>人数</th><th>届け先</th><th>郵便番号</th><th>住所</th><th>宛名</th><th>電話番号</th><th>受け取りやすい日</th><th>回答日時</th><th></th></tr></thead><tbody>' +
       list.map(r => { const s = staffOf(r.staff_id); return `<tr>
-        <td class="nw">${esc(s.employee_code || '')}</td><td class="nw">${esc(s.name || '')}</td><td>${esc(s.department || '')}</td>
+        <td class="nw">${esc(s.employee_code || '')}</td><td class="nw">${esc(s.name || '')}</td><td class="nw">${esc(String(s.department || '').replace(/^\d+:/, ''))}</td>
         <td class="nw"><span class="tag t-${r.choice}">${CH[r.choice]}</span></td>
         <td class="nw">${esc(sizeOf(r))}</td>
-        <td class="nw">${(r.choice === 'food' && r.eat_count >= 5) ? '5人以上' : (r.eat_count || '')}</td><td class="nw">${esc(asrc(r))}</td><td class="nw">${esc(zip(r.postal_code))}</td><td>${esc(r.address || '')}</td>
-        <td class="nw">${esc(r.recipient || '')}</td><td class="nw">${esc(r.phone || '')}</td><td>${esc(pref(r))}</td><td class="nw">${fmtDT(r.submitted_at)}${r.proxy_by ? `<br><span style="font-size:11px;color:#b7770a;">📞 ${esc(r.proxy_by)} 代理入力</span>` : ''}</td>
+        <td class="nw">${(r.choice === 'food' && r.eat_count >= 5) ? '5人以上' : (r.eat_count || '')}</td><td class="nw">${esc(asrc(r))}</td><td class="nw">${esc(zip(r.postal_code))}</td><td class="addr">${esc(r.address || '')}</td>
+        <td class="nw">${esc(r.recipient || '')}</td><td class="nw">${esc(r.phone || '')}</td><td class="pref">${esc(pref(r))}</td><td class="nw">${fmtDT(r.submitted_at)}${r.proxy_by ? `<br><span style="font-size:11px;color:#b7770a;">📞 ${esc(r.proxy_by)} 代理入力</span>` : ''}</td>
         <td class="nw"><button type="button" class="mini danger" onclick="undo(${r.id})">取消</button></td></tr>`; }).join('') + '</tbody></table>';
   }
   document.getElementById('tbl').innerHTML = list.length ? h : '<div class="empty">該当する回答はありません</div>';
@@ -1161,12 +1179,108 @@ async function mgr2SendAll(){
   ng.length ? mgrSay(`${okN}人に送りました。× 送れなかった人：${esc(ng.join('、'))}`, 'err') : mgrSay(`✓ ${okN}人全員に「再度のお願い」を送りました。`, 'ok');
 }
 
+
+/* ---------- 従業員への案内メール（本番）の検索と再送（2026-11-16） ---------- */
+const ALL_GRP = 'all';
+let ALLT = [];
+const ALL_SUBJECT = '【ご案内】クリスマスケーキのお申し込み（11月18日（水）まで）';
+function allHtml(name, tok){
+  const link = pubUrl() + (tok ? '?t=' + encodeURIComponent(tok) : '');
+  return `<div style="font-family:'Hiragino Kaku Gothic ProN','Yu Gothic','Meiryo',sans-serif;font-size:15px;line-height:1.8;color:#2d3b35;max-width:560px;">
+<p>${esc(name)} 様</p>
+<p>いつもお疲れさまです。八重樫です。</p>
+<p>日頃の感謝の気持ちを込めて、今年もクリスマスケーキをお贈りします。今年は、ご希望の方のご自宅へ<b>冷凍便でお届け</b>します。</p>
+<p>下のボタンから申込ページを開き、次のどれかをお選びください。</p>
+<ul style="padding-left:20px;margin:6px 0;">
+<li><b>クリスマスケーキ</b>（生クリーム・チョコレート・チーズ）</li>
+<li><b>ケーキ以外の食品</b>（チキン・ローストビーフ・焼き菓子）</li>
+<li><b>今回は不要</b></li>
+</ul>
+<p style="background:#fbeaea;border-radius:8px;padding:8px 12px;"><b>回答期限：11月18日（水）</b></p>
+<p style="margin:20px 0;"><a href="${link}" style="display:inline-block;background:#4d7a5e;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 26px;border-radius:10px;">申込ページを開く</a></p>
+<p>このボタンは<b>${esc(name)} 様専用</b>です。開くと、お名前が入った状態の申込ページが表示されます。ほかの方へは転送しないでください。</p>
+<p>送信すると、受付内容の確認メールが届きます。期限までは何度でも入れ直せます（最後に送った内容が優先されます）。お届けは12月中旬以降です。</p>
+<div style="background:#f6f6f6;border:1px solid #dddddd;border-radius:8px;padding:8px 14px;margin:14px 0;">
+<p style="margin:6px 0;"><b>対象となる方</b></p>
+<p style="margin:6px 0;">今回のお贈りは、次の2つをどちらも満たす方を対象としています。このご案内は、条件に当てはまる方にお送りしています。</p>
+<ul style="padding-left:20px;margin:6px 0;">
+<li>10月末時点で在籍し、実際に勤務している方（勤続6か月以上で、療養のため就業できない方も含みます）</li>
+<li>令和8年4月以降に20日以上勤務した方、または10月1日以降に入社し、入社以降20日以上の勤務が見込まれる方</li>
+</ul>
+</div>
+<div style="background:#f1f6f2;border:1px solid #dfe7e1;border-radius:8px;padding:8px 14px;margin:14px 0;">
+<p style="margin:6px 0;"><b>ご理解とご協力のお願い</b></p>
+<p style="margin:6px 0;">この企画は、日ごろご尽力いただいている皆様へ、感謝の気持ちを込めて、福利厚生の一環として行っているものです。一方で、事務手続きの負担を軽くするため、細やかな配慮が欠けてしまう点もあろうかと思います。</p>
+<p style="margin:6px 0;">また、用意できる数量やご希望の大きさなどにより、商品ごとに差が出ることをご了承ください。</p>
+<p style="margin:6px 0;">以上のことをご理解いただき、皆様が気持ちよく素敵な年末をお過ごしできますよう、ご協力ください。</p>
+</div>
+<p style="background:#fff8e8;border:1px solid #ecd3a0;border-radius:8px;padding:8px 12px;">お申し込みは、<b>ご自身のスマートフォンやパソコンから</b>お願いします。ご家族に手伝っていただいてもかまいません。<br>どうしても操作ができない方に限り、担当（岩﨑・梨本・曾木・小林　042-669-0960）へお電話ください。担当は通常の業務と並行して受け付けていますので、できるだけご自身でのお申し込みにご協力ください。</p>
+<p>このメールに返信しても届きません。</p>
+<p style="font-size:12px;color:#888;">※ボタンが開かないときは、次のアドレスを<b>全部</b>コピーして、ブラウザに貼ってください。<br><span style="word-break:break-all;">${esc(link)}</span></p>
+<p>八重樫</p>
+</div>`;
+}
+const kanaN2 = s => String(s||'').normalize('NFKC').replace(/[\s　]/g,'').replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
+async function allLoad(){
+  try{
+    const [t, logs] = await Promise.all([
+      rpc('gift_admin_targets', { p_campaign: CAMPAIGN, p_grp: ALL_GRP }),
+      Promise.resolve(null)
+    ]);
+    ALLT = (t || []).sort((a, b) => String(a.kana||'').localeCompare(String(b.kana||''), 'ja'));
+    if(!ALLT.length){ document.getElementById('allPanel').style.display = 'none'; return; }
+    allRender();
+  }catch(e){ document.getElementById('allTbl').innerHTML = `<div class="empty">読み込めませんでした：${esc(e.message)}</div>`; }
+}
+function allRender(){
+  const q = document.getElementById('allQ').value.trim(), qk = kanaN2(q), qn = q.replace(/[\s　]/g,'');
+  const onlyNg = document.getElementById('allOnlyNg').checked, onlyTodo = document.getElementById('allOnlyTodo').checked;
+  const list = ALLT.filter(m => (!q || String(m.name||'').replace(/[\s　]/g,'').includes(qn) || kanaN2(m.kana).includes(qk) || String(m.employee_code||'').includes(q) || String(m.email||'').toLowerCase().includes(q.toLowerCase()))
+    && (!onlyNg || !m.last_sent) && (!onlyTodo || !m.answered));
+  document.getElementById('allCount').textContent = `${list.length}名を表示（全${ALLT.length}名）`;
+  document.getElementById('allTbl').innerHTML = list.length ? '<table class="list"><thead><tr><th>社員番号</th><th>氏名</th><th>所属</th><th>宛先</th><th>申込</th><th>送信</th><th></th></tr></thead><tbody>' +
+    list.map(m => `<tr><td class="nw">${esc(m.employee_code||'')}</td><td class="nw">${esc(m.name)}</td><td class="nw">${esc(m.dept||'')}</td><td class="nw">${esc(m.email)}</td>
+      <td class="nw">${m.answered ? '<span class="tag t-big">回答済み</span>' : '<span class="muted">未回答</span>'}</td>
+      <td class="nw">${m.last_sent ? '送信済み ' + fmtDT(m.last_sent) : '<span style="color:#b5453a;font-weight:700;">送れていない</span>'}</td>
+      <td class="nw"><button type="button" class="mini" onclick="allSendOne(${m.staff_id})">再送</button></td></tr>`).join('') + '</tbody></table>'
+    : '<div class="empty">見つかりません</div>';
+}
+function allSay(msg, kind){
+  const el = document.getElementById('allMsg');
+  const c = { ok:['#eef7ef','#2f7d32','#bfe3c0'], err:['#fdeceb','#b5453a','#f3c3bf'], run:['#eef4fb','#1f4a72','#c9dcef'] }[kind];
+  el.style.display = 'block'; el.style.background = c[0]; el.style.color = c[1]; el.style.border = '1px solid ' + c[2];
+  el.innerHTML = msg;
+}
+async function allSendOne(id){
+  const m = ALLT.find(x => x.staff_id === id); if(!m) return;
+  const to = (prompt(`${m.name} さんに案内メールを送り直します。\n送り先のアドレスを確かめてください（別のアドレスに送るときは書き換えてください）。`, m.email) || '').trim();
+  if(!to) return;
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)){ allSay('× アドレスの形が正しくありません。', 'err'); return; }
+  document.querySelectorAll('#allPanel button').forEach(b => b.disabled = true);
+  allSay(`${esc(m.name)} さん（${esc(to)}）へ送信しています…`, 'run');
+  let ok = false, err = null;
+  try{
+    await ensureFreshToken();
+    const res = await fetch(`${FUNCTIONS_URL}/send-email`, { method:'POST', headers:getH(), body: JSON.stringify({ to, subject: ALL_SUBJECT, html: allHtml(m.name, m.token) }) });
+    const r = await res.json().catch(() => ({}));
+    ok = res.ok && r.ok; if(!ok) err = r.error || ('HTTP ' + res.status);
+  }catch(e){ err = e.message; }
+  try{ await rpc('gift_admin_log_mail', { p_campaign: CAMPAIGN, p_grp: ALL_GRP, p_staff: m.staff_id, p_email: to, p_ok: ok, p_error: err }); }catch(e){}
+  await allLoad();
+  document.querySelectorAll('#allPanel button').forEach(b => b.disabled = false);
+  ok ? allSay(`✓ ${esc(m.name)} さん（${esc(to)}）へ送りました。`, 'ok')
+     : allSay(`× ${esc(m.name)} さんへの送信に失敗しました：${esc(err)}${/Permission|403|権限/.test(String(err)) ? '<br>このアカウントにはメール送信の権限がありません。' : ''}`, 'err');
+}
+document.addEventListener('input', e => { if(e.target && e.target.id === 'allQ') allRender(); });
+document.addEventListener('change', e => { if(e.target && (e.target.id === 'allOnlyNg' || e.target.id === 'allOnlyTodo')) allRender(); });
+
 window.addEventListener('DOMContentLoaded', async () => {
   const ok = await initAuth(['super_admin','admin','operator','staff']);
   if(!ok) return;
   document.getElementById('pubUrl').value = new URL('cake.html', location.href).href;
   await load();
   await mgrLoad();
+  await allLoad();
 });
 </script>
 </body>
