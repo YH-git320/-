@@ -899,7 +899,7 @@ async function rpc(name, args){
 function say(msg, ok){
   const el = document.getElementById('status');
   el.className = ok ? 'ok' : 'err'; el.innerHTML = msg;
-  if(ok) setTimeout(() => { if(el.innerHTML === msg) el.className = ''; }, 6000);
+  if(ok && !/restoreLast/.test(msg)) setTimeout(() => { if(el.innerHTML === msg) el.className = ''; }, 6000);
 }
 function fmtDT(iso){
   if(!iso) return '';
@@ -975,9 +975,27 @@ function setTab(t){
 }
 async function undo(id){
   const r = REQ.find(x => x.id === id); const s = staffOf(r && r.staff_id);
-  if(!confirm(`${s.name || ''} さんの回答を取り消します。本人がもう一度回答できるようになります。よろしいですか？`)) return;
-  try{ await rpc('gift_admin_delete', { p_id: id }); say('回答を取り消しました。', true); await load(); await mgrLoad(); }
-  catch(e){ say('取り消せませんでした：' + esc(e.message)); }
+  const name = String(s.name || '').trim();
+  const sei = name.split(/[\s　]+/)[0] || name;
+  // 誤操作を防ぐため、取り消す方の姓（苗字）を入力してもらう（2026-11-16）
+  const typed = prompt(`【取消の確認】\n${name} さんの回答（${CH[r.choice] || ''}）を取り消します。\n取り消すと、本人がもう一度申し込める状態に戻ります。\n\n本当に取り消すときは、下の欄に「${sei}」と入力してください。`, '');
+  if(typed === null) return;
+  if(typed.replace(/[\s　]/g, '') !== sei.replace(/[\s　]/g, '')){ say('入力された名前が一致しないため、取り消しませんでした。'); return; }
+  try{
+    const bid = await rpc('gift_admin_delete', { p_id: id });
+    LAST_UNDO = { bid, name };
+    say(`${esc(name)} さんの回答を取り消しました。　<button type="button" class="mini" onclick="restoreLast()">元に戻す</button>`, true);
+    await load(); await mgrLoad();
+  }catch(e){ say('取り消せませんでした：' + esc(e.message)); }
+}
+let LAST_UNDO = null;
+async function restoreLast(){
+  if(!LAST_UNDO) return;
+  try{
+    const r = await rpc('gift_admin_restore', { p_backup_id: LAST_UNDO.bid });
+    if(r && r.ok){ say(`${esc(LAST_UNDO.name)} さんの回答を元に戻しました。`, true); LAST_UNDO = null; await load(); await mgrLoad(); }
+    else say('元に戻せませんでした：' + esc((r && r.message) || ''));
+  }catch(e){ say('元に戻せませんでした：' + esc(e.message)); }
 }
 async function saveCampaign(){
   const d = document.getElementById('deadline').value || null;
