@@ -130,7 +130,9 @@ table.list tr:hover td{background:#f7faf8;}
     <button type="button" onclick="load()">最新の状態に更新</button>
     <span class="muted" id="cnt"></span>
   </div>
-  <div class="twrap"><div id="tbl"></div></div>
+  <div id="tblTop" style="overflow-x:auto;overflow-y:hidden;height:16px;margin-bottom:2px;"><div id="tblTopIn" style="height:1px;"></div></div>
+  <div class="twrap" id="tblWrap" style="max-height:72vh;"><div id="tbl"></div></div>
+  <div class="muted" style="margin-top:4px;">表が画面に収まらないときは、表の上か下のスクロールバー、またはShiftキーを押しながらマウスのホイールで横に動かせます。</div>
 </main>
 <script>
 // ===== 高尾輸送サービス 管理システム 共通認証モジュール =====
@@ -967,6 +969,7 @@ function render(){
         <td class="nw"><button type="button" class="mini danger" onclick="undo(${r.id})">取消</button></td></tr>`; }).join('') + '</tbody></table>';
   }
   document.getElementById('tbl').innerHTML = list.length ? h : '<div class="empty">該当する回答はありません</div>';
+  syncTblTop();
 }
 function setTab(t){
   TAB = t;
@@ -1292,6 +1295,22 @@ async function allSendOne(id){
 document.addEventListener('input', e => { if(e.target && e.target.id === 'allQ') allRender(); });
 document.addEventListener('change', e => { if(e.target && (e.target.id === 'allOnlyNg' || e.target.id === 'allOnlyTodo')) allRender(); });
 
+
+/* 申込一覧の横スクロール（上にも同じスクロールバーを付けて連動させる）（2026-11-16） */
+function syncTblTop(){
+  const wrap = document.getElementById('tblWrap'), top = document.getElementById('tblTop'), inner = document.getElementById('tblTopIn');
+  if(!wrap || !top) return;
+  inner.style.width = wrap.scrollWidth + 'px';
+  top.style.display = wrap.scrollWidth > wrap.clientWidth + 2 ? 'block' : 'none';
+}
+let _tblSyncing = false;
+document.addEventListener('DOMContentLoaded', () => {
+  const wrap = document.getElementById('tblWrap'), top = document.getElementById('tblTop');
+  if(!wrap || !top) return;
+  top.addEventListener('scroll', () => { if(_tblSyncing) return; _tblSyncing = true; wrap.scrollLeft = top.scrollLeft; _tblSyncing = false; });
+  wrap.addEventListener('scroll', () => { if(_tblSyncing) return; _tblSyncing = true; top.scrollLeft = wrap.scrollLeft; _tblSyncing = false; });
+  window.addEventListener('resize', syncTblTop);
+});
 window.addEventListener('DOMContentLoaded', async () => {
   const ok = await initAuth(['super_admin','admin','operator','staff']);
   if(!ok) return;
